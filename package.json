@@ -1,0 +1,13 @@
+{
+  "name": "punk-lang",
+  "version": "1.0.0",
+  "description": "## Introduction Punk is a functional programming language designed for concise and expressive data manipulation. It features a unique syntax that emphasizes readability and composability, with a focus on functional programming patterns and data transformation.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

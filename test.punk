@@ -1,0 +1,46 @@
+#Basic logging#
+.log![Hello World]
+
+#Logging multiple values#
+.log![First Second Third]
+
+#Logging with named things#
+name:Charlie
+.log![Hello .name]
+
+#Logging in pattern matching#
+isTim:(Tim)
+Tim?.isTim[.log![Found Tim]][.log![Not Tim]]
+
+#Logging in functions#
+greet:(_)[.]
+.log!.greet!Hello
+
+#Logging with lists#
+numbers:[1 2 3]
+.log![Numbers .numbers]
+
+#Test last item accessor#
+.log!numbers.~
+
+#Chaining logs#
+.log![Start] .log![Middle] .log![End]
+
+#Test math namespace#
+.log!.math.add![5 3]
+
+#Test math.isnum#
+.log!.math.isnum!42
+.log!.math.isnum!Hello
+
+#Test logic namespace#
+.log!.logic.eq![5 5]
+.log!.logic.eq![[1 2] [1 2]]
+.log!.logic.gt![10 5]
+.log!.logic.lt![3 8]
+.log!.logic.gt![xyz abc]
+.log!.logic.lt![abc xyz]
+
+#Test TRUE/FALSE literals#
+.log!TRUE
+.log!FALSE 
