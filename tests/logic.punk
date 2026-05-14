@@ -1,0 +1,44 @@
+#logic namespace — equality and comparisons#
+
+#Numeric equality#
+assert![logic.eq![5 5] TRUE]
+assert![logic.eq![5 6] FALSE]
+
+#Deep equality for lists#
+assert![logic.eq![[1 2 3] [1 2 3]] TRUE]
+assert![logic.eq![[1 2] [1 3]] FALSE]
+
+#Numeric comparisons#
+assert![logic.gt![10 5] TRUE]
+assert![logic.gt![5 10] FALSE]
+assert![logic.lt![3 8] TRUE]
+assert![logic.lt![8 3] FALSE]
+
+#Text comparisons (lexical)#
+assert![logic.gt![xyz abc] TRUE]
+assert![logic.lt![abc xyz] TRUE]
+
+#Truthy semantics: NULL and FALSE are falsy, everything else is truthy#
+assert![logic.not!TRUE FALSE]
+assert![logic.not!FALSE TRUE]
+assert![logic.not!NULL TRUE]
+assert![logic.not!hello FALSE]
+assert![logic.not!0 FALSE]
+assert![logic.not![] FALSE]
+
+#and: all truthy → TRUE, any falsy → FALSE#
+assert![logic.and![TRUE TRUE] TRUE]
+assert![logic.and![TRUE FALSE] FALSE]
+assert![logic.and![hello 1 [a]] TRUE]
+assert![logic.and![hello NULL 1] FALSE]
+assert![logic.and!hello TRUE]
+
+#or: any truthy → TRUE, all falsy → FALSE#
+assert![logic.or![FALSE TRUE] TRUE]
+assert![logic.or![FALSE FALSE] FALSE]
+assert![logic.or![NULL FALSE hello] TRUE]
+assert![logic.or![NULL FALSE] FALSE]
+
+#Variadic empty: identity values#
+assert![logic.and![] TRUE]
+assert![logic.or![] FALSE]

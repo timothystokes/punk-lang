@@ -1,0 +1,72 @@
+#Pattern matching with ? (single) and ?? (multi)#
+
+#Predicate form: pattern?value → TRUE / FALSE#
+isTim:(Tim)
+assert![isTim?Tim TRUE]
+assert![isTim?Bob FALSE]
+assert![isTim?[Tim] TRUE]
+
+#Match form: pattern?[value then] → then or NULL#
+isFive:(5)
+assert![isFive?[5 yes] yes]
+assert![isFive?[3 yes] NULL]
+
+#Wildcard pattern always matches#
+anything:(_)
+assert![anything?hello TRUE]
+assert![anything?[hello yes] yes]
+
+#Lazy then-branch: only runs on match#
+counter:{0}
+isOne:(1)
+isOne?[1 [counter<math.add![counter> 1]]!]
+isOne?[2 [counter<math.add![counter> 100]]!]
+assert![counter> 1]
+
+#Multi-pattern match with ?? - full [pattern result] cases#
+wild:(_)
+classify:(x:_)[
+  x.??[
+    [1 one]
+    [2 two]
+    [wild. other]
+  ]
+]
+assert![classify!1 one]
+assert![classify!2 two]
+assert![classify!9 other]
+
+#?? with bare [pattern] case: matches, no-op, stops, returns NULL#
+silent:(x:_)[
+  x.??[
+    [1 found]
+    [2]
+    [wild. other]
+  ]
+]
+assert![silent!1 found]
+assert![silent!2 NULL]
+assert![silent!9 other]
+
+#?? bare [_] catch-all: any non-listed value → NULL, doesn't fall through#
+catchall:(x:_)[
+  x.??[
+    [1 one]
+    [_]
+  ]
+]
+assert![catchall!1 one]
+assert![catchall!99 NULL]
+
+#?? falls through to NULL when no case matches at all#
+strict:(x:_)[
+  x.??[
+    [1 one]
+    [2 two]
+  ]
+]
+assert![strict!9 NULL]
+
+#Function body returns the last expression's value#
+greet:(s:_)[text.upper!s.]
+assert![greet!hi HI]

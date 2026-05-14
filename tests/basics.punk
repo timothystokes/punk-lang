@@ -1,0 +1,17 @@
+#Basic Things, names, and literals — self-checked with `assert`#
+
+#A name binds to its value; postfix `.` dereferences#
+name:Charlie
+assert![name. Charlie]
+
+#Numbers are Things#
+assert![42 42]
+
+#TRUE / FALSE / NULL literals#
+assert![TRUE TRUE]
+assert![FALSE FALSE]
+assert![NULL NULL]
+
+#Lists hold Things in order#
+xs:[a b c]
+assert![xs. [a b c]]

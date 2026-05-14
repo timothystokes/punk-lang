@@ -1,0 +1,47 @@
+#Function definition and application#
+#A function body is a sequence of expressions; the call's value is the
+ value of the LAST expression in the body (Clojure-style). Earlier
+ expressions run for their side effects and any name bindings they make.#
+
+#Single-param function — parameter is named with `name:_`#
+identity:(x:_)[x.]
+assert![identity!hello hello]
+
+#Multi-param function — each parameter is named#
+add:(a:_ b:_)[math.add![a. b.]]
+assert![add![5 3] 8]
+
+#Three-param function returning the last#
+last3:(a:_ b:_ c:_)[c.]
+assert![last3![a b c] c]
+
+#Earlier expressions still run; only the LAST value is returned#
+seq:(x:_)[
+  y:math.add![x. 1]
+  math.mul![y. 10]
+]
+assert![seq!4 50]
+
+#Variadic with `*` — name binds the whole match#
+all:(xs:*)[xs.]
+assert![all![a b c] [a b c]]
+
+#Anonymous variadic — `*.` derefs the whole argument as a list#
+allUnnamed:(*)[*.]
+assert![allUnnamed![a b c] [a b c]]
+
+#`*.` is available in every function, even with positional named params#
+pairAll:(a:_ b:_)[*.]
+assert![pairAll![1 2] [1 2]]
+
+#A trailing `*` slot is anonymous; `*.` still gives the full argument#
+trailing:(x:_ *)[*.]
+assert![trailing![1 2 3 4] [1 2 3 4]]
+
+#Function reference — `name.` is the value of the function#
+double:(n:_)[math.mul![n. 2]]
+ref:double.
+assert![ref!21 42]
+
+#Higher-order: map applies the function to each element#
+assert![list.map![[1 2 3] double.] [2 4 6]]

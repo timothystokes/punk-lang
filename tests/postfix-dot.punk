@@ -1,0 +1,31 @@
+#Postfix-dot dereference: every chain step ends with `.`, `!`, `<` or `>`#
+
+#`name.` reads the value bound to `name`#
+greeting:hello
+assert![greeting. hello]
+
+#`name` alone is data; `name.` is the value#
+literal:hello
+assert![literal literal]
+assert![literal. hello]
+
+#Implicit dereference before `!` — `fn!arg` works without a separate `.`#
+shout:(s:_)[text.upper!s.]
+assert![shout!hello HELLO]
+
+#Implicit dereference before `>` and `<` for cells#
+box:{0}
+box<7
+assert![box> 7]
+
+#Chain through namespaces — `math.add!` is two steps, last terminated by `!`#
+assert![math.add![1 2] 3]
+
+#Index literals: every step needs its `.`#
+assert![[10 20 30].0. 10]
+assert![[10 20 30].~. 30]
+
+#Mixed: name -> index -> name -> last#
+data:[[name:Alice age:30] [name:Bob age:40]]
+assert![data.0.name. Alice]
+assert![data.~.age. 40]

@@ -39,10 +39,15 @@ class Tokenizer {
             case ']': this.addToken('RIGHT_BRACKET'); break;
             case '(': this.addToken('LEFT_PAREN'); break;
             case ')': this.addToken('RIGHT_PAREN'); break;
+            case '{': this.addToken('LEFT_BRACE'); break;
+            case '}': this.addToken('RIGHT_BRACE'); break;
+            case '<': this.addToken('LESS'); break;
+            case '>': this.addToken('GREATER'); break;
             case '_': this.addToken('UNDERSCORE'); break;
             case '*': this.addToken('STAR'); break;
             case '~': this.addToken('TILDE'); break;
             case '#': this.blockComment(); break;
+            case '/': throw new Error('Forward slash is reserved for future ratio literals; use \\/ to include a literal /');
             case ' ':
             case '\r':
             case '\t':
@@ -51,17 +56,25 @@ class Tokenizer {
                 this.seenWhitespace = true;
                 break;
             default:
-                // Handle things (any sequence of characters that isn't a special character)
-                if (!this.isSpecialChar(c)) {
-                    while (!this.isAtEnd() && !this.isSpecialChar(this.peek())) {
-                        this.advance();
+                if (c === '\\' || !this.isSpecialChar(c)) {
+                    // Read a THING, allowing `\X` to embed any special char as literal X
+                    let value = (c === '\\') ? this.advance() : c;
+                    while (!this.isAtEnd()) {
+                        const p = this.peek();
+                        if (p === '\\') {
+                            this.advance();
+                            if (this.isAtEnd()) throw new Error('Unexpected backslash at end of input');
+                            value += this.advance();
+                        } else if (this.isSpecialChar(p)) {
+                            break;
+                        } else {
+                            value += this.advance();
+                        }
                     }
-                    const text = this.source.substring(this.start, this.current);
-                    // Check if it's a number
-                    if (/^-?\d+(?:,\d+)?$/.test(text)) {
-                        this.addToken('NUMBER', text.replace(',', '.'));
+                    if (/^-?\d+(?:,\d+)?$/.test(value)) {
+                        this.addToken('NUMBER', value.replace(',', '.'));
                     } else {
-                        this.addToken('THING', text);
+                        this.addToken('THING', value);
                     }
                 } else {
                     throw new Error(`Unexpected character in Punk source: ${c}`);
@@ -70,7 +83,7 @@ class Tokenizer {
     }
 
     isSpecialChar(c) {
-        return '.:!?[]()_*~ \n\r\t#'.includes(c);
+        return '.:!?[](){}<>_*~ \n\r\t#/\\'.includes(c);
     }
 
     blockComment() {

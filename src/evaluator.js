@@ -5,116 +5,258 @@ class Evaluator {
     }
 
     setupBuiltins() {
-        const math = {
-            add: arg => {
-                const [a, b] = this.expectList(arg, 2, 'add');
-                return a + b;
-            },
-            sub: arg => {
-                const [a, b] = this.expectList(arg, 2, 'sub');
-                return a - b;
-            },
-            mul: arg => {
-                const [a, b] = this.expectList(arg, 2, 'mul');
-                return a * b;
-            },
-            div: arg => {
-                const [a, b] = this.expectList(arg, 2, 'div');
-                return a / b;
-            },
-            pow: arg => {
-                const [a, b] = this.expectList(arg, 2, 'pow');
-                return Math.pow(a, b);
-            },
-            sqrt: arg => {
-                const [a] = this.expectList(arg, 1, 'sqrt');
-                return Math.sqrt(a);
-            },
-            isnum: arg => {
-                const value = this.expectSingle(arg, 'isnum');
-                return typeof value === 'number' && !isNaN(value);
-            }
+        // Pattern-builder helpers. These produce the same AST shape the parser
+        // produces for `(_ _)`, `(*)`, `(a:_ b:_)` etc., so built-ins dispatch
+        // through the very same matchPattern + binding machinery as user
+        // functions, and report mismatches with the same Punk-shaped error.
+        const P = {
+            wild: () => ({ type: 'Wildcard' }),
+            star: () => ({ type: 'StarWildcard' }),
+            named: (name, value) => ({ type: 'NamedThing', name, value }),
+            thing: (value) => ({ type: 'Thing', value }),
+            num: (value) => ({ type: 'Number', value }),
+            pat: (...elements) => ({ type: 'Pattern', elements }),
         };
 
+        // Wrap a JS implementation with a Punk pattern. Returns an object the
+        // runtime treats as a BuiltinFunction; callFunction does the matchPattern
+        // step itself so dispatch and error reporting are uniform with user fns.
+        const builtin = (qualifiedName, pattern, impl) => ({
+            type: 'BuiltinFunction',
+            name: qualifiedName,
+            pattern,
+            impl,
+        });
+
+        const math = {
+            add: builtin('math.add', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') + b.get('b')),
+            sub: builtin('math.sub', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') - b.get('b')),
+            mul: builtin('math.mul', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') * b.get('b')),
+            div: builtin('math.div', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') / b.get('b')),
+            pow: builtin('math.pow', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => Math.pow(b.get('a'), b.get('b'))),
+            mod: builtin('math.mod', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') % b.get('b')),
+            sqrt: builtin('math.sqrt', P.pat(P.wild()),
+                (b) => Math.sqrt(b.get('0'))),
+            isnum: builtin('math.isnum', P.pat(P.wild()),
+                (b) => typeof b.get('0') === 'number' && !isNaN(b.get('0'))),
+            // Variadic: `(*)` matches any number of Things.
+            min: builtin('math.min', P.pat(P.star()),
+                (b, arg) => this.reduceNumeric('math.min', arg, Math.min)),
+            max: builtin('math.max', P.pat(P.star()),
+                (b, arg) => this.reduceNumeric('math.max', arg, Math.max)),
+        };
+
+        const truthy = v => v !== null && v !== false;
         const logic = {
-            gt: arg => {
-                const [a, b] = this.expectList(arg, 2, 'gt');
-                // Support both numeric and text comparison
-                if (typeof a === 'string' && typeof b === 'string') {
-                    return a > b; // Alphanumeric comparison
-                }
-                return a > b;
-            },
-            lt: arg => {
-                const [a, b] = this.expectList(arg, 2, 'lt');
-                // Support both numeric and text comparison
-                if (typeof a === 'string' && typeof b === 'string') {
-                    return a < b; // Alphanumeric comparison
-                }
-                return a < b;
-            },
-            eq: arg => {
-                const [a, b] = this.expectList(arg, 2, 'eq');
-                return this.deepEqual(a, b);
-            }
+            gt: builtin('logic.gt', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') > b.get('b')),
+            lt: builtin('logic.lt', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => b.get('a') < b.get('b')),
+            eq: builtin('logic.eq', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+                (b) => this.deepEqual(b.get('a'), b.get('b'))),
+            // Truthy semantics across `not`/`and`/`or`: NULL and FALSE are
+            // falsy; every other Punk Thing (including 0, the empty list,
+            // and arbitrary atoms) is truthy.
+            // Takes any single Thing (including an empty list). Using `(*)`
+            // and reading `arg` directly avoids `(_)`'s "exactly-one-element"
+            // interpretation when the input is itself a list.
+            not: builtin('logic.not', P.pat(P.star()),
+                (b, arg) => !truthy(arg)),
+            // Variadic: any number of Things; empty list returns the identity
+            // (TRUE for `and`, FALSE for `or`).
+            and: builtin('logic.and', P.pat(P.star()),
+                (b, arg) => (Array.isArray(arg) ? arg : [arg]).every(truthy)),
+            or: builtin('logic.or', P.pat(P.star()),
+                (b, arg) => (Array.isArray(arg) ? arg : [arg]).some(truthy)),
         };
 
         const stringOps = {
-            upper: arg => String(this.expectSingle(arg, 'upper')).toUpperCase(),
-            lower: arg => String(this.expectSingle(arg, 'lower')).toLowerCase(),
-            trim: arg => String(this.expectSingle(arg, 'trim')).trim(),
-            split: arg => {
-                const [text, delim] = this.expectList(arg, 1, 'split');
-                return String(text).split(delim === undefined ? '' : String(delim));
-            },
-            join: arg => {
-                const [list, delim] = this.expectList(arg, 1, 'join');
-                if (!Array.isArray(list)) throw new Error('join expects a List as the first Thing');
-                return list.join(delim === undefined ? '' : String(delim));
-            },
-            replace: arg => {
-                const [text, searchValue, replacement] = this.expectList(arg, 3, 'replace');
-                return String(text).split(String(searchValue)).join(String(replacement));
-            }
+            upper: builtin('text.upper', P.pat(P.wild()),
+                (b) => String(b.get('0')).toUpperCase()),
+            lower: builtin('text.lower', P.pat(P.wild()),
+                (b) => String(b.get('0')).toLowerCase()),
+            trim: builtin('text.trim', P.pat(P.wild()),
+                (b) => String(b.get('0')).trim()),
+            split: builtin('text.split', P.pat(P.named('text', P.wild()), P.named('delim', P.wild())),
+                (b) => String(b.get('text')).split(String(b.get('delim')))),
+            join: builtin('text.join', P.pat(P.named('list', P.wild()), P.named('delim', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('text.join expects a List as the first Thing');
+                    return list.join(String(b.get('delim')));
+                }),
+            replace: builtin('text.replace', P.pat(P.named('text', P.wild()), P.named('search', P.wild()), P.named('with', P.wild())),
+                (b) => String(b.get('text')).split(String(b.get('search'))).join(String(b.get('with')))),
         };
 
         const listOps = {
-            map: arg => {
-                const [list, fn] = this.expectList(arg, 2, 'map');
-                if (!Array.isArray(list)) throw new Error('map expects a List as the first Thing');
-                return list.map(item => this.callFunction(fn, item));
-            },
-            filter: arg => {
-                const [list, fn] = this.expectList(arg, 2, 'filter');
-                if (!Array.isArray(list)) throw new Error('filter expects a List as the first Thing');
-                return list.filter(item => this.callFunction(fn, item));
-            },
-            reduce: arg => {
-                const [list, fn, initial] = this.expectList(arg, 2, 'reduce');
-                if (!Array.isArray(list)) throw new Error('reduce expects a List as the first Thing');
-                return list.reduce((acc, item) => this.callFunction(fn, [acc, item]), initial);
-            },
-            flatMap: arg => {
-                const [list, fn] = this.expectList(arg, 2, 'flatMap');
-                if (!Array.isArray(list)) throw new Error('flatMap expects a List as the first Thing');
-                return list.flatMap(item => this.callFunction(fn, item));
-            }
+            map: builtin('list.map', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.map expects a List as the first Thing');
+                    return list.map(item => this.callFunction(b.get('fn'), item));
+                }),
+            filter: builtin('list.filter', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.filter expects a List as the first Thing');
+                    return list.filter(item => this.callFunction(b.get('fn'), item));
+                }),
+            reduce: builtin('list.reduce', P.pat(P.named('list', P.wild()), P.named('fn', P.wild()), P.named('init', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.reduce expects a List as the first Thing');
+                    return list.reduce((acc, item) => this.callFunction(b.get('fn'), [acc, item]), b.get('init'));
+                }),
+            flatMap: builtin('list.flatMap', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.flatMap expects a List as the first Thing');
+                    return list.flatMap(item => {
+                        const r = this.callFunction(b.get('fn'), item);
+                        return Array.isArray(r) ? r : [r];
+                    });
+                }),
+            len: builtin('list.len', P.pat(P.wild()),
+                (b) => {
+                    const list = b.get('0');
+                    return Array.isArray(list) ? list.length : 1;
+                }),
+            concat: builtin('list.concat', P.pat(P.star()),
+                (b, arg) => {
+                    const lists = Array.isArray(arg) ? arg : [arg];
+                    return lists.flat();
+                }),
+            range: builtin('list.range', P.pat(P.named('start', P.wild()), P.named('end', P.wild()), P.named('step', P.wild())),
+                (b) => {
+                    const start = b.get('start'), end = b.get('end'), step = b.get('step');
+                    const result = [];
+                    if (step > 0) for (let i = start; i < end; i += step) result.push(i);
+                    else if (step < 0) for (let i = start; i > end; i += step) result.push(i);
+                    return result;
+                }),
+            slice: builtin('list.slice', P.pat(P.named('list', P.wild()), P.named('start', P.wild()), P.named('end', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.slice expects a List as the first Thing');
+                    return list.slice(b.get('start'), b.get('end'));
+                }),
+            find: builtin('list.find', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.find expects a List as the first Thing');
+                    const i = list.findIndex(item => this.deepEqual(item, b.get('value')));
+                    return i >= 0 ? i : null;
+                }),
+            contains: builtin('list.contains', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.contains expects a List as the first Thing');
+                    return list.some(item => this.deepEqual(item, b.get('value')));
+                }),
+            sort: builtin('list.sort', P.pat(P.wild()),
+                (b) => {
+                    const list = b.get('0');
+                    if (!Array.isArray(list)) throw this.punkError('list.sort expects a List');
+                    return [...list].sort((a, c) => {
+                        if (typeof a === 'string' && typeof c === 'string') return a.localeCompare(c);
+                        if (typeof a === 'number' && typeof c === 'number') return a - c;
+                        return String(a).localeCompare(String(c));
+                    });
+                }),
         };
 
-        const log = arg => {
-            if (Array.isArray(arg)) {
-                console.log(...arg);
-                return undefined;
-            }
-            console.log(arg);
-            return undefined;
+        const fs = require('fs');
+
+        const fileOps = {
+            read: builtin('file.read', P.pat(P.wild()),
+                (b) => {
+                    try {
+                        return fs.readFileSync(String(b.get('0')), 'utf8').split('\n');
+                    } catch (err) {
+                        throw this.punkError(`Cannot read file: ${err.message}`);
+                    }
+                }),
+            write: builtin('file.write', P.pat(P.named('path', P.wild()), P.named('content', P.wild())),
+                (b) => {
+                    try {
+                        const content = b.get('content');
+                        const text = Array.isArray(content) ? content.join('\n') : String(content);
+                        fs.writeFileSync(String(b.get('path')), text, 'utf8');
+                        return undefined;
+                    } catch (err) {
+                        throw this.punkError(`Cannot write file: ${err.message}`);
+                    }
+                }),
         };
+
+        const log = builtin('log', P.pat(P.star()), (b, arg) => {
+            if (Array.isArray(arg)) console.log(...arg.map(x => this.formatValue(x)));
+            else console.log(this.formatValue(arg));
+            return undefined;
+        });
+
+        // Self-checking assertion. Silent on pass so a passing test file
+        // produces no output of its own; on failure throws a Punk-shaped error
+        // with both values rendered the way Punk itself would print them.
+        const assertFn = builtin(
+            'assert',
+            P.pat(P.named('actual', P.wild()), P.named('expected', P.wild())),
+            (b) => {
+                const actual = b.get('actual');
+                const expected = b.get('expected');
+                if (this.deepEqual(actual, expected)) return undefined;
+                throw this.punkError(
+                    `assert failed: expected ${this.formatValue(expected)} got ${this.formatValue(actual)}`
+                );
+            }
+        );
 
         this.setName('math', math);
         this.setName('logic', logic);
         this.setName('list', listOps);
         this.setName('text', stringOps);
+        this.setName('file', fileOps);
         this.setName('log', log);
+        this.setName('assert', assertFn);
+    }
+
+    // Render a Punk value back into Punk-ish source for error messages so
+    // assertion failures read in the same vocabulary as the rest of the
+    // language (lists in brackets, NULL/TRUE/FALSE keywords, etc.).
+    formatValue(v) {
+        if (v === null) return 'NULL';
+        if (v === true) return 'TRUE';
+        if (v === false) return 'FALSE';
+        if (v === undefined) return '<nothing>';
+        if (Array.isArray(v)) return '[' + v.map(x => this.formatValue(x)).join(' ') + ']';
+        if (typeof v === 'string') return v;
+        if (v && typeof v === 'object') {
+            if (v.type === 'Cell') return '{' + this.formatValue(v.contents) + '}';
+            if (v.type === 'UserFunction' || v.type === 'FunctionLiteral') return '<function>';
+            if (v.type === 'BuiltinFunction') return '<builtin>';
+            if (v.type === 'Pattern') return '<pattern>';
+        }
+        return String(v);
+    }
+
+    reduceNumeric(name, arg, op) {
+        const list = Array.isArray(arg) ? arg : [arg];
+        if (list.length === 0) throw this.punkError(`${name} requires at least one Thing`);
+        return op(...list);
+    }
+
+    // Throw an error in the same shape Punk uses for runtime issues. Kept in
+    // one place so any future error-channel changes (line info, types, etc.)
+    // happen uniformly across native and built-in code paths.
+    punkError(message) {
+        return new Error(message);
     }
 
     setName(name, value) {
@@ -153,6 +295,8 @@ class Evaluator {
                 return this.evaluatePattern(node);
             case 'Conditional':
                 return this.evaluateConditional(node);
+            case 'Predicate':
+                return this.evaluatePredicate(node);
             case 'MultiplePatternMatch':
                 return this.evaluateMultiplePatternMatch(node);
             case 'FunctionCall':
@@ -163,11 +307,29 @@ class Evaluator {
                 return this.evaluateFunctionLiteral(node);
             case 'Dereference':
                 return this.evaluateDereference(node);
+            case 'CellLiteral':
+                return { type: 'Cell', contents: this.evaluate(node.value) };
+            case 'CellRead': {
+                const cell = this.evaluate(node.target);
+                if (!cell || typeof cell !== 'object' || cell.type !== 'Cell') {
+                    throw new Error("Cell read '>' used on a non-Cell Thing");
+                }
+                return cell.contents;
+            }
+            case 'CellWrite': {
+                const cell = this.evaluate(node.target);
+                if (!cell || typeof cell !== 'object' || cell.type !== 'Cell') {
+                    throw new Error("Cell write '<' used on a non-Cell Thing");
+                }
+                cell.contents = this.evaluate(node.value);
+                return cell.contents;
+            }
             case 'Number':
                 return node.value;
             case 'Thing':
                 if (node.value === 'TRUE') return true;
                 if (node.value === 'FALSE') return false;
+                if (node.value === 'NULL') return null;
                 return node.value;
             case 'Param':
                 return this.getName('.');
@@ -215,19 +377,70 @@ class Evaluator {
     }
 
     captureClosure() {
-        return this.scopes.map(scope => new Map(scope));
+        // Share frame references with the surrounding scope chain so closures
+        // see live bindings — including cells — created in their lexical parents.
+        return this.scopes.slice();
     }
 
+    // A bare [ ] in source is DATA. Atoms self-evaluate; active forms
+    // (function calls, dereferences, conditionals, pattern matches) are
+    // preserved as quoted AST so they don't fire until something applies `!`.
     evaluateList(node) {
-        return node.elements.map(element => this.evaluateListElement(element));
+        return node.elements.map(element => this.elementAsData(element));
     }
 
-    evaluateListElement(element) {
-        if (element.type === 'NamedThing') {
-            const value = this.evaluate(element.value);
-            return { name: element.name, value };
+    elementAsData(element) {
+        switch (element.type) {
+            case 'Number':
+                return element.value;
+            case 'Thing':
+                if (element.value === 'TRUE') return true;
+                if (element.value === 'FALSE') return false;
+                if (element.value === 'NULL') return null;
+                return element.value;
+            case 'List':
+                return this.evaluateList(element);
+            case 'NamedThing':
+                return { name: element.name, value: this.elementAsData(element.value) };
+            case 'Pattern':
+                return this.evaluatePattern(element);
+            case 'FunctionLiteral':
+                return this.evaluateFunctionLiteral(element);
+            case 'CellLiteral':
+                return { type: 'Cell', contents: this.elementAsData(element.value) };
+            default:
+                // FunctionCall, Dereference, Conditional, MultiplePatternMatch, ...
+                // remain unevaluated forms until a `!` evaluates the containing list.
+                return { type: 'Quoted', form: element };
         }
-        return this.evaluate(element);
+    }
+
+    // A list evaluated AS CODE: triggered by `!` (function body, function arg list,
+    // conditional/multi-pattern branch). Each element is evaluated through the normal
+    // dispatcher. NamedThing elements additionally bind their name into the current
+    // scope, matching top-level program statement semantics.
+    evaluateListAsCode(node) {
+        const results = [];
+        for (const element of node.elements) {
+            if (element.type === 'NamedThing') {
+                const value = this.evaluate(element.value);
+                this.setName(element.name, value);
+                results.push({ name: element.name, value });
+            } else {
+                results.push(this.evaluate(element));
+            }
+        }
+        return results;
+    }
+
+    // Evaluate a list-as-block: each element runs in order. Punk follows the
+    // Clojure-style rule that a body's value is the value of its **last**
+    // expression. Earlier expressions are evaluated for their side effects
+    // (and for binding NamedThings into scope). An empty body has no value
+    // and yields `null`.
+    evaluateBody(node) {
+        const results = this.evaluateListAsCode(node);
+        return results.length === 0 ? null : results[results.length - 1];
     }
 
     evaluatePattern(node) {
@@ -246,59 +459,131 @@ class Evaluator {
         return this.evaluate(element);
     }
 
+    evaluatePredicate(node) {
+        const value = this.evaluate(node.value);
+        const pattern = this.evaluate(node.pattern);
+        return this.matchPattern(value, pattern) !== null;
+    }
+
     evaluateConditional(node) {
         const value = this.evaluate(node.value);
         const pattern = this.evaluate(node.pattern);
         const bindings = this.matchPattern(value, pattern);
-
         if (bindings) {
             return this.withScope(bindings, () => this.evaluate(node.thenExpr));
         }
-        return this.withScope(new Map(), () => this.evaluate(node.elseExpr));
+        return null;
     }
 
     evaluateMultiplePatternMatch(node) {
         const value = this.evaluate(node.value);
-        
-        for (const { pattern, expression } of node.patterns) {
+        for (const { pattern, expression } of node.cases) {
             const evaluatedPattern = this.evaluate(pattern);
             const bindings = this.matchPattern(value, evaluatedPattern);
             if (bindings) {
+                if (expression === null) return null;
                 return this.withScope(bindings, () => this.evaluate(expression));
             }
         }
-        
-        return undefined; // No pattern matched
+        return null;
     }
 
     evaluateFunctionCall(node) {
         const callee = this.evaluate(node.callee);
-        const arg = this.evaluate(node.arg);
+        // `!` evaluates its argument as code: a List arg has each element evaluated
+        // (with name binding for NamedThings); a single non-list form is evaluated normally.
+        // A null arg means a zero-arg call (e.g. `.code!` where code is a list value).
+        let arg;
+        if (node.arg === null || node.arg === undefined) {
+            arg = null;
+        } else if (node.arg.type === 'List') {
+            arg = this.evaluateListAsCode(node.arg);
+        } else {
+            arg = this.evaluate(node.arg);
+        }
         return this.callFunction(callee, arg);
     }
 
     callFunction(fn, arg) {
-        if (!fn) throw new Error('Undefined function Thing');
-        if (typeof fn === 'function') {
-            return fn(arg);
+        if (fn === null || fn === undefined) throw new Error('Undefined function Thing');
+        // A list value is a zero-parameter body: applying `!` evaluates its elements
+        // as code in the current scope. This is the homoiconic "eval" path —
+        // `[forms]!` and `.code!` (where code is bound to a list) go through here.
+        if (Array.isArray(fn)) {
+            return this.withScope(arg === null ? new Map() : new Map([['.', arg]]), () => {
+                return this.evaluateListValueAsCode(fn);
+            });
+        }
+        if (fn && fn.type === 'BuiltinFunction') {
+            const bindings = this.matchPattern(arg, fn.pattern);
+            if (!bindings) {
+                throw new Error(`${fn.name} expects ${this.formatPattern(fn.pattern)}`);
+            }
+            return fn.impl(bindings, arg);
         }
         if (fn.type === 'UserFunction') {
             const bindings = this.matchPattern(arg, this.evaluatePattern(fn.pattern));
             if (!bindings) {
-                throw new Error('Input Thing does not match pattern');
+                throw new Error(`Input Thing does not match pattern ${this.formatPattern(this.evaluatePattern(fn.pattern))}`);
             }
             bindings.set('.', arg);
+            bindings.set('*', Array.isArray(arg) ? arg : [arg]);
             const savedScopes = this.scopes;
-            this.scopes = fn.closure.map(scope => new Map(scope));
+            this.scopes = fn.closure.slice();
             const result = this.withScope(bindings, () => {
-                const bodyResult = this.evaluate(fn.body);
-                // Function bodies are lists, return the full list
-                return bodyResult;
+                // Function body is a List; `!` evaluates it as a block and
+                // the function returns the value of its final statement.
+                return this.evaluateBody(fn.body);
             });
             this.scopes = savedScopes;
             return result;
         }
+        if (typeof fn === 'function') {
+            return fn(arg);
+        }
         throw new Error('Target is not a function Thing');
+    }
+
+    // Render a Pattern AST back to Punk source form for error messages so
+    // failures speak the language the user wrote, not JavaScript-isms.
+    formatPattern(pattern) {
+        const fmtElement = (el) => {
+            if (!el) return '';
+            switch (el.type) {
+                case 'Wildcard': return '_';
+                case 'StarWildcard': return '*';
+                case 'NamedThing': return `${el.name}:${fmtElement(el.value)}`;
+                case 'Pattern': return `(${el.elements.map(fmtElement).join(' ')})`;
+                case 'Thing': return String(el.value);
+                case 'Number': return String(el.value);
+                default: return String(el.value !== undefined ? el.value : el.type);
+            }
+        };
+        return fmtElement(pattern);
+    }
+
+    // Evaluate a runtime list VALUE (not an AST node) as a block of code: each
+    // element runs in order. The block's value is the value of its **last**
+    // element (Clojure-style). Powers `!` applied to list values.
+    evaluateListValueAsCode(arr) {
+        let last = null;
+        for (const el of arr) {
+            last = this.evaluateValueAsCode(el);
+        }
+        return last;
+    }
+
+    evaluateValueAsCode(v) {
+        if (v && typeof v === 'object' && !Array.isArray(v) && v.type === 'Quoted') {
+            return this.evaluate(v.form);
+        }
+        if (v && typeof v === 'object' && !Array.isArray(v)
+            && v.name !== undefined && 'value' in v && v.type !== 'UserFunction') {
+            const value = this.evaluateValueAsCode(v.value);
+            this.setName(v.name, value);
+            return { name: v.name, value };
+        }
+        return v;
     }
 
     evaluateDereference(node) {
@@ -342,6 +627,21 @@ class Evaluator {
                 }
                 throw new Error(`No Named Thing found with name: ${node.name}`);
             }
+            
+            // Treat single Thing as a list of one Thing when accessed by index
+            if (/^\d+$/.test(node.name)) {
+                const index = parseInt(node.name);
+                if (index === 0) {
+                    return obj;
+                }
+                return undefined; // Out of bounds for single Thing
+            }
+            
+            // Handle ~ for single Thing (it is the only item)
+            if (node.name === '~') {
+                return obj;
+            }
+            
             if (typeof obj === 'object' && obj.name !== undefined) {
                 // Handle named thing objects
                 if (obj.name === node.name) {
@@ -363,6 +663,13 @@ class Evaluator {
         const matched = this.matchPatternInternal(value, pattern, bindings);
         if (matched) {
             if (!bindings.has('.')) bindings.set('.', value);
+            // Bind numeric indices for list access
+            if (Array.isArray(value)) {
+                this.bindListIndexes(value, bindings);
+            } else {
+                // Treat single Thing as list of one - bind index 0
+                bindings.set('0', value);
+            }
             return bindings;
         }
         return null;
@@ -411,7 +718,8 @@ class Evaluator {
     }
 
     matchListPattern(values, patterns, bindings) {
-        const starIndex = patterns.findIndex(p => p && p.type === 'StarWildcard');
+        const isStar = p => p && (p.type === 'StarWildcard' || (p.type === 'NamedThing' && p.value && p.value.type === 'StarWildcard'));
+        const starIndex = patterns.findIndex(isStar);
         if (starIndex === -1) {
             if (values.length !== patterns.length) return false;
             for (let i = 0; i < patterns.length; i++) {
@@ -435,6 +743,11 @@ class Evaluator {
             if (!this.matchPatternInternal(values[offset + i], after[i], bindings)) return false;
         }
 
+        const starPattern = patterns[starIndex];
+        if (starPattern.type === 'NamedThing') {
+            bindings.set(starPattern.name, values.slice(before.length, offset));
+        }
+
         this.bindListIndexes(values, bindings);
         return true;
     }
@@ -444,27 +757,6 @@ class Evaluator {
             const key = String(i);
             if (!bindings.has(key)) bindings.set(key, values[i]);
         }
-    }
-
-    expectList(arg, minCount, fnName) {
-        if (!Array.isArray(arg)) {
-            if (minCount <= 1) return [arg];
-            throw new Error(`${fnName} expects a List Thing`);
-        }
-        if (arg.length < minCount) {
-            throw new Error(`${fnName} expects at least ${minCount} Things`);
-        }
-        return arg;
-    }
-
-    expectSingle(arg, fnName) {
-        if (Array.isArray(arg)) {
-            if (arg.length !== 1) {
-                throw new Error(`${fnName} expects a single Thing`);
-            }
-            return arg[0];
-        }
-        return arg;
     }
 
     deepEqual(a, b) {
