@@ -51,16 +51,21 @@ class Parser {
             expr = this.conditional(expr);
         }
         
-        // Pipeline: `a | f!` desugars to `f!a`. Left-associative, so
-        // `a | f! | g!` becomes `g!(f!a)`. Whitespace around `|` is
-        // ignored. The trailing `!` is required — it makes the
-        // execution explicit. The RHS is parsed as a primary plus
-        // *deref* postfix only (so `a | obj.method!` works); for
-        // multi-arg stages, wrap in a lambda: `a | (v:_)[f![v. 0 2]]!`.
+        // Pipeline: `a | stage` desugars to `(stage)!a` where `stage` is
+        // an expression that must evaluate to a function value. Typical
+        // forms are `a | f.` (deref a name) and `a | f!x.` (call something
+        // that returns a function). Left-associative. Whitespace around
+        // `|` is ignored. For multi-arg stages, wrap in a lambda:
+        // `a | (v:_)[f![v. 0 2]].`.
         while (this.match('PIPE')) {
             let stage = this.primary();
-            stage = this.postfixDerefOnly(stage);
-            this.consume('BANG', "Expected '!' after pipeline stage (e.g. `a | f!`)");
+            stage = this.postfix(stage);
+            // A bare Thing (e.g. `a | f`) is almost certainly a forgotten
+            // `.` — reject at parse time with a clear message rather than
+            // let the runtime say "Target is not a function Thing".
+            if (stage.type === 'Thing') {
+                throw new Error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
+            }
             // Wrap LHS as a single-element list so a list value isn't
             // spread across multiple positional slots.
             const argList = { type: 'List', elements: [expr] };

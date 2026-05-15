@@ -433,14 +433,14 @@ greet![Ada Lovelace]  # Ada+Lovelace
 
 ## Pipeline `|`
 
-`a | f!` desugars to `f!a`. The trailing `!` is required — it makes the
-execution explicit. Pipelines are left-associative, so `a | f! | g!`
-means `g!(f!a)`:
+`a | f.` desugars to `f!a`. The trailing `.` is required — it gives the
+pipe the function **value** to call, same rule as `map![xs f.]`. Pipelines
+are left-associative, so `a | f. | g.` means `g!(f!a)`:
 
 ```punk
-hello | split! | head!     # h
-[1 2 3] | len!                   # 3
-[a b c] | tail!                  # [b c]
+hello | split. | head.           # h
+[1 2 3] | len.                   # 3
+[a b c] | tail.                  # [b c]
 ```
 
 The LHS is wrapped as a single-element argument, so a list value isn't
@@ -448,11 +448,13 @@ spread across positional slots. For multi-argument stages, wrap in a
 lambda:
 
 ```punk
-5 | (n:_)[add![n. 10]]!          # 15
+5 | (n:_)[add![n. 10]].          # 15
 ```
 
-Whitespace around `|` is irrelevant; the RHS is a deref chain only
-(no `!`/`<`/`>` postfix), and the implicit call is the trailing `!`.
+Whitespace around `|` is irrelevant; the RHS is any expression that
+evaluates to a function value — typically `f.` (deref a name) or
+`getFn!x` (a call that itself returns a function). The pipe is what
+performs the final call with the LHS as the single argument.
 
 ## Code as Data (Macros)
 

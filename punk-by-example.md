@@ -162,7 +162,7 @@ John+Doe
 ```
 
 ```punk
-> join![[a b c] [, ]] ⏎
+> join![[a b c] ,] ⏎
 a,b,c
 ```
 
@@ -497,19 +497,24 @@ sum:(lst:_)[
 
 ### Pipeline `|`
 
-`a | f!` is exactly the same as `f!a`, but reads left-to-right. Each
-stage must end with `!` (so the execution is explicit) and the LHS is
-passed as a single argument:
+`a | f.` is exactly the same as `f!a`, but reads left-to-right. The
+trailing `.` on each stage hands over the function **value** to the
+pipe (same rule as `map![xs f.]`), and the pipe itself performs the
+call with the LHS as a single argument:
 
 ```punk
-> hello | split! | head! ⏎
+> hello | split. | head. ⏎
 h
-> [1 2 3] | len! ⏎
+> [1 2 3] | len. ⏎
 3
 ```
 
-`a | f! | g!` means `g!(f!a)`. For multi-argument stages, wrap in a
-lambda: `5 | (n:_)[add![n. 10]]!`.
+`a | f. | g.` means `g!(f!a)`. For multi-argument stages, wrap in a
+lambda: `5 | (n:_)[add![n. 10]].`.
+
+A stage can be any expression that evaluates to a function value, not
+just a bare deref. So `a | getFn!key` is fine when `getFn!key` returns
+a callable — the pipe takes that value and applies it to `a`.
 
 ## 10. Functions
 

@@ -282,7 +282,7 @@ user=> (clojure.string/join " " ["John" "Doe"])
 
 **Punk**
 ```punk
-> join![[a b c] [, ]] ⏎
+> join![[a b c] ,] ⏎
 a,b,c
 ```
 **Clojure**
@@ -830,9 +830,9 @@ takes the previous value as its single argument).
 
 **Punk**
 ```punk
-> hello | split! | head! ⏎
+> hello | split. | head. ⏎
 h
-> [1 2 3] | len! ⏎
+> [1 2 3] | len. ⏎
 3
 ```
 **Clojure**
@@ -1432,7 +1432,7 @@ done
 | Cell / Atom       | `{value}` / `c>` / `c<v`                | `(atom value)` / `@a` / `(reset! a v)` |
 | Code as data      | `[forms]` (data) / `[forms]!` (run)     | `'(forms)` / `(eval '(forms))`       |
 | Tail call         | implicit (in tail position)             | explicit `(recur …)`                 |
-| Pipeline          | `a \| f! \| g!`                         | `(-> a f g)`                         |
+| Pipeline          | `a \| f. \| g.`                         | `(-> a f g)`                         |
 | Spine             | `head!` `tail!` `prepend!` | `first` `rest` `cons`              |
 
 ## Where the languages part ways
