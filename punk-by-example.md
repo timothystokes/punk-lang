@@ -168,8 +168,8 @@ When a function needs more than one Thing, pass them as a list:
 ```
 
 ```punk
-> text.join![[John Doe] \ ] ⏎
-John Doe
+> text.join![[John Doe] +] ⏎
+John+Doe
 ```
 
 ```punk
@@ -177,7 +177,50 @@ John Doe
 a,b,c
 ```
 
-The `\ ` in the `join` call is a literal space (more on escaping in §12).
+The `+` in the first `join` call is the in-Thing space marker — a standalone
+`+` is a one-character Thing whose value is a literal space. The result
+`John+Doe` is **one** Thing of length nine (the `+` shown on display is
+the same space marker, so `John+Doe` round-trips cleanly through
+`text.fromList!`). More on `+` and escaping in §12.
+
+Punk doesn't have a separate "string" type — text is just a Thing, no
+different from any other. So we don't add `text.len!`, `text.startsWith!`,
+`text.first!`, or any of the usual string accessors. Instead, decompose
+text into a List of single-character Things with `text.toList!` and use
+the regular `list.*` functions. Rejoin with `text.fromList!`:
+
+```punk
+> text.toList!hello ⏎
+[h e l l o]
+```
+
+```punk
+> list.len![text.toList!hello] ⏎
+5
+```
+
+```punk
+> text.fromList![list.slice![text.toList!hello 0 2]] ⏎
+he
+```
+
+`startsWith` falls out of the same building blocks:
+
+```punk
+> startsWith:(s:_ p:_)[
+    chars: text.toList!s.
+    prefix: text.toList!p.
+    logic.eq![list.slice![chars. 0 list.len![prefix.]] prefix.]
+  ] ⏎
+```
+
+```punk
+> startsWith![hello he] ⏎
+TRUE
+```
+
+Only ops that genuinely don't decompose into list work — `upper`, `lower`,
+`trim`, `split`, `join`, `replace` — stay in `text.*`.
 
 ## 6. Comparisons and logic
 
@@ -427,6 +470,54 @@ the bindings by name:
 10
 ```
 
+### The Lisp spine: `head` / `tail` / `prepend`
+
+Three primitives are enough to walk and rebuild any list. `head` returns
+the first element (or `NULL` for an empty list); `tail` returns the
+rest; `prepend` puts an item back on the front.
+
+```punk
+> list.head![[a b c]] ⏎
+a
+> list.tail![[a b c]] ⏎
+[b c]
+> list.prepend![z [a b c]] ⏎
+[z a b c]
+> list.head![[]] ⏎
+NULL
+> list.tail![[]] ⏎
+[]
+```
+
+These compose nicely with recursion. Here's a hand-written `sum`:
+
+```punk
+sum:(lst:_)[
+  list.len![lst.] ?? [
+    [0 0]
+    [_ math.add![list.head![lst.] sum![list.tail![lst.]]]]
+  ]
+]
+> sum![[1 2 3 4 5]] ⏎
+15
+```
+
+### Pipeline `|`
+
+`a | f!` is exactly the same as `f!a`, but reads left-to-right. Each
+stage must end with `!` (so the execution is explicit) and the LHS is
+passed as a single argument:
+
+```punk
+> hello | text.toList! | list.head! ⏎
+h
+> [1 2 3] | list.len! ⏎
+3
+```
+
+`a | f! | g!` means `g!(f!a)`. For multi-argument stages, wrap in a
+lambda: `5 | (n:_)[math.add![n. 10]]!`.
+
 ## 10. Functions
 
 A function is written `(pattern)[body]`. The pattern declares what input
@@ -638,8 +729,8 @@ other
 ## 12. Escaping special characters
 
 Punk uses a handful of characters for syntax: `.`, `:`, `!`, `?`, `[`, `]`,
-`(`, `)`, `{`, `}`, `<`, `>`, `_`, `*`, `~`, `#`, `/`, and `\`. To put any
-of these inside a Thing's value, prefix each occurrence with `\`:
+`(`, `)`, `{`, `}`, `<`, `>`, `_`, `*`, `~`, `+`, `#`, `/`, and `\`. To put
+any of these inside a Thing's value, prefix each occurrence with `\`:
 
 ```punk
 > \. ⏎
@@ -662,6 +753,44 @@ of these inside a Thing's value, prefix each occurrence with `\`:
 ```
 
 Each occurrence is escaped individually — `\.\.\.` is three full stops.
+
+### The `+` space marker
+
+A regular space is the delimiter between Things in a list, so it can't
+appear inside a single Thing's value. The `+` character fills that gap:
+inside (or between) Thing characters with no whitespace, `+` becomes a
+literal space. A standalone `+` (surrounded by whitespace) is a
+one-character Thing whose value is a single space.
+
+```punk
+> Hello+World ⏎
+Hello+World
+```
+
+```punk
+> list.len![text.toList!Hello+World] ⏎
+11
+```
+
+```punk
+> list.len![[Hello+World]] ⏎
+1
+```
+
+```punk
+> text.join![[John Doe] +] ⏎
+John+Doe
+```
+
+To embed a literal `+` character in a Thing's value, escape it as `\+`:
+
+```punk
+> a\+b ⏎
+a\+b
+```
+
+The output shows the escape because that's the round-trip-safe Punk source
+for a Thing whose value is `a+b` (three characters).
 
 ## 13. Mutable cells
 
@@ -726,6 +855,55 @@ zero-argument anonymous list applied to itself.
 
 The upshot: code and data look the same in source. The choice between
 "data" and "code" is made at the point of use.
+
+A function can take a `[…]` argument and apply `!` to it itself —
+that's all there is to a "macro". For example:
+
+```punk
+> when:(test:_ body:_)[test. ? [TRUE body!]]
+> when![TRUE [log![hi]]] ⏎
+hi
+> when![FALSE [log![nope]]] ⏎
+```
+
+The `body!` runs in the **caller's** scope, so the block sees the
+caller's variables. Combine with `list.concat!` to splice forms
+together for Lisp-style template macros.
+
+## 15. Recursion and tail calls
+
+A named function can call itself by name; the binding is in scope
+before the body runs:
+
+```punk
+fact:(n:_)[
+  n. ?? [
+    [0 1]
+    [_ math.mul![n. fact!math.sub![n. 1]]]
+  ]
+]
+> fact!10 ⏎
+3628800
+```
+
+When the self-call is in **tail position** — the last expression of a
+body, or the chosen branch of `?` / `??` whose value is the body's
+result — Punk trampolines the call instead of growing the JavaScript
+stack. So tail-recursive loops run at any depth:
+
+```punk
+countdown:(n:_)[
+  n. ?? [
+    [0 done]
+    [_ countdown!math.sub![n. 1]]   # tail call — trampolines
+  ]
+]
+> countdown!100000 ⏎
+done
+```
+
+Non-tail recursion (like `fact` above) still uses the JS stack and is
+bounded by it.
 
 ---
 

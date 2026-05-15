@@ -1,0 +1,49 @@
+#text functions: decompose to a List and use list.* for everything else#
+
+#round-trip: a Thing of N chars decomposes into N single-char Things and rejoins#
+assert![text.toList!hello [h e l l o]]
+assert![text.fromList![[h e l l o]] hello]
+assert![text.fromList![text.toList!world] world]
+
+#length via list.len once decomposed#
+assert![list.len![text.toList!hello] 5]
+assert![list.len![text.toList!a] 1]
+
+#first / last char via list.slice (no dedicated text helpers needed)#
+assert![text.fromList![list.slice![text.toList!hello 0 1]] h]
+assert![text.fromList![list.slice![text.toList!hello 4 5]] o]
+
+#startsWith: build the prefix list and compare#
+startsWith:(s:_ p:_)[
+  chars: text.toList!s.
+  prefix: text.toList!p.
+  logic.eq![list.slice![chars. 0 list.len![prefix.]] prefix.]
+]
+assert![startsWith![hello he] TRUE]
+assert![startsWith![hello world] FALSE]
+
+#substring contains: decompose, slice every window, look for the prefix#
+#(demonstrates that "no text-specific function" still composes cleanly)#
+assert![list.contains![text.toList!hello l] TRUE]
+assert![list.contains![text.toList!hello z] FALSE]
+
+#character-class ops still live in text.* (upper/lower/trim) — those are not#
+#list decompositions and have no list-side equivalent#
+assert![text.upper!abc ABC]
+
+#`+` is the in-Thing space marker — Hello+World is ONE Thing, not two#
+assert![list.len![text.toList!Hello+World] 11]
+assert![list.len![[Hello+World]] 1]
+
+#standalone `+` is a one-character space Thing#
+assert![list.len![text.toList!+] 1]
+
+#round-trip preserves embedded spaces#
+assert![text.fromList![text.toList!Hello+World] Hello+World]
+
+#join with `+` gives a single Thing with one embedded space#
+assert![text.join![[John Doe] +] John+Doe]
+assert![list.len![[text.join![[John Doe] +]]] 1]
+
+#literal `+` must be escaped as `\+`#
+assert![list.len![text.toList!a\+b] 3]

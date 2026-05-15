@@ -78,11 +78,14 @@ The following characters have special meaning in Punk and cannot appear in Thing
 - `_` - Single wildcard in patterns
 - `*` - Multiple wildcard in patterns
 - `~` - Last-item accessor (a chain step name; must be followed by `.`, `!`, `<` or `>`)
+- `+` - In-Thing space marker (so `Hello+World` is one Thing containing a literal space, not two)
 - `#` - Comment delimiter (block style)
 - `/` - **Reserved** for future ratio literals (e.g. `1/2`); not currently usable
 - `\` - Escape character (see below)
 
-**Escaping Special Characters:** To use a special character as literal text, prefix it with `\` for each instance. For example, `\.` is a literal full stop, `\/` is a literal forward slash, and `\\` is a literal backslash. The escape must be repeated for each occurrence — `\.\.\.` is three dots.
+**Escaping Special Characters:** To use a special character as literal text, prefix it with `\` for each instance. For example, `\.` is a literal full stop, `\/` is a literal forward slash, `\\` is a literal backslash, and `\+` is a literal plus sign. The escape must be repeated for each occurrence — `\.\.\.` is three dots.
+
+**Spaces inside a Thing:** A regular space is the delimiter between Things in a list, so it can't appear inside a Thing's value. Use `+` to embed a literal space. `Hello+World` is one Thing of length 11; `[Hello World]` is a list of two Things. A standalone `+` (with whitespace around it) is a one-character Thing whose value is a single space — useful as a delimiter argument: `text.join![[John Doe] +]` yields `John+Doe`.
 
 #### Things
 - Can contain any character except the special characters listed above
@@ -375,6 +378,105 @@ numbers.~.   # Returns 30
 
 Name lookup resolves the function's local parameter namespace first, then walks up the calling namespaces to the default namespace.
 
+## Recursion and Tail Calls
+
+A named function can refer to itself by name from inside its own body
+(the binding is in scope before the body runs):
+
+```punk
+fact:(n:_)[
+  n. ?? [
+    [0 1]
+    [_ math.mul![n. fact!math.sub![n. 1]]]
+  ]
+]
+fact!5      # 120
+```
+
+When a self-call sits in **tail position** — the last expression of a
+body, or the chosen branch of a `?` / `??` whose value is the body's
+result — Punk trampolines the call instead of pushing a new JavaScript
+stack frame. So tail-recursive loops (e.g. countdown, mutual recursion
+via the spine) run at any depth:
+
+```punk
+countdown:(n:_)[
+  n. ?? [
+    [0 done]
+    [_ countdown!math.sub![n. 1]]    # tail call — trampolines
+  ]
+]
+countdown!100000      # done
+```
+
+Non-tail recursion (like `math.mul![n. fact!...]` above) still uses the
+JS stack and is bounded by it.
+
+## Multi-arity Dispatch
+
+Punk has no overloads — every function takes one Thing. The Clojure-style
+"different shapes of input" pattern is just `??` on the whole argument
+(`*.` is always the argument as a list):
+
+```punk
+greet:(*)[
+  *. ?? [
+    [()              hello]
+    [(name:_)        math.add![hi+ name.]]
+    [(first:_ last:_) math.add![first. math.add![+ last.]]]
+  ]
+]
+greet![]              # hello
+greet![Alice]         # hi+Alice    (one Thing; `+` marks internal space)
+greet![Ada Lovelace]  # Ada+Lovelace
+```
+
+## Pipeline `|`
+
+`a | f!` desugars to `f!a`. The trailing `!` is required — it makes the
+execution explicit. Pipelines are left-associative, so `a | f! | g!`
+means `g!(f!a)`:
+
+```punk
+hello | text.toList! | list.head!     # h
+[1 2 3] | list.len!                   # 3
+[a b c] | list.tail!                  # [b c]
+```
+
+The LHS is wrapped as a single-element argument, so a list value isn't
+spread across positional slots. For multi-argument stages, wrap in a
+lambda:
+
+```punk
+5 | (n:_)[math.add![n. 10]]!          # 15
+```
+
+Whitespace around `|` is irrelevant; the RHS is a deref chain only
+(no `!`/`<`/`>` postfix), and the implicit call is the trailing `!`.
+
+## Code as Data (Macros)
+
+A list of forms — `[log!yes log!done]` — is **data** until something
+applies `!` to it. So a function can accept a "block of code" as a
+parameter and choose whether (and when) to run it. This is the macro
+mechanism; there is no separate quoting form.
+
+```punk
+when:(test:_ body:_)[
+  test. ? [TRUE body!]      # body is a list value; body! runs it
+]
+when![TRUE [log!yes]]       # prints yes
+when![FALSE [log!no]]       # nothing happens
+```
+
+The body list is captured as data when `when!` is called; only `body!`
+(applying `!` to the value) evaluates the forms — and they evaluate in
+the **caller's** scope, so they see the variables the caller sees.
+
+You can also build code by composing lists with `list.concat!` and run
+the result, giving Lisp-style template macros without a separate
+syntax for quote/unquote.
+
 ## Library Functions
 
 Punk provides library functions organized in namespaces. These are independent functions that take Things as arguments — they are not methods attached to objects.
@@ -417,18 +519,46 @@ list.slice!     # Extract portion: takes [list, start, end]
 list.find!      # Find index: takes [list, value]
 list.contains!  # Check contains: takes [list, value]
 list.sort!      # Sort list: takes list, returns sorted copy
+list.head!      # First element (NULL if empty): takes list
+list.tail!      # All but the first (always a list): takes list
+list.prepend!   # Add an item to the front: takes [item, list]
 ```
+
+Together, `list.head!`, `list.tail!`, `list.prepend!` and `list.concat!` form a Lisp-style spine — every other list traversal can be written recursively in terms of them.
 
 ### Text Operations (`text` namespace)
 
 ```punk
 text.upper!     # Convert to uppercase: takes text
 text.lower!     # Convert to lowercase: takes text
-text.split!     # Split into list: takes [text, delimiter]
-text.join!      # Join list into text: takes [list, delimiter]
-text.replace!   # Replace text: takes [text, search, replacement]
 text.trim!      # Remove whitespace: takes text
+text.split!     # Split into list: takes [text delimiter]
+text.join!      # Join list into text: takes [list delimiter]
+text.replace!   # Replace text: takes [text search replacement]
+text.toList!    # Decompose into a List of single-character Things
+text.fromList!  # Inverse of toList: rejoin a List of Things into one text Thing
 ```
+
+Punk has no separate "string" type — text is just a Thing. Operations like
+length, first/last, slice, `startsWith`, or substring search are not
+mirrored in `text.*`; instead, decompose with `text.toList!` and use the
+existing `list.*` functions. Reassemble with `text.fromList!` when needed.
+
+```punk
+list.len![text.toList!hello]                              # 5
+text.fromList![list.slice![text.toList!hello 0 2]]        # he
+
+#startsWith#
+startsWith:(s:_ p:_)[
+  chars: text.toList!s.
+  prefix: text.toList!p.
+  logic.eq![list.slice![chars. 0 list.len![prefix.]] prefix.]
+]
+startsWith![hello he]                                     # TRUE
+```
+
+Only the genuine character-class operations (`upper`/`lower`/`trim`) and
+delimiter ops (`split`/`join`/`replace`) live in `text.*`.
 
 ### File Operations (`file` namespace)
 

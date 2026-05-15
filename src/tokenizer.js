@@ -46,6 +46,14 @@ class Tokenizer {
             case '_': this.addToken('UNDERSCORE'); break;
             case '*': this.addToken('STAR'); break;
             case '~': this.addToken('TILDE'); break;
+            case '|': this.addToken('PIPE'); break;
+            case '+': {
+                // `+` is the in-Thing space marker. Standalone `+` becomes a
+                // single-character text Thing whose value is one space; that
+                // way `text.join![[a b] +]` works without escaping.
+                this.addToken('THING', ' ');
+                break;
+            }
             case '#': this.blockComment(); break;
             case '/': throw new Error('Forward slash is reserved for future ratio literals; use \\/ to include a literal /');
             case ' ':
@@ -57,7 +65,9 @@ class Tokenizer {
                 break;
             default:
                 if (c === '\\' || !this.isSpecialChar(c)) {
-                    // Read a THING, allowing `\X` to embed any special char as literal X
+                    // Read a THING, allowing `\X` to embed any special char as literal X.
+                    // `+` inside a THING is the literal-space marker; use `\+` to embed
+                    // a real `+` character.
                     let value = (c === '\\') ? this.advance() : c;
                     while (!this.isAtEnd()) {
                         const p = this.peek();
@@ -65,6 +75,9 @@ class Tokenizer {
                             this.advance();
                             if (this.isAtEnd()) throw new Error('Unexpected backslash at end of input');
                             value += this.advance();
+                        } else if (p === '+') {
+                            this.advance();
+                            value += ' ';
                         } else if (this.isSpecialChar(p)) {
                             break;
                         } else {
@@ -83,7 +96,7 @@ class Tokenizer {
     }
 
     isSpecialChar(c) {
-        return '.:!?[](){}<>_*~ \n\r\t#/\\'.includes(c);
+        return '.:!?[](){}<>_*~+| \n\r\t#/\\'.includes(c);
     }
 
     blockComment() {

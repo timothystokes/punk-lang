@@ -46,12 +46,43 @@ class Parser {
         expr = this.postfix(expr);
         
         if (this.match('DOUBLE_QUESTION')) {
-            return this.multiplePatternMatch(expr);
-        }
-        if (this.match('QUESTION')) {
-            return this.conditional(expr);
+            expr = this.multiplePatternMatch(expr);
+        } else if (this.match('QUESTION')) {
+            expr = this.conditional(expr);
         }
         
+        // Pipeline: `a | f!` desugars to `f!a`. Left-associative, so
+        // `a | f! | g!` becomes `g!(f!a)`. Whitespace around `|` is
+        // ignored. The trailing `!` is required — it makes the
+        // execution explicit. The RHS is parsed as a primary plus
+        // *deref* postfix only (so `a | obj.method!` works); for
+        // multi-arg stages, wrap in a lambda: `a | (v:_)[f![v. 0 2]]!`.
+        while (this.match('PIPE')) {
+            let stage = this.primary();
+            stage = this.postfixDerefOnly(stage);
+            this.consume('BANG', "Expected '!' after pipeline stage (e.g. `a | f!`)");
+            // Wrap LHS as a single-element list so a list value isn't
+            // spread across multiple positional slots.
+            const argList = { type: 'List', elements: [expr] };
+            expr = { type: 'FunctionCall', callee: stage, arg: argList };
+        }
+        
+        return expr;
+    }
+
+    postfixDerefOnly(expr) {
+        while (!this.isAtEnd() && !this.peek().leadingWhitespace) {
+            if (this.peek().type !== 'DOT') break;
+            this.advance();
+            if (this.isAtEnd() || this.peek().leadingWhitespace) break;
+            const nt = this.peek().type;
+            if (nt !== 'THING' && nt !== 'NUMBER' && nt !== 'TILDE') break;
+            const tok = this.advance();
+            const name = tok.type === 'NUMBER' ? String(tok.literal)
+                : (tok.type === 'TILDE' ? '~' : tok.literal);
+            expr = { type: 'Dereference', object: expr, name };
+            this.expectStepCloser(name);
+        }
         return expr;
     }
 
@@ -136,7 +167,12 @@ class Parser {
         if (this.isAtEnd() || this.peek().leadingWhitespace) return null;
         const t = this.peek().type;
         if (t === 'RIGHT_BRACKET' || t === 'RIGHT_PAREN' || t === 'RIGHT_BRACE') return null;
-        return this.expression();
+        // Bare `!` argument is a single primary + postfix chain, not a full
+        // expression — otherwise `f!a ?? b` would parse as `f!(a ?? b)`.
+        // Use brackets `f![a ?? b]` to splice a full expression as a list arg.
+        let arg = this.primary();
+        arg = this.postfix(arg);
+        return arg;
     }
 
     postfix(expr) {

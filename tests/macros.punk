@@ -1,0 +1,26 @@
+#A "block of code" is just a list of forms. `!` runs it.#
+
+#`when` is a 4-line library function — no special-form needed#
+when:(test:_ body:_)[
+  test. ? [TRUE body!]
+]
+
+#Side-effect via a Cell so we can observe whether the body ran#
+ran:{NULL}
+when![TRUE [ran<yes]]
+assert![ran> yes]
+
+ran<NULL
+when![FALSE [ran<no]]
+assert![ran> NULL]
+
+#The body sees the caller's scope#
+greeting:hello
+ran<NULL
+when![TRUE [ran<greeting.]]
+assert![ran> hello]
+
+#Code can be built up and then executed#
+prog:list.concat![[log!] [[skipped]]]
+#prog. is the list value [log! skipped]; we don't run it here, just check shape#
+assert![list.len![prog.] 2]

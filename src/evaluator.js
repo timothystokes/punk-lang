@@ -93,6 +93,20 @@ class Evaluator {
                 }),
             replace: builtin('text.replace', P.pat(P.named('text', P.wild()), P.named('search', P.wild()), P.named('with', P.wild())),
                 (b) => String(b.get('text')).split(String(b.get('search'))).join(String(b.get('with')))),
+            // text.toList: decompose any Thing into a List of single-character
+            // Things. This is the bridge that lets list.* handle "string" tasks
+            // like length, first/last, slice, startsWith, contains — Punk
+            // doesn't need a parallel text.len / text.startsWith / ...
+            toList: builtin('text.toList', P.pat(P.wild()),
+                (b) => Array.from(String(b.get('0')))),
+            // text.fromList: inverse of toList. Concatenates a List of Things
+            // back into a single text Thing. Non-text elements are stringified.
+            fromList: builtin('text.fromList', P.pat(P.wild()),
+                (b) => {
+                    const list = b.get('0');
+                    if (!Array.isArray(list)) throw this.punkError('text.fromList expects a List');
+                    return list.map(x => String(x)).join('');
+                }),
         };
 
         const listOps = {
@@ -127,6 +141,27 @@ class Evaluator {
                 (b) => {
                     const list = b.get('0');
                     return Array.isArray(list) ? list.length : 1;
+                }),
+            // Lisp spine: head/tail/prepend. Empty-list head returns NULL,
+            // empty-list tail returns []. Together with `list.concat!` these
+            // are enough to express any recursive list algorithm.
+            head: builtin('list.head', P.pat(P.wild()),
+                (b) => {
+                    const list = b.get('0');
+                    if (!Array.isArray(list)) return list;
+                    return list.length === 0 ? null : list[0];
+                }),
+            tail: builtin('list.tail', P.pat(P.wild()),
+                (b) => {
+                    const list = b.get('0');
+                    if (!Array.isArray(list)) return [];
+                    return list.slice(1);
+                }),
+            prepend: builtin('list.prepend', P.pat(P.named('item', P.wild()), P.named('list', P.wild())),
+                (b) => {
+                    const list = b.get('list');
+                    if (!Array.isArray(list)) throw this.punkError('list.prepend expects a List as the second Thing');
+                    return [b.get('item'), ...list];
                 }),
             concat: builtin('list.concat', P.pat(P.star()),
                 (b, arg) => {
@@ -236,7 +271,13 @@ class Evaluator {
         if (v === false) return 'FALSE';
         if (v === undefined) return '<nothing>';
         if (Array.isArray(v)) return '[' + v.map(x => this.formatValue(x)).join(' ') + ']';
-        if (typeof v === 'string') return v;
+        if (typeof v === 'string') {
+            // Render text Things so the output is valid Punk source again:
+            // a literal `+` in the value must be escaped as `\+`, and a
+            // literal space inside the Thing is shown as `+`. Without this,
+            // a single Thing containing a space would re-parse as two Things.
+            return v.replace(/\\/g, '\\\\').replace(/\+/g, '\\+').replace(/ /g, '+');
+        }
         if (v && typeof v === 'object') {
             if (v.type === 'Cell') return '{' + this.formatValue(v.contents) + '}';
             if (v.type === 'UserFunction' || v.type === 'FunctionLiteral') return '<function>';
@@ -439,8 +480,74 @@ class Evaluator {
     // (and for binding NamedThings into scope). An empty body has no value
     // and yields `null`.
     evaluateBody(node) {
-        const results = this.evaluateListAsCode(node);
-        return results.length === 0 ? null : results[results.length - 1];
+        const elements = node.elements;
+        if (elements.length === 0) return null;
+        for (let i = 0; i < elements.length - 1; i++) {
+            const element = elements[i];
+            if (element.type === 'NamedThing') {
+                const value = this.evaluate(element.value);
+                this.setName(element.name, value);
+            } else {
+                this.evaluate(element);
+            }
+        }
+        // Last element runs in tail position so direct self-calls trampoline
+        // instead of growing the JS stack.
+        const last = elements[elements.length - 1];
+        if (last.type === 'NamedThing') {
+            const value = this.evaluate(last.value);
+            this.setName(last.name, value);
+            return value;
+        }
+        return this.evaluateTail(last);
+    }
+
+    // Tail-position evaluator: same as `evaluate`, but FunctionCall to a
+    // UserFunction returns a `{__tc, fn, arg}` sentinel that the trampoline
+    // in `callFunction` resolves iteratively. Conditional/MultiplePatternMatch
+    // propagate tail position into their chosen branch.
+    evaluateTail(node) {
+        if (!node || typeof node !== 'object') return this.evaluate(node);
+        switch (node.type) {
+            case 'Conditional': {
+                const value = this.evaluate(node.value);
+                const pattern = this.evaluate(node.pattern);
+                const bindings = this.matchPattern(value, pattern);
+                if (bindings) {
+                    return this.withScope(bindings, () => this.evaluateTail(node.thenExpr));
+                }
+                return null;
+            }
+            case 'MultiplePatternMatch': {
+                const value = this.evaluate(node.value);
+                for (const { pattern, expression } of node.cases) {
+                    const evaluatedPattern = this.evaluate(pattern);
+                    const bindings = this.matchPattern(value, evaluatedPattern);
+                    if (bindings) {
+                        if (expression === null) return null;
+                        return this.withScope(bindings, () => this.evaluateTail(expression));
+                    }
+                }
+                return null;
+            }
+            case 'FunctionCall': {
+                const callee = this.evaluate(node.callee);
+                let arg;
+                if (node.arg === null || node.arg === undefined) {
+                    arg = null;
+                } else if (node.arg.type === 'List') {
+                    arg = this.evaluateListAsCode(node.arg);
+                } else {
+                    arg = this.evaluate(node.arg);
+                }
+                if (callee && callee.type === 'UserFunction') {
+                    return { __tc: true, fn: callee, arg };
+                }
+                return this.callFunction(callee, arg);
+            }
+            default:
+                return this.evaluate(node);
+        }
     }
 
     evaluatePattern(node) {
@@ -522,21 +629,32 @@ class Evaluator {
             return fn.impl(bindings, arg);
         }
         if (fn.type === 'UserFunction') {
-            const bindings = this.matchPattern(arg, this.evaluatePattern(fn.pattern));
-            if (!bindings) {
-                throw new Error(`Input Thing does not match pattern ${this.formatPattern(this.evaluatePattern(fn.pattern))}`);
-            }
-            bindings.set('.', arg);
-            bindings.set('*', Array.isArray(arg) ? arg : [arg]);
+            // Trampoline: tail-position self/mutual calls bubble up as
+            // {__tc, fn, arg} sentinels (see evaluateTail) so we re-enter
+            // here without growing the JS stack.
             const savedScopes = this.scopes;
-            this.scopes = fn.closure.slice();
-            const result = this.withScope(bindings, () => {
-                // Function body is a List; `!` evaluates it as a block and
-                // the function returns the value of its final statement.
-                return this.evaluateBody(fn.body);
-            });
-            this.scopes = savedScopes;
-            return result;
+            try {
+                while (true) {
+                    const bindings = this.matchPattern(arg, this.evaluatePattern(fn.pattern));
+                    if (!bindings) {
+                        throw new Error(`Input Thing does not match pattern ${this.formatPattern(this.evaluatePattern(fn.pattern))}`);
+                    }
+                    bindings.set('.', arg);
+                    bindings.set('*', Array.isArray(arg) ? arg : [arg]);
+                    this.scopes = fn.closure.slice();
+                    const result = this.withScope(bindings, () => {
+                        return this.evaluateBody(fn.body);
+                    });
+                    if (result && typeof result === 'object' && result.__tc) {
+                        fn = result.fn;
+                        arg = result.arg;
+                        continue;
+                    }
+                    return result;
+                }
+            } finally {
+                this.scopes = savedScopes;
+            }
         }
         if (typeof fn === 'function') {
             return fn(arg);
