@@ -35,12 +35,15 @@ class Tokenizer {
                     this.addToken('QUESTION');
                 }
                 break;
-            case '[': this.addToken('LEFT_BRACKET'); break;
-            case ']': this.addToken('RIGHT_BRACKET'); break;
-            case '(': this.addToken('LEFT_PAREN'); break;
-            case ')': this.addToken('RIGHT_PAREN'); break;
-            case '{': this.addToken('LEFT_BRACE'); break;
-            case '}': this.addToken('RIGHT_BRACE'); break;
+            // Bracket rotation: `(` is list/body, `{` is pattern, `[` is cell.
+            // (Token *names* still reflect their semantic role — only the
+            // surface characters changed.)
+            case '(': this.addToken('LEFT_BRACKET'); break;
+            case ')': this.addToken('RIGHT_BRACKET'); break;
+            case '{': this.addToken('LEFT_PAREN'); break;
+            case '}': this.addToken('RIGHT_PAREN'); break;
+            case '[': this.addToken('LEFT_BRACE'); break;
+            case ']': this.addToken('RIGHT_BRACE'); break;
             case '<': this.addToken('LESS'); break;
             case '>': this.addToken('GREATER'); break;
             case '_': this.addToken('UNDERSCORE'); break;

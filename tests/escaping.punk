@@ -1,15 +1,15 @@
 #Special characters in data must be escaped with `\` per instance#
 
 #Standalone escaped specials are data Things#
-assert![\. \.]
-assert![\/ \/]
-assert![\\ \\]
-assert![\! \!]
-assert![\: \:]
+assert!(\. \.)
+assert!(\/ \/)
+assert!(\\ \\)
+assert!(\! \!)
+assert!(\: \:)
 
 #Escapes inside a multi-char Thing#
-assert![input\.txt input\.txt]
-assert![a\/b a\/b]
+assert!(input\.txt input\.txt)
+assert!(a\/b a\/b)
 
 #Lists containing escaped specials#
-assert![[Hello\. World\.] [Hello\. World\.]]
+assert!((Hello\. World\.) (Hello\. World\.))

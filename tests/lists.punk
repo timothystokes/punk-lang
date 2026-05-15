@@ -1,37 +1,37 @@
 #List operations — every step in a chain ends with `.`, `!`, `<` or `>`#
 
 #Index by position#
-nums:[1 2 3 4 5]
-assert![nums.0. 1]
-assert![nums.~. 5]
-assert![nums.2. 3]
+nums:(1 2 3 4 5)
+assert!(nums.0. 1)
+assert!(nums.~. 5)
+assert!(nums.2. 3)
 
 #Index sugar on a literal list#
-assert![[10 20 30].0. 10]
-assert![[10 20 30].~. 30]
+assert!((10 20 30).0. 10)
+assert!((10 20 30).~. 30)
 
-#Named items in a list (deref by name takes the last match)#
-people:[name:Alice name:Bob]
-assert![people.name. Bob]
+#Named items in a list {deref by name takes the last match}#
+people:(name:Alice name:Bob)
+assert!(people.name. Bob)
 
 #Nested list access — each step independently terminated#
-matrix:[[1 2] [3 4]]
-assert![matrix.0. [1 2]]
-assert![matrix.0.0. 1]
-assert![matrix.~.~. 4]
+matrix:((1 2) (3 4))
+assert!(matrix.0. (1 2))
+assert!(matrix.0.0. 1)
+assert!(matrix.~.~. 4)
 
 #A single Thing behaves as a 1-element list#
 solo:hello
-assert![solo.0. hello]
-assert![solo.~. hello]
+assert!(solo.0. hello)
+assert!(solo.~. hello)
 
 #Lisp spine: head / tail / prepend#
-assert![head![[a b c]] a]
-assert![tail![[a b c]] [b c]]
-assert![prepend![z [a b c]] [z a b c]]
-#head of empty is NULL, tail of empty is []#
-assert![head![[]] NULL]
-assert![tail![[]] []]
+assert!(head!((a b c)) a)
+assert!(tail!((a b c)) (b c))
+assert!(prepend!(z (a b c)) (z a b c))
+#head of empty is NULL, tail of empty is ()#
+assert!(head!(()) NULL)
+assert!(tail!(()) ())
 #head/tail compose to rebuild a list with prepend#
-xs:[1 2 3]
-assert![prepend![head![xs.] tail![xs.]] xs.]
+xs:(1 2 3)
+assert!(prepend!(head!(xs.) tail!(xs.)) xs.)

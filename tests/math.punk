@@ -1,20 +1,20 @@
 #math namespace — every assertion is a self-check#
 
 #Binary arithmetic#
-assert![add![5 3] 8]
-assert![sub![10 4] 6]
-assert![mul![6 7] 42]
-assert![div![20 4] 5]
-assert![mod![10 3] 1]
-assert![pow![2 8] 256]
+assert!(add!(5 3) 8)
+assert!(sub!(10 4) 6)
+assert!(mul!(6 7) 42)
+assert!(div!(20 4) 5)
+assert!(mod!(10 3) 1)
+assert!(pow!(2 8) 256)
 
 #Variadic min / max — accept any number of Things#
-assert![min![3 1 4 1 5 9 2 6] 1]
-assert![max![3 1 4 1 5 9 2 6] 9]
+assert!(min!(3 1 4 1 5 9 2 6) 1)
+assert!(max!(3 1 4 1 5 9 2 6) 9)
 
 #Type predicate#
-assert![isnum!42 TRUE]
-assert![isnum!hello FALSE]
+assert!(isnum!42 TRUE)
+assert!(isnum!hello FALSE)
 
-#Pattern-shaped error message for wrong arity (demo, commented)#
+#Pattern-shaped error message for wrong arity {demo, commented}#
 #add!5#

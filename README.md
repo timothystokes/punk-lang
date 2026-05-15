@@ -15,14 +15,14 @@ person:Tim      # Named Thing
 
 #### Accessing a thing by its name
 
-In Punk a name is dereferenced by appending `.` (postfix). The `.` does one job everywhere: dereference the thing on its left. A bare `name` on its own is just data (a literal Thing); writing `name.` retrieves the value bound to `name`.
+In Punk a name is dereferenced by appending `.` {postfix}. The `.` does one job everywhere: dereference the thing on its left. A bare `name` on its own is just data {a literal Thing}; writing `name.` retrieves the value bound to `name`.
 
 ```punk
 name:Tim   # define a Named Thing
-name.      # Dereferences to the value 'Tim' (retrieved from the default namespace)
+name.      # Dereferences to the value 'Tim' {retrieved from the default namespace}
 ```
 
-A leading-dot form like `.name` is **not** a dereference — it is reserved for the implicit single-parameter reference (see *Parameter Access* below).
+A leading-dot form like `.name` is **not** a dereference — it is reserved for the implicit single-parameter reference {see *Parameter Access* below}.
 
 **Immutability and Naming:**  
 All Things in Punk are immutable. Once a Thing is named, its value cannot be changed. However, a new Named Thing within the same namespace will remap the new Thing to that name. This is similar to shadowing or rebinding in other functional languages.
@@ -40,52 +40,52 @@ person.     # returns Bob, the new Thing named 'person'
 
 ### Lists are Things
 
-A List is a collection of Things enclosed in brackets `[ ]`. **Importantly, a List itself is a single Thing** when viewed from outside. When you pass a List to a function, you're passing one Thing (which happens to contain multiple items).
+A List is a collection of Things enclosed in brackets `( )`. **Importantly, a List itself is a single Thing** when viewed from outside. When you pass a List to a function, you're passing one Thing {which happens to contain multiple items}.
 
-**Single Things as Lists:** A single Thing can also be treated as a list of one Thing. This means `name.0.` (index 0 of `name`) on a scalar returns itself, and `name.~.` does too.
+**Single Things as Lists:** A single Thing can also be treated as a list of one Thing. This means `name.0.` {index 0 of `name`} on a scalar returns itself, and `name.~.` does too.
 
-Lists can be used as both associative arrays (by name) and indexed arrays (by position):
+Lists can be used as both associative arrays {by name} and indexed arrays {by position}:
 ```punk
-[Tim age:44]  # A List containing a Thing and a Named Thing
+(Tim age:44)  # A List containing a Thing and a Named Thing
 ```
 NOTE: When dereferencing items from a List by name, the last value with that name is returned, on the principle that within the namespace new named things replace previous ones using that name.
 
-**Lists are data; `!` is what evaluates them.** A `[ ]` written in source is *always* just data — its elements are not run as code. Active forms inside a bare list (function calls, dereferences, conditionals, pattern matches) are held as unevaluated Things. They only execute when something applies `!` to the containing list — directly (`fn![…]`), as a function body when the function is called, or as a branch of `?` / `??` that gets taken. A Punk source file is itself evaluated as if it were `[file contents]!` — a literal zero-parameter anonymous list applied directly — which is the only reason top-level statements run. This makes code and data interchangeable in form; the choice is made at the point of use.
+**Lists are data; `!` is what evaluates them.** A `( )` written in source is *always* just data — its elements are not run as code. Active forms inside a bare list {function calls, dereferences, conditionals, pattern matches} are held as unevaluated Things. They only execute when something applies `!` to the containing list — directly {`fn!(…)`}, as a function body when the function is called, or as a branch of `?` / `??` that gets taken. A Punk source file is itself evaluated as if it were `(file contents)!` — a literal zero-parameter anonymous list applied directly — which is the only reason top-level statements run. This makes code and data interchangeable in form; the choice is made at the point of use.
 
 **A list is a zero-parameter function body.** `!` can be applied to *any* list, literal or bound to a name, with no argument:
 
 ```punk
-[log![hi]]!       # Literal list applied directly: prints 'hi'
-code:[log![hi]]   # Bound — held as data, nothing runs yet
+(log!(hi))!       # Literal list applied directly: prints 'hi'
+code:(log!(hi))   # Bound — held as data, nothing runs yet
 code!             # Evaluates the bound list as a body: prints 'hi'
 ```
 
-Because of this, `[ ]!` is Punk's eval primitive: take any list value (built from literals, returned from a function, or manipulated as data) and run it. `!` with no argument is a zero-arg call; an argument is allowed only when it immediately follows the `!` with no whitespace.
+Because of this, `( )!` is Punk's eval primitive: take any list value {built from literals, returned from a function, or manipulated as data} and run it. `!` with no argument is a zero-arg call; an argument is allowed only when it immediately follows the `!` with no whitespace.
 
 ### Character Rules
 
 #### Special Characters
 The following characters have special meaning in Punk and cannot appear in Thing values or names:
-- `.` - Dereference operator (postfix on a name) / single-parameter reference (bare)
+- `.` - Dereference operator {postfix on a name} / single-parameter reference {bare}
 - `:` - Name assignment operator
-- `!` - Function call operator (implicitly dereferences the name on its left)
+- `!` - Function call operator {implicitly dereferences the name on its left}
 - `?` - Pattern matching operator
 - `??` - Multiple pattern matching operator
-- `[` `]` - List delimiters
-- `(` `)` - Pattern delimiters
-- `{` `}` - Mutable cell delimiters
-- `<` `>` - Cell write / cell read (implicitly dereferences the name on its left)
+- `(` `)` - List delimiters
+- `{` `}` - Pattern delimiters
+- `[` `]` - Mutable cell delimiters
+- `<` `>` - Cell write / cell read {implicitly dereferences the name on its left}
 - `_` - Single wildcard in patterns
 - `*` - Multiple wildcard in patterns
-- `~` - Last-item accessor (a chain step name; must be followed by `.`, `!`, `<` or `>`)
-- `+` - In-Thing space marker (so `Hello+World` is one Thing containing a literal space, not two)
-- `#` - Comment delimiter (block style)
-- `/` - **Reserved** for future ratio literals (e.g. `1/2`); not currently usable
-- `\` - Escape character (see below)
+- `~` - Last-item accessor {a chain step name; must be followed by `.`, `!`, `<` or `>`}
+- `+` - In-Thing space marker {so `Hello+World` is one Thing containing a literal space, not two}
+- `#` - Comment delimiter {block style}
+- `/` - **Reserved** for future ratio literals {e.g. `1/2`}; not currently usable
+- `\` - Escape character {see below}
 
 **Escaping Special Characters:** To use a special character as literal text, prefix it with `\` for each instance. For example, `\.` is a literal full stop, `\/` is a literal forward slash, `\\` is a literal backslash, and `\+` is a literal plus sign. The escape must be repeated for each occurrence — `\.\.\.` is three dots.
 
-**Spaces inside a Thing:** A regular space is the delimiter between Things in a list, so it can't appear inside a Thing's value. Use `+` to embed a literal space. `Hello+World` is one Thing of length 11; `[Hello World]` is a list of two Things. A standalone `+` (with whitespace around it) is a one-character Thing whose value is a single space — useful as a delimiter argument: `join![[John Doe] +]` yields `John+Doe`.
+**Spaces inside a Thing:** A regular space is the delimiter between Things in a list, so it can't appear inside a Thing's value. Use `+` to embed a literal space. `Hello+World` is one Thing of length 11; `(Hello World)` is a list of two Things. A standalone `+` {with whitespace around it} is a one-character Thing whose value is a single space — useful as a delimiter argument: `join!((John Doe) +)` yields `John+Doe`.
 
 #### Things
 - Can contain any character except the special characters listed above
@@ -97,7 +97,7 @@ The following characters have special meaning in Punk and cannot appear in Thing
   ```
 
 #### Names of things
-- Must start with a letter (a-z, A-Z)
+- Must start with a letter {a-z, A-Z}
 - Can only contain letters and numbers after the first character
 - Examples:
   ```punk
@@ -110,13 +110,13 @@ The following characters have special meaning in Punk and cannot appear in Thing
 #### Numbers
 Punk supports numeric literals in two formats:
 - Standard format: `123`, `-45`, `0`
-- European format: `1,5` (comma as decimal separator, equivalent to `1.5`)
+- European format: `1,5` {comma as decimal separator, equivalent to `1.5`}
 
 Examples:
 ```punk
 42        # Integer
 -17       # Negative integer
-3,14159   # European decimal (equals 3.14159)
+3,14159   # European decimal {equals 3.14159}
 ```
 
 #### Comments
@@ -130,7 +130,7 @@ Comments are completely removed during tokenization and can span multiple lines.
 #### Strings
 Punk has no string literal type. To represent text with multiple words, use a List of Things:
 ```punk
-message:[Hello World]  # A list containing two Things
+message:(Hello World)  # A list containing two Things
 log!message.           # Logs: Hello World
 ```
 
@@ -143,26 +143,26 @@ Punk has three special literal Things:
 These are capitalized to emphasize they are static literals.
 
 ### Whitespace
-Whitespace (spaces, tabs, newlines) serves as a delimiter between tokens. Whitespace between operators and operands is significant — for example, `numbers.1.` (no spaces) dereferences index 1, while `numbers .1.` (with space) is two separate tokens and is a syntax error (a leading `.` no longer has any meaning). The postfix dereference is `name.` only when the `.` immediately follows the name with no whitespace.
+Whitespace {spaces, tabs, newlines} serves as a delimiter between tokens. Whitespace between operators and operands is significant — for example, `numbers.1.` {no spaces} dereferences index 1, while `numbers .1.` {with space} is two separate tokens and is a syntax error {a leading `.` no longer has any meaning}. The postfix dereference is `name.` only when the `.` immediately follows the name with no whitespace.
 
 ### Lists
-Lists in Punk have a unique dual nature — they can be accessed both by index (like traditional arrays) and by name (like associative arrays).
+Lists in Punk have a unique dual nature — they can be accessed both by index {like traditional arrays} and by name {like associative arrays}.
 
 ```punk
-[1 2 3]              # Simple List
-names:[Tim Bob Mary]  # Simple Named list
-people:[
-  [name:Tim age:44]
-  [name:John age:30]
-]  # Named List of Lists
+(1 2 3)              # Simple List
+names:(Tim Bob Mary)  # Simple Named list
+people:(
+  (name:Tim age:44)
+  (name:John age:30)
+)  # Named List of Lists
 ```
 
 Important rules for list things:
 1. Simple Things don't need individual brackets
-2. Nested Lists require their own brackets: `[[1 2] [3 4]]`
+2. Nested Lists require their own brackets: `((1 2) (3 4))`
 3. Lists can contain Things, Named Things, or other Lists
 4. All Things are immutable
-5. Things in a List can be accessed by both index and name (if named)
+5. Things in a List can be accessed by both index and name {if named}
 6. When multiple items have the same name, the last one supersedes earlier ones
 
 #### List Access Examples
@@ -172,23 +172,23 @@ special-case for indexes — `0.`, `~.`, and `name.` all behave the same way.
 
 ```punk
 # Access by numeric index — every step ends with `.`
-numbers:[1 2 3]
-numbers.1.            # Returns 2 (0-based indexing) — note no space before `.1.`
+numbers:(1 2 3)
+numbers.1.            # Returns 2 {0-based indexing} — note no space before `.1.`
 
 # Access the last item with `~`
 numbers.~.            # Returns 3
 
 # Same rule applies to list literals
-[10 20 30].0.         # Returns 10
-[10 20 30].~.         # Returns 30
+(10 20 30).0.         # Returns 10
+(10 20 30).~.         # Returns 30
 numbers.1             # Error: step '1' must be terminated with '.', '!', '<' or '>'
 
 # Access by name — same shape
-people:[person:John person:Tim]
-people.person.        # Returns 'Tim' (the last value bound to `person`)
+people:(person:John person:Tim)
+people.person.        # Returns 'Tim' {the last value bound to `person`}
 
 # Chains compose uniformly
-matrix:[[1 2] [3 4]]
+matrix:((1 2) (3 4))
 matrix.0.0.           # Returns 1
 matrix.~.~.           # Returns 4
 ```
@@ -199,14 +199,14 @@ write/read. `.` always means "dereference one step."
 
 ## Mutable Cells
 
-Punk supports controlled mutability through *cells*: lexically scoped boxes whose contents can be replaced. A cell is created with `{value}` and accessed with two operators that work on the cell's name:
+Punk supports controlled mutability through *cells*: lexically scoped boxes whose contents can be replaced. A cell is created with `[value]` and accessed with two operators that work on the cell's name:
 
 - `name>` — read the cell's contents
 - `name<value` — write `value` into the cell
 
 ```punk
-counter:{0}                       # bind counter to a cell containing 0
-counter<add![counter> 1]     # increment
+counter:[0]                       # bind counter to a cell containing 0
+counter<add!(counter> 1)     # increment
 log!counter>                      # prints 1
 ```
 
@@ -214,68 +214,68 @@ The `name` itself stays bound to the same cell — the cell's *contents* change.
 
 ## Pattern Matching
 
-A pattern in Punk is defined by shapes of data placed between `( )` where:
+A pattern in Punk is defined by shapes of data placed between `{ }` where:
 - `_` represents a single Thing in a pattern shape
-- `*` represents any number of Things (including zero Things)
+- `*` represents any number of Things {including zero Things}
 
 For example:
 ```punk
-(_ _)            # Matches a List containing exactly two Things
-(3 _ _)          # Matches a List containing three Things where the first is the Thing '3'
-(*)              # Matches any Thing
-(person:Tim *)   # Matches any List where 'person:Tim' is the first Thing in the list
+{_ _}            # Matches a List containing exactly two Things
+{3 _ _}          # Matches a List containing three Things where the first is the Thing '3'
+{*}              # Matches any Thing
+{person:Tim *}   # Matches any List where 'person:Tim' is the first Thing in the list
 ```
 
-**Note:** Empty patterns `()` are not currently implemented.
+**Note:** Empty patterns `{}` are not currently implemented.
 
-### Conditional Pattern Matching (`?`)
+### Conditional Pattern Matching {`?`}
 
 The `?` operator is **pattern-first** and dispatches on the shape of its right-hand side:
 
 | Form | Result |
 | --- | --- |
-| `pattern?value` | `TRUE` if matched, `FALSE` otherwise (pure predicate) |
-| `pattern?[value]` | `TRUE` / `FALSE` (equivalent) |
-| `pattern?[value then]` | `then` if matched, `NULL` otherwise |
+| `pattern?value` | `TRUE` if matched, `FALSE` otherwise {pure predicate} |
+| `pattern?(value)` | `TRUE` / `FALSE` {equivalent} |
+| `pattern?(value then)` | `then` if matched, `NULL` otherwise |
 
 There's no third "else" slot — use `??` when you want a branch for the no-match case.
 
 ```punk
-isTim:(Tim)
+isTim:{Tim}
 isTim?Tim                    # TRUE
 isTim?Bob                    # FALSE
-isTim?[Tim [log!Found Tim]!] # runs log!Found Tim, returns its value
-isTim?[Bob hit]              # NULL
+isTim?(Tim (log!Found Tim)!) # runs log!Found Tim, returns its value
+isTim?(Bob hit)              # NULL
 ```
 
-The `then` slot is **lazy** — it only runs on a match, so a side effect (or error) in the body doesn't fire when the pattern misses. Wrap multiple steps in `[…]!` to evaluate them as a body.
+The `then` slot is **lazy** — it only runs on a match, so a side effect {or error} in the body doesn't fire when the pattern misses. Wrap multiple steps in `(…)!` to evaluate them as a body.
 
-To test a pattern against a list value (which would otherwise look like the match-form), bind the value to a name first:
+To test a pattern against a list value {which would otherwise look like the match-form}, bind the value to a name first:
 
 ```punk
-isPair:(_ _)
-pair:[1 2]
+isPair:{_ _}
+pair:(1 2)
 isPair?pair.                 # TRUE
 ```
 
-### Multiple Pattern Matching (`??`)
+### Multiple Pattern Matching {`??`}
 
 The `??` operator dispatches one value against many patterns. The right-hand side is a list of cases:
 
-- `[pattern result]` — on match, evaluate `result` lazily and return it.
-- `[pattern]` — on match, do nothing and return `NULL`.
+- `(pattern result)` — on match, evaluate `result` lazily and return it.
+- `(pattern)` — on match, do nothing and return `NULL`.
 
-Cases are tried in order; the first match wins. Falling off the end with no match also yields `NULL`. A trailing `[_]` is a "swallow everything else" no-op catch-all.
+Cases are tried in order; the first match wins. Falling off the end with no match also yields `NULL`. A trailing `(_)` is a "swallow everything else" no-op catch-all.
 
 ```punk
-wild:(_)
-classify:(x:_)[
-  x.??[
-    [1 one]
-    [2 two]
-    [wild. other]
-  ]
-]
+wild:{_}
+classify:{x:_}(
+  x.??(
+    (1 one)
+    (2 two)
+    (wild. other)
+  )
+)
 classify!1                   # one
 classify!9                   # other
 ```
@@ -285,84 +285,84 @@ classify!9                   # other
 Patterns can be named just like any other Thing. Dereference them with postfix `.` wherever a pattern is expected.
 
 ```punk
-isTim:(Tim)
-isBob:(Bob)
-isZero:(0)
+isTim:{Tim}
+isBob:{Bob}
+isZero:{0}
 ```
 
 ## Functions
 
-Functions are defined by a pattern connected to an expression (List) that can be applied to a Thing passed to the function that matches that pattern. They are executed by using `!` after the function name (or function literal).
+Functions are defined by a pattern connected to an expression {List} that can be applied to a Thing passed to the function that matches that pattern. They are executed by using `!` after the function name {or function literal}.
 
-**Every function takes exactly one Thing as its parameter.** Since a List is a single Thing, you can effectively pass multiple values by wrapping them in a List `[ ]`.
+**Every function takes exactly one Thing as its parameter.** Since a List is a single Thing, you can effectively pass multiple values by wrapping them in a List `( )`.
 
-Punk has no methods. Operations live in function libraries (like `math`, `list`, `text`), and the target Thing is passed as the argument. For example, use `map![numbers. (n:_)[...]]` rather than `numbers.map`.
+Punk has no methods. Operations live in function libraries {like `math`, `list`, `text`}, and the target Thing is passed as the argument. For example, use `map!(numbers. {n:_}(...))` rather than `numbers.map`.
 
 To call a named function, write the name immediately followed by `!`. The `!` implicitly dereferences the name. For example:
 
 ```punk
-double:(n:_)[mul![n. 2]]   # Define a function named 'double'
+double:{n:_}(mul!(n. 2))   # Define a function named 'double'
 double!4                        # Returns 8  — the value of the last expression
 ```
 
-If a function name is followed by postfix `.` (not `!`), the result is a *reference* to the function itself, suitable for passing to another function:
+If a function name is followed by postfix `.` {not `!`}, the result is a *reference* to the function itself, suitable for passing to another function:
 
 ```punk
-double:(n:_)[mul![n. 2]]
-map![numbers. double.]    # Passes the list and the function reference to map
+double:{n:_}(mul!(n. 2))
+map!(numbers. double.)    # Passes the list and the function reference to map
 ```
 
 Punk supports anonymous functions, which are useful for higher-order functions that accept a function as a parameter.
 
 ```punk
-map![people. (person:_)[person.name.]]
+map!(people. {person:_}(person.name.))
 ```
 Returns a list of names from a list of people that contain an element called `name`.
 
-There are a number of built-in functions (`add!`, `map!`, `eq!`, …) all available at the top level — see "Library Functions" below.
+There are a number of built-in functions {`add!`, `map!`, `eq!`, …} all available at the top level — see "Library Functions" below.
 
 #### Named Function Example
 
 ```punk
-sum:(a:_ b:_)[add![a. b.]]
-sum![2 3]      # Returns 5
+sum:{a:_ b:_}(add!(a. b.))
+sum!(2 3)      # Returns 5
 ```
 
 **Function Return Values:** A function body is a sequence of expressions
 evaluated in order. The call's value is the **value of the last expression**
-(Clojure-style). Earlier expressions run for their side effects and any
+{Clojure-style}. Earlier expressions run for their side effects and any
 name bindings they introduce. This rule applies uniformly to function
-bodies, conditional branches (`?` / `??`), and the eval primitive `[…]!`.
+bodies, conditional branches {`?` / `??`}, and the eval primitive `(…)!`.
 
 ```punk
-compute:(x:_)[
-    y:add![x. 1]
-    mul![y. 10]
-]
+compute:{x:_}(
+    y:add!(x. 1)
+    mul!(y. 10)
+)
 compute!4      # Returns 50
 ```
 
 ## Parameter Access
 
-Every parameter slot in a function pattern must be **named**. Use `(name:_)`
-for a single Thing and `(name:*)` for a run of Things, then dereference the
+Every parameter slot in a function pattern must be **named**. Use `{name:_}`
+for a single Thing and `{name:*}` for a run of Things, then dereference the
 binding inside the body with `name.`:
 
 ```punk
-double:(n:_)[mul![n. 2]]
-add:(a:_ b:_)[add![a. b.]]
-all:(xs:*)[xs.]
+double:{n:_}(mul!(n. 2))
+add:{a:_ b:_}(add!(a. b.))
+all:{xs:*}(xs.)
 ```
 
-There is no implicit-parameter `.` — every `.` has a name (or expression)
+There is no implicit-parameter `.` — every `.` has a name {or expression}
 on its left. The one universal shorthand is `*.`, which is **always**
-bound inside a function body to the full argument-as-a-list (even when
-the pattern uses positional named params). For functions whose pattern is
-`(*)`, `*.` is the only way to reach the input:
+bound inside a function body to the full argument-as-a-list {even when
+the pattern uses positional named params}. For functions whose pattern is
+`{*}`, `*.` is the only way to reach the input:
 
 ```punk
-all:(*)[*.]                  # *. is the whole argument
-pairAll:(a:_ b:_)[*.]        # *. = [a b] even though the slots are named
+all:{*}(*.)                  # *. is the whole argument
+pairAll:{a:_ b:_}(*.)        # *. = (a b) even though the slots are named
 ```
 
 For functions that take a List of inputs, use `name.0.`, `name.1.`,
@@ -370,7 +370,7 @@ For functions that take a List of inputs, use `name.0.`, `name.1.`,
 
 ```punk
 # Accessing list items by index — every step ends with `.`
-numbers:[10 20 30]
+numbers:(10 20 30)
 numbers.0.   # Returns 10
 numbers.1.   # Returns 20
 numbers.~.   # Returns 30
@@ -381,66 +381,66 @@ Name lookup resolves the function's local parameter namespace first, then walks 
 ## Recursion and Tail Calls
 
 A named function can refer to itself by name from inside its own body
-(the binding is in scope before the body runs):
+{the binding is in scope before the body runs}:
 
 ```punk
-fact:(n:_)[
-  n. ?? [
-    [0 1]
-    [_ mul![n. fact!sub![n. 1]]]
-  ]
-]
+fact:{n:_}(
+  n. ?? (
+    (0 1)
+    (_ mul!(n. fact!sub!(n. 1)))
+  )
+)
 fact!5      # 120
 ```
 
 When a self-call sits in **tail position** — the last expression of a
 body, or the chosen branch of a `?` / `??` whose value is the body's
 result — Punk trampolines the call instead of pushing a new JavaScript
-stack frame. So tail-recursive loops (e.g. countdown, mutual recursion
-via the spine) run at any depth:
+stack frame. So tail-recursive loops {e.g. countdown, mutual recursion
+via the spine} run at any depth:
 
 ```punk
-countdown:(n:_)[
-  n. ?? [
-    [0 done]
-    [_ countdown!sub![n. 1]]    # tail call — trampolines
-  ]
-]
+countdown:{n:_}(
+  n. ?? (
+    (0 done)
+    (_ countdown!sub!(n. 1))    # tail call — trampolines
+  )
+)
 countdown!100000      # done
 ```
 
-Non-tail recursion (like `mul![n. fact!...]` above) still uses the
+Non-tail recursion {like `mul!(n. fact!...)` above} still uses the
 JS stack and is bounded by it.
 
 ## Multi-arity Dispatch
 
 Punk has no overloads — every function takes one Thing. The Clojure-style
 "different shapes of input" pattern is just `??` on the whole argument
-(`*.` is always the argument as a list):
+{`*.` is always the argument as a list}:
 
 ```punk
-greet:(*)[
-  *. ?? [
-    [()              hello]
-    [(name:_)        add![hi+ name.]]
-    [(first:_ last:_) add![first. add![+ last.]]]
-  ]
-]
-greet![]              # hello
-greet![Alice]         # hi+Alice    (one Thing; `+` marks internal space)
-greet![Ada Lovelace]  # Ada+Lovelace
+greet:{*}(
+  *. ?? (
+    ({}              hello)
+    ({name:_}        add!(hi+ name.))
+    ({first:_ last:_} add!(first. add!(+ last.)))
+  )
+)
+greet!()              # hello
+greet!(Alice)         # hi+Alice    {one Thing; `+` marks internal space}
+greet!(Ada Lovelace)  # Ada+Lovelace
 ```
 
 ## Pipeline `|`
 
 `a | f.` desugars to `f!a`. The trailing `.` is required — it gives the
-pipe the function **value** to call, same rule as `map![xs f.]`. Pipelines
-are left-associative, so `a | f. | g.` means `g!(f!a)`:
+pipe the function **value** to call, same rule as `map!(xs f.)`. Pipelines
+are left-associative, so `a | f. | g.` means `g!{f!a}`:
 
 ```punk
 hello | split. | head.           # h
-[1 2 3] | len.                   # 3
-[a b c] | tail.                  # [b c]
+(1 2 3) | len.                   # 3
+(a b c) | tail.                  # (b c)
 ```
 
 The LHS is wrapped as a single-element argument, so a list value isn't
@@ -448,31 +448,31 @@ spread across positional slots. For multi-argument stages, wrap in a
 lambda:
 
 ```punk
-5 | (n:_)[add![n. 10]].          # 15
+5 | {n:_}(add!(n. 10)).          # 15
 ```
 
 Whitespace around `|` is irrelevant; the RHS is any expression that
-evaluates to a function value — typically `f.` (deref a name) or
-`getFn!x` (a call that itself returns a function). The pipe is what
+evaluates to a function value — typically `f.` {deref a name} or
+`getFn!x` {a call that itself returns a function}. The pipe is what
 performs the final call with the LHS as the single argument.
 
-## Code as Data (Macros)
+## Code as Data {Macros}
 
-A list of forms — `[log!yes log!done]` — is **data** until something
+A list of forms — `(log!yes log!done)` — is **data** until something
 applies `!` to it. So a function can accept a "block of code" as a
-parameter and choose whether (and when) to run it. This is the macro
+parameter and choose whether {and when} to run it. This is the macro
 mechanism; there is no separate quoting form.
 
 ```punk
-when:(test:_ body:_)[
-  test. ? [TRUE body!]      # body is a list value; body! runs it
-]
-when![TRUE [log!yes]]       # prints yes
-when![FALSE [log!no]]       # nothing happens
+when:{test:_ body:_}(
+  test. ? (TRUE body!)      # body is a list value; body! runs it
+)
+when!(TRUE (log!yes))       # prints yes
+when!(FALSE (log!no))       # nothing happens
 ```
 
 The body list is captured as data when `when!` is called; only `body!`
-(applying `!` to the value) evaluates the forms — and they evaluate in
+{applying `!` to the value} evaluates the forms — and they evaluate in
 the **caller's** scope, so they see the variables the caller sees.
 
 You can also build code by composing lists with `concat!` and run
@@ -491,16 +491,16 @@ mul!     # Multiply two numbers
 div!     # Divide two numbers
 pow!     # Power function
 sqrt!    # Square root
-mod!     # Modulo (remainder after division)
+mod!     # Modulo {remainder after division}
 min!     # Find minimum value in a list
 max!     # Find maximum value in a list
-isnum!   # Check if a Thing is a number (returns TRUE or FALSE)
+isnum!   # Check if a Thing is a number {returns TRUE or FALSE}
 ```
 
 Example usage:
 ```punk
-add![5 3]   # Returns 8
-mul![4 7]   # Returns 28
+add!(5 3)   # Returns 8
+mul!(4 7)   # Returns 28
 ```
 
 ### List Operations
@@ -508,20 +508,20 @@ mul![4 7]   # Returns 28
 These functions operate on lists by taking the list as the first argument. They return new lists without modifying the original.
 
 ```punk
-map!       # Transform each element: takes [list, function]
-filter!    # Filter elements: takes [list, function]
-reduce!    # Reduce to single value: takes [list, function, initial]
-flatMap!   # Transform and flatten: takes [list, function]
+map!       # Transform each element: takes (list, function)
+filter!    # Filter elements: takes (list, function)
+reduce!    # Reduce to single value: takes (list, function, initial)
+flatMap!   # Transform and flatten: takes (list, function)
 len!       # Get length: takes list
-concat!    # Concatenate: takes [list, list, ...]
-range!     # Generate range: takes [start, end, step]
-slice!     # Extract portion: takes [list, start, end]
-find!      # Find index: takes [list, value]
-contains!  # Check contains: takes [list, value]
+concat!    # Concatenate: takes (list, list, ...)
+range!     # Generate range: takes (start, end, step)
+slice!     # Extract portion: takes (list, start, end)
+find!      # Find index: takes (list, value)
+contains!  # Check contains: takes (list, value)
 sort!      # Sort list: takes list, returns sorted copy
-head!      # First element (NULL if empty): takes list
-tail!      # All but the first (always a list): takes list
-prepend!   # Add an item to the front: takes [item, list]
+head!      # First element {NULL if empty}: takes list
+tail!      # All but the first {always a list}: takes list
+prepend!   # Add an item to the front: takes (item, list)
 ```
 
 Together, `head!`, `tail!`, `prepend!` and `concat!` form a Lisp-style spine — every other list traversal can be written recursively in terms of them.
@@ -532,11 +532,11 @@ Together, `head!`, `tail!`, `prepend!` and `concat!` form a Lisp-style spine —
 upper!     # Convert to uppercase: takes text
 lower!     # Convert to lowercase: takes text
 trim!      # Remove whitespace: takes text
-split!     # With [text delim]: split into list at each delim.
+split!     # With (text delim): split into list at each delim.
            # With one Thing: decompose into a List of single-character Things.
-join!      # With [list delim]: glue with delim between elements.
+join!      # With (list delim): glue with delim between elements.
            # With one list: concatenate elements with nothing between.
-replace!   # Replace text: takes [text search replacement]
+replace!   # Replace text: takes (text search replacement)
 ```
 
 Punk has no separate "string" type — text is just a Thing. Operations like
@@ -545,16 +545,16 @@ as text-specific calls; instead, decompose with `split!` and use the existing
 list operations. Reassemble with `join!` when needed.
 
 ```punk
-len![split!hello]                       # 5
-join![slice![split!hello 0 2]]          # he
+len!(split!hello)                       # 5
+join!(slice!(split!hello 0 2))          # he
 
 #startsWith#
-startsWith:(s:_ p:_)[
+startsWith:{s:_ p:_}(
   chars: split!s.
   prefix: split!p.
-  eq![slice![chars. 0 len![prefix.]] prefix.]
-]
-startsWith![hello he]                    # TRUE
+  eq!(slice!(chars. 0 len!(prefix.)) prefix.)
+)
+startsWith!(hello he)                    # TRUE
 ```
 
 `split!`/`join!` are inverses: `join!split!hello.` round-trips to `hello`.
@@ -563,7 +563,7 @@ startsWith![hello he]                    # TRUE
 
 ```punk
 read!      # Read file: takes filename, returns list of lines
-write!     # Write file: takes [filename, content]
+write!     # Write file: takes (filename, content)
 ```
 
 Example:
@@ -571,42 +571,42 @@ Example:
 #Read a file#
 lines:read!myfile\.txt
 
-#Write a file (content can be list of lines or text)#
-write![[output\.txt] [line1 line2 line3]]
+#Write a file {content can be list of lines or text}#
+write!((output\.txt) (line1 line2 line3))
 ```
 
 ### Logic Operations
 
-Logic functions compare Things and combine truth values. `NULL` and `FALSE` are falsy; every other Thing (including `0`, the empty list, and arbitrary atoms) is truthy.
+Logic functions compare Things and combine truth values. `NULL` and `FALSE` are falsy; every other Thing {including `0`, the empty list, and arbitrary atoms} is truthy.
 
 ```punk
-gt!   # Greater than: takes [a b] (works with numbers or text)
-lt!   # Less than: takes [a b] (works with numbers or text)
-eq!   # Equal: takes [a b] (deep equality)
+gt!   # Greater than: takes (a b) {works with numbers or text}
+lt!   # Less than: takes (a b) {works with numbers or text}
+eq!   # Equal: takes (a b) {deep equality}
 not!  # Logical NOT: TRUE if its Thing is falsy, FALSE otherwise
 and!  # Variadic AND: TRUE iff every Thing in the list is truthy
 or!   # Variadic OR: TRUE if any Thing in the list is truthy
 ```
 
-The `gt!` and `lt!` functions work on both numbers and text. For text, they compare using alphanumeric order (e.g., `xyz` is greater than `abc`).
+The `gt!` and `lt!` functions work on both numbers and text. For text, they compare using alphanumeric order {e.g., `xyz` is greater than `abc`}.
 
 The `eq!` function performs deep equality checking:
 ```punk
-eq![[1 2 3] [1 2 3]]      # Returns TRUE
-eq![5 5]                  # Returns TRUE
-eq![[a:1 b:2] [a:1 b:2]]  # Returns TRUE
+eq!((1 2 3) (1 2 3))      # Returns TRUE
+eq!(5 5)                  # Returns TRUE
+eq!((a:1 b:2) (a:1 b:2))  # Returns TRUE
 ```
 
-`and!` and `or!` are variadic and eager — every argument is evaluated before the call. Empty `and` is `TRUE`, empty `or` is `FALSE` (their identity values):
+`and!` and `or!` are variadic and eager — every argument is evaluated before the call. Empty `and` is `TRUE`, empty `or` is `FALSE` {their identity values}:
 
 ```punk
-not!hello                 # FALSE  (hello is truthy)
+not!hello                 # FALSE  {hello is truthy}
 not!NULL                  # TRUE
-and![TRUE TRUE TRUE]      # TRUE
-and![TRUE FALSE TRUE]     # FALSE
-or![FALSE NULL hello]     # TRUE
-and![]                    # TRUE
-or![]                     # FALSE
+and!(TRUE TRUE TRUE)      # TRUE
+and!(TRUE FALSE TRUE)     # FALSE
+or!(FALSE NULL hello)     # TRUE
+and!()                    # TRUE
+or!()                     # FALSE
 ```
 
 ### Log Function
@@ -614,11 +614,11 @@ or![]                     # FALSE
 The log function outputs Things. It's one of the few functions available at the top level.
 
 ```punk
-log![This is a message]   # Logs each Thing in the list
-log![Hello World]         # Logs: Hello World
+log!(This is a message)   # Logs each Thing in the list
+log!(Hello World)         # Logs: Hello World
 ```
 
-The log function takes a single Thing as its parameter (which can be a List). It returns nothing.
+The log function takes a single Thing as its parameter {which can be a List}. It returns nothing.
 
 ### Assert Function
 
@@ -628,16 +628,16 @@ silent on success and throws a Punk-shaped error on failure, so a passing test
 file produces no output of its own.
 
 ```punk
-assert![add![2 3] 5]              # silent: pass
-assert![concat![[1 2] [3 4]] [1 2 3 4]]
-assert![NULL NULL]
-assert![1 2]                           # Error: assert failed: expected 2 got 1
+assert!(add!(2 3) 5)              # silent: pass
+assert!(concat!((1 2) (3 4)) (1 2 3 4))
+assert!(NULL NULL)
+assert!(1 2)                           # Error: assert failed: expected 2 got 1
 ```
 
 Wrong arity reports through the same pattern channel as any other built-in:
 
 ```
-Error: assert expects (actual:_ expected:_)
+Error: assert expects {actual:_ expected:_}
 ```
 
 This lets a test file double as both the test and its expected outcome — the

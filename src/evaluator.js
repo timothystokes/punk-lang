@@ -92,7 +92,7 @@ class Evaluator {
                     if (Array.isArray(arg)) {
                         if (arg.length === 1) return Array.from(String(arg[0]));
                         if (arg.length === 2) return String(arg[0]).split(String(arg[1]));
-                        throw this.punkError('split expects one Thing or [text delim]');
+                        throw this.punkError('split expects one Thing or (text delim)');
                     }
                     return Array.from(String(arg));
                 }),
@@ -306,7 +306,7 @@ class Evaluator {
         if (v === true) return 'TRUE';
         if (v === false) return 'FALSE';
         if (v === undefined) return '<nothing>';
-        if (Array.isArray(v)) return '[' + v.map(x => this.formatValue(x)).join(' ') + ']';
+        if (Array.isArray(v)) return '(' + v.map(x => this.formatValue(x)).join(' ') + ')';
         if (typeof v === 'string') {
             // Render text Things so the output is valid Punk source again:
             // a literal `+` in the value must be escaped as `\+`, and a
@@ -315,7 +315,7 @@ class Evaluator {
             return v.replace(/\\/g, '\\\\').replace(/\+/g, '\\+').replace(/ /g, '+');
         }
         if (v && typeof v === 'object') {
-            if (v.type === 'Cell') return '{' + this.formatValue(v.contents) + '}';
+            if (v.type === 'Cell') return '[' + this.formatValue(v.contents) + ']';
             if (v.type === 'UserFunction' || v.type === 'FunctionLiteral') return '<function>';
             if (v.type === 'BuiltinFunction') return '<builtin>';
             if (v.type === 'Pattern') return '<pattern>';

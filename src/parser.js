@@ -97,7 +97,7 @@ class Parser {
         }
         if (this.match('LEFT_BRACE')) {
             const value = this.expression();
-            this.consume('RIGHT_BRACE', "Expected '}' to end Cell");
+            this.consume('RIGHT_BRACE', "Expected ']' to end Cell");
             return { type: 'CellLiteral', value };
         }
         if (this.match('LEFT_PAREN')) {
@@ -124,7 +124,7 @@ class Parser {
             return { type: 'StarWildcard' };
         }
         if (this.check('DOT')) {
-            throw new Error("Bare '.' as a parameter reference is no longer supported; name your parameters with '(name:_)' and dereference with 'name.'");
+            throw new Error("Bare '.' as a parameter reference is no longer supported; name your parameters with '{name:_}' and dereference with 'name.'");
         }
         if (this.match('THING')) {
             const name = this.previous().literal;
@@ -227,7 +227,7 @@ class Parser {
             elements.push(this.expression());
             if (this.check('RIGHT_BRACKET')) break;
         }
-        this.consume('RIGHT_BRACKET', "Expected ']' to end List");
+        this.consume('RIGHT_BRACKET', "Expected ')' to end List");
         return { type: 'List', elements };
     }
 
@@ -237,7 +237,7 @@ class Parser {
             elements.push(this.expression());
             if (this.check('RIGHT_PAREN')) break;
         }
-        this.consume('RIGHT_PAREN', "Expected ')' to end Pattern");
+        this.consume('RIGHT_PAREN', "Expected '}' to end Pattern");
         return { type: 'Pattern', elements };
     }
 
@@ -259,7 +259,7 @@ class Parser {
             while (!this.check('RIGHT_BRACKET') && !this.isAtEnd()) {
                 elements.push(this.expression());
             }
-            this.consume('RIGHT_BRACKET', "Expected ']' to close conditional");
+            this.consume('RIGHT_BRACKET', "Expected ')' to close conditional");
             if (elements.length < 1 || elements.length > 2) {
                 throw new Error(`Conditional '?' expects 1 or 2 elements inside [...], got ${elements.length}; use '??' for multi-branch matching`);
             }
@@ -285,18 +285,18 @@ class Parser {
     //   value ?? [[p1 r1] [p2] [_ r3] [_]]
     multiplePatternMatch(value) {
         const cases = [];
-        this.consume('LEFT_BRACKET', "Expected '[' after '??'");
+        this.consume('LEFT_BRACKET', "Expected '(' after '??'");
         while (!this.check('RIGHT_BRACKET') && !this.isAtEnd()) {
-            this.consume('LEFT_BRACKET', "Expected '[' for case");
+            this.consume('LEFT_BRACKET', "Expected '(' for case");
             const pattern = this.expression();
             let expression = null;
             if (!this.check('RIGHT_BRACKET')) {
                 expression = this.expression();
             }
-            this.consume('RIGHT_BRACKET', "Expected ']' after case");
+            this.consume('RIGHT_BRACKET', "Expected ')' after case");
             cases.push({ pattern, expression });
         }
-        this.consume('RIGHT_BRACKET', "Expected ']' after '??' cases");
+        this.consume('RIGHT_BRACKET', "Expected ')' after '??' cases");
         return { type: 'MultiplePatternMatch', value, cases };
     }
 

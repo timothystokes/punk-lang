@@ -1,25 +1,25 @@
 #assert: self-checking tests, silent on pass#
 
 #scalars#
-assert![add![2 3] 5]
-assert![sub![10 4] 6]
-assert![eq![1 1] TRUE]
-assert![eq![1 2] FALSE]
+assert!(add!(2 3) 5)
+assert!(sub!(10 4) 6)
+assert!(eq!(1 1) TRUE)
+assert!(eq!(1 2) FALSE)
 
 #lists#
-assert![len![[a b c]] 3]
-assert![find![[a b c] b] 1]
-assert![concat![[1 2] [3 4]] [1 2 3 4]]
-assert![range![0 5 1] [0 1 2 3 4]]
+assert!(len!((a b c)) 3)
+assert!(find!((a b c) b) 1)
+assert!(concat!((1 2) (3 4)) (1 2 3 4))
+assert!(range!(0 5 1) (0 1 2 3 4))
 
 #nulls and booleans#
-assert![NULL NULL]
-assert![TRUE TRUE]
-assert![find![[a b c] z] NULL]
+assert!(NULL NULL)
+assert!(TRUE TRUE)
+assert!(find!((a b c) z) NULL)
 
 #variadic#
-assert![min![3 1 4 1 5 9 2 6] 1]
-assert![max![3 1 4 1 5 9 2 6] 9]
+assert!(min!(3 1 4 1 5 9 2 6) 1)
+assert!(max!(3 1 4 1 5 9 2 6) 9)
 
 #failure demo: uncomment the next line to see a formatted failure#
-#assert![1 2]#
+#assert!(1 2)#
