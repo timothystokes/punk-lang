@@ -19,8 +19,8 @@ assert![anything?[hello yes] yes]
 #Lazy then-branch: only runs on match#
 counter:{0}
 isOne:(1)
-isOne?[1 [counter<math.add![counter> 1]]!]
-isOne?[2 [counter<math.add![counter> 100]]!]
+isOne?[1 [counter<add![counter> 1]]!]
+isOne?[2 [counter<add![counter> 100]]!]
 assert![counter> 1]
 
 #Multi-pattern match with ?? - full [pattern result] cases#
@@ -68,5 +68,5 @@ strict:(x:_)[
 assert![strict!9 NULL]
 
 #Function body returns the last expression's value#
-greet:(s:_)[text.upper!s.]
+greet:(s:_)[upper!s.]
 assert![greet!hi HI]

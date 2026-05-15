@@ -8,8 +8,8 @@ identity:(x:_)[x.]
 assert![identity!hello hello]
 
 #Multi-param function — each parameter is named#
-add:(a:_ b:_)[math.add![a. b.]]
-assert![add![5 3] 8]
+plus:(a:_ b:_)[add![a. b.]]
+assert![plus![5 3] 8]
 
 #Three-param function returning the last#
 last3:(a:_ b:_ c:_)[c.]
@@ -17,8 +17,8 @@ assert![last3![a b c] c]
 
 #Earlier expressions still run; only the LAST value is returned#
 seq:(x:_)[
-  y:math.add![x. 1]
-  math.mul![y. 10]
+  y:add![x. 1]
+  mul![y. 10]
 ]
 assert![seq!4 50]
 
@@ -39,9 +39,9 @@ trailing:(x:_ *)[*.]
 assert![trailing![1 2 3 4] [1 2 3 4]]
 
 #Function reference — `name.` is the value of the function#
-double:(n:_)[math.mul![n. 2]]
+double:(n:_)[mul![n. 2]]
 ref:double.
 assert![ref!21 42]
 
 #Higher-order: map applies the function to each element#
-assert![list.map![[1 2 3] double.] [2 4 6]]
+assert![map![[1 2 3] double.] [2 4 6]]

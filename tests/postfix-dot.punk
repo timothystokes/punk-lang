@@ -10,7 +10,7 @@ assert![literal literal]
 assert![literal. hello]
 
 #Implicit dereference before `!` — `fn!arg` works without a separate `.`#
-shout:(s:_)[text.upper!s.]
+shout:(s:_)[upper!s.]
 assert![shout!hello HELLO]
 
 #Implicit dereference before `>` and `<` for cells#
@@ -18,8 +18,8 @@ box:{0}
 box<7
 assert![box> 7]
 
-#Chain through namespaces — `math.add!` is two steps, last terminated by `!`#
-assert![math.add![1 2] 3]
+#Chain through namespaces — `add!` is two steps, last terminated by `!`#
+assert![add![1 2] 3]
 
 #Index literals: every step needs its `.`#
 assert![[10 20 30].0. 10]

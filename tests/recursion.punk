@@ -4,7 +4,7 @@
 fact:(n:_)[
   n. ?? [
     [0 1]
-    [_ math.mul![n. fact!math.sub![n. 1]]]
+    [_ mul![n. fact!sub![n. 1]]]
   ]
 ]
 assert![fact!0 1]
@@ -14,9 +14,9 @@ assert![fact!10 3628800]
 
 #List recursion via head/tail/prepend (Lisp spine)#
 sum:(lst:_)[
-  list.len![lst.] ?? [
+  len![lst.] ?? [
     [0 0]
-    [_ math.add![list.head![lst.] sum![list.tail![lst.]]]]
+    [_ add![head![lst.] sum![tail![lst.]]]]
   ]
 ]
 assert![sum![[]] 0]
@@ -29,7 +29,7 @@ assert![sum![[1 2 3 4 5]] 15]
 countdown:(n:_)[
   n. ?? [
     [0 done]
-    [_ countdown!math.sub![n. 1]]
+    [_ countdown!sub![n. 1]]
   ]
 ]
 assert![countdown!10000 done]
@@ -38,7 +38,7 @@ assert![countdown!10000 done]
 walk:(n:_)[
   n. ?? [
     [0 walked]
-    [_ walk!math.sub![n. 1]]
+    [_ walk!sub![n. 1]]
   ]
 ]
 assert![walk!5000 walked]

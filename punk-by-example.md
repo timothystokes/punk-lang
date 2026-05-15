@@ -49,17 +49,12 @@ to *dereference* it with a postfix `.`:
 
 ```punk
 > name:Alice
-> name ⏎
-name
-```
-(still the literal Thing `name`)
-
-```punk
-> name:Alice
 > name. ⏎
 Alice
 ```
-(the value bound to `name`)
+(the value bound to `name`. Without the trailing `.`, `name` would just
+be the literal Thing `name` again — binding doesn't change what a bare
+word means, only what `.` retrieves.)
 
 This is the single most important rule in Punk. The `.` doesn't "say"
 anything about types or scope; it just means **"dereference one step."**
@@ -93,87 +88,81 @@ printing or about chaining calls.
 
 ## 4. Arithmetic
 
-Math functions live in the `math` namespace. Reaching into a namespace is
-itself just dereferencing: `math.add` is the value of `add` *inside* `math`.
-The trailing `!` then calls it.
+Math functions are plain top-level Things — no namespace. You just call
+them: `add!` calls `add`, `sub!` calls `sub`, and so on.
 
 ```punk
-> math.add![5 3] ⏎
+> add![5 3] ⏎
 8
 ```
 
 ```punk
-> math.sub![10 4] ⏎
+> sub![10 4] ⏎
 6
 ```
 
 ```punk
-> math.mul![6 7] ⏎
+> mul![6 7] ⏎
 42
 ```
 
 ```punk
-> math.div![20 4] ⏎
+> div![20 4] ⏎
 5
 ```
 
 ```punk
-> math.pow![2 8] ⏎
+> pow![2 8] ⏎
 256
 ```
 
 ```punk
-> math.mod![10 3] ⏎
+> mod![10 3] ⏎
 1
 ```
 
-Notice the chain `math.add!…`: the `.` dereferences `math` (giving the
-namespace), and the `!` then dereferences `add` *by calling it*. The whole
-thing is one chain of two steps, each terminated by its own operator. This
-is the same uniform rule from §2 — `.` reads, `!` calls.
-
-A few `math` functions accept a variable number of arguments rather than a
+A few math functions accept a variable number of arguments rather than a
 single list:
 
 ```punk
-> math.min![3 1 4 1 5] ⏎
+> min![3 1 4 1 5] ⏎
 1
 ```
 
 ```punk
-> math.max![3 1 4 1 5] ⏎
+> max![3 1 4 1 5] ⏎
 5
 ```
 
 ## 5. Text
 
-Text functions live in the `text` namespace. Like `math`, they're free
-functions; there are no string methods.
+Text functions are just plain top-level Things — there are no namespaces
+and no string methods.
 
 ```punk
-> text.upper!hello ⏎
+> upper!hello ⏎
 HELLO
 ```
 
 ```punk
-> text.lower!BOB ⏎
+> lower!BOB ⏎
 bob
 ```
 
 When a function needs more than one Thing, pass them as a list:
 
 ```punk
-> text.split![[a,b,c] ,] ⏎
+> split![a,b,c ,] ⏎
 [a b c]
 ```
 
 ```punk
-> text.join![[John Doe] +] ⏎
+> join![[John Doe] +] ⏎
 John+Doe
 ```
 
 ```punk
-> text.join![[a b c] [, ]] ⏎
+> join![[a b c] [, ]] ⏎
 a,b,c
 ```
 
@@ -181,36 +170,41 @@ The `+` in the first `join` call is the in-Thing space marker — a standalone
 `+` is a one-character Thing whose value is a literal space. The result
 `John+Doe` is **one** Thing of length nine (the `+` shown on display is
 the same space marker, so `John+Doe` round-trips cleanly through
-`text.fromList!`). More on `+` and escaping in §12.
+`join!`). More on `+` and escaping in §12.
 
 Punk doesn't have a separate "string" type — text is just a Thing, no
-different from any other. So we don't add `text.len!`, `text.startsWith!`,
-`text.first!`, or any of the usual string accessors. Instead, decompose
-text into a List of single-character Things with `text.toList!` and use
-the regular `list.*` functions. Rejoin with `text.fromList!`:
+different from any other. So we don't add `length!`, `startsWith!`,
+`first!`, or any of the usual string accessors. Instead, decompose
+text into a List of single-character Things with `split!` (called with
+just the Thing, no delimiter) and use the regular list functions. Rejoin
+with `join!`:
 
 ```punk
-> text.toList!hello ⏎
+> split!hello ⏎
 [h e l l o]
 ```
 
 ```punk
-> list.len![text.toList!hello] ⏎
+> len![split!hello] ⏎
 5
 ```
 
 ```punk
-> text.fromList![list.slice![text.toList!hello 0 2]] ⏎
+> join![slice![split!hello 0 2]] ⏎
 he
 ```
+
+`split!` and `join!` are inverses: with no second argument they
+character-decompose / re-concatenate; with a delimiter they split / glue
+at the delimiter.
 
 `startsWith` falls out of the same building blocks:
 
 ```punk
 > startsWith:(s:_ p:_)[
-    chars: text.toList!s.
-    prefix: text.toList!p.
-    logic.eq![list.slice![chars. 0 list.len![prefix.]] prefix.]
+    chars: split!s.
+    prefix: split!p.
+    eq![slice![chars. 0 len![prefix.]] prefix.]
   ] ⏎
 ```
 
@@ -220,70 +214,69 @@ TRUE
 ```
 
 Only ops that genuinely don't decompose into list work — `upper`, `lower`,
-`trim`, `split`, `join`, `replace` — stay in `text.*`.
+`trim`, `split`, `join`, `replace` — stay as their own builtins.
 
 ## 6. Comparisons and logic
 
-The `logic` namespace gives you ordering, equality, and boolean
-combinators. Equality is deep — two lists compare equal when their
-contents do. Truthiness is simple: `NULL` and `FALSE` are falsy, and
-every other Thing (including `0`, the empty list, and arbitrary atoms)
-is truthy.
+Ordering, equality, and boolean combinators are plain top-level functions.
+Equality is deep — two lists compare equal when their contents do.
+Truthiness is simple: `NULL` and `FALSE` are falsy, and every other Thing
+(including `0`, the empty list, and arbitrary atoms) is truthy.
 
 ```punk
-> logic.gt![10 5] ⏎
+> gt![10 5] ⏎
 TRUE
 ```
 
 ```punk
-> logic.lt![3 8] ⏎
+> lt![3 8] ⏎
 TRUE
 ```
 
 ```punk
-> logic.eq![5 5] ⏎
+> eq![5 5] ⏎
 TRUE
 ```
 
 ```punk
-> logic.gt![xyz abc] ⏎
+> gt![xyz abc] ⏎
 TRUE
 ```
 (alphanumeric order)
 
 ```punk
-> logic.eq![[1 2 3] [1 2 3]] ⏎
+> eq![[1 2 3] [1 2 3]] ⏎
 TRUE
 ```
 (deep equality)
 
 ```punk
-> logic.not!FALSE ⏎
+> not!FALSE ⏎
 TRUE
 ```
 
 ```punk
-> logic.not!hello ⏎
+> not!hello ⏎
 FALSE
 ```
 (any non-`NULL`/non-`FALSE` Thing is truthy)
 
-`logic.and!` and `logic.or!` are variadic — pass any number of Things
+`and!` and `or!` are variadic — pass any number of Things
 in a list. Empty `and` is `TRUE` and empty `or` is `FALSE` (their
 identity values).
 
 ```punk
-> logic.and![TRUE TRUE TRUE] ⏎
+> and![TRUE TRUE TRUE] ⏎
 TRUE
 ```
 
 ```punk
-> logic.and![TRUE FALSE TRUE] ⏎
+> and![TRUE FALSE TRUE] ⏎
 FALSE
 ```
 
 ```punk
-> logic.or![FALSE NULL hello] ⏎
+> or![FALSE NULL hello] ⏎
 TRUE
 ```
 
@@ -387,51 +380,51 @@ Tim
 
 ## 9. List operations
 
-The `list` namespace contains the usual collection operations. They're free
-functions that take the list and any other arguments — no methods.
+The usual collection operations are plain top-level functions that take
+the list and any other arguments — no methods, no namespaces.
 
 Length, concatenation, ranges, and slices:
 
 ```punk
-> list.len![[1 2 3 4]] ⏎
+> len![[1 2 3 4]] ⏎
 4
 ```
 
 ```punk
-> list.concat![[1 2] [3 4]] ⏎
+> concat![[1 2] [3 4]] ⏎
 [1 2 3 4]
 ```
 
 ```punk
-> list.range![1 6 1] ⏎
+> range![1 6 1] ⏎
 [1 2 3 4 5]
 ```
 
 ```punk
-> list.range![0 10 2] ⏎
+> range![0 10 2] ⏎
 [0 2 4 6 8]
 ```
 
 ```punk
-> list.slice![[0 1 2 3 4 5] 0 3] ⏎
+> slice![[0 1 2 3 4 5] 0 3] ⏎
 [0 1 2]
 ```
 
 ```punk
-> list.slice![[0 1 2 3 4 5] 2 4] ⏎
+> slice![[0 1 2 3 4 5] 2 4] ⏎
 [2 3]
 ```
 
 Search:
 
 ```punk
-> list.find![[1 2 3] 2] ⏎
+> find![[1 2 3] 2] ⏎
 1
 ```
 (index of first match)
 
 ```punk
-> list.contains![[1 2 3] 2] ⏎
+> contains![[1 2 3] 2] ⏎
 TRUE
 ```
 
@@ -442,17 +435,17 @@ matches a single Thing and binds it to `name`; inside the body `name.`
 dereferences that bound value:
 
 ```punk
-> list.map![
+> map![
     [1 2 3]
-    (n:_)[math.mul![n. 2]]
+    (n:_)[mul![n. 2]]
   ] ⏎
 [2 4 6]
 ```
 
 ```punk
-> list.filter![
+> filter![
     [1 2 3 4]
-    (n:_)[logic.eq![math.mod![n. 2] 0]]
+    (n:_)[eq![mod![n. 2] 0]]
   ] ⏎
 [2 4]
 ```
@@ -462,9 +455,9 @@ next element — so it uses the pattern `(acc:_ item:_)` and dereferences
 the bindings by name:
 
 ```punk
-> list.reduce![
+> reduce![
     [1 2 3 4]
-    (acc:_ item:_)[math.add![acc. item.]]
+    (acc:_ item:_)[add![acc. item.]]
     0
   ] ⏎
 10
@@ -477,15 +470,15 @@ the first element (or `NULL` for an empty list); `tail` returns the
 rest; `prepend` puts an item back on the front.
 
 ```punk
-> list.head![[a b c]] ⏎
+> head![[a b c]] ⏎
 a
-> list.tail![[a b c]] ⏎
+> tail![[a b c]] ⏎
 [b c]
-> list.prepend![z [a b c]] ⏎
+> prepend![z [a b c]] ⏎
 [z a b c]
-> list.head![[]] ⏎
+> head![[]] ⏎
 NULL
-> list.tail![[]] ⏎
+> tail![[]] ⏎
 []
 ```
 
@@ -493,9 +486,9 @@ These compose nicely with recursion. Here's a hand-written `sum`:
 
 ```punk
 sum:(lst:_)[
-  list.len![lst.] ?? [
+  len![lst.] ?? [
     [0 0]
-    [_ math.add![list.head![lst.] sum![list.tail![lst.]]]]
+    [_ add![head![lst.] sum![tail![lst.]]]]
   ]
 ]
 > sum![[1 2 3 4 5]] ⏎
@@ -509,14 +502,14 @@ stage must end with `!` (so the execution is explicit) and the LHS is
 passed as a single argument:
 
 ```punk
-> hello | text.toList! | list.head! ⏎
+> hello | split! | head! ⏎
 h
-> [1 2 3] | list.len! ⏎
+> [1 2 3] | len! ⏎
 3
 ```
 
 `a | f! | g!` means `g!(f!a)`. For multi-argument stages, wrap in a
-lambda: `5 | (n:_)[math.add![n. 10]]!`.
+lambda: `5 | (n:_)[add![n. 10]]!`.
 
 ## 10. Functions
 
@@ -532,7 +525,7 @@ A function over a single argument names it once and dereferences with
 `name.`:
 
 ```punk
-> double:(n:_)[math.mul![n. 2]]
+> double:(n:_)[mul![n. 2]]
 > double!5 ⏎
 10
 ```
@@ -541,8 +534,8 @@ Earlier expressions can prepare values that the last expression uses:
 
 ```punk
 > compute:(x:_)[
-    y:math.add![x. 1]
-    math.mul![y. 10]
+    y:add![x. 1]
+    mul![y. 10]
   ]
 > compute!4 ⏎
 50
@@ -551,7 +544,7 @@ Earlier expressions can prepare values that the last expression uses:
 A function over two arguments gives each one a name:
 
 ```punk
-> add:(a:_ b:_)[math.add![a. b.]]
+> add:(a:_ b:_)[add![a. b.]]
 > add![5 3] ⏎
 8
 ```
@@ -581,8 +574,8 @@ gives you the function itself (suitable for passing as an argument); using
 `!` instead *calls* it:
 
 ```punk
-> double:(n:_)[math.mul![n. 2]]
-> list.map![[1 2 3] double.] ⏎
+> double:(n:_)[mul![n. 2]]
+> map![[1 2 3] double.] ⏎
 [2 4 6]
 ```
 
@@ -590,8 +583,15 @@ You don't have to bind a function to a name. Anonymous functions are
 written the same way, and dropped in where you need them:
 
 ```punk
-> list.map![[1 2 3] (n:_)[math.pow![n. 2]]] ⏎
+> map![[1 2 3] (n:_)[pow![n. 2]]] ⏎
 [1 4 9]
+```
+
+Templsting is easy using . dereferences and passed in data.
+
+```punk
+> (name:_ age:_)[Name is name.]![Bob 42] ⏎
+[Name is Bob and their age is 42]
 ```
 
 ## 11. Pattern matching
@@ -657,7 +657,7 @@ branch's value:
 
 ```punk
 > isFive:(5)
-> isFive?[5 [log!matched math.mul![5 2]]!] ⏎
+> isFive?[5 [log!matched mul![5 2]]!] ⏎
 matched
 10
 ```
@@ -768,17 +768,17 @@ Hello+World
 ```
 
 ```punk
-> list.len![text.toList!Hello+World] ⏎
+> len![split!Hello+World] ⏎
 11
 ```
 
 ```punk
-> list.len![[Hello+World]] ⏎
+> len![[Hello+World]] ⏎
 1
 ```
 
 ```punk
-> text.join![[John Doe] +] ⏎
+> join![[John Doe] +] ⏎
 John+Doe
 ```
 
@@ -816,7 +816,7 @@ Create a cell with `{ }`, read it with `>`, write to it with `<`:
 ```punk
 > counter:{0}
 > counter<5
-> counter<math.add![counter> 1]
+> counter<add![counter> 1]
 > counter> ⏎
 6
 ```
@@ -867,7 +867,7 @@ hi
 ```
 
 The `body!` runs in the **caller's** scope, so the block sees the
-caller's variables. Combine with `list.concat!` to splice forms
+caller's variables. Combine with `concat!` to splice forms
 together for Lisp-style template macros.
 
 ## 15. Recursion and tail calls
@@ -879,7 +879,7 @@ before the body runs:
 fact:(n:_)[
   n. ?? [
     [0 1]
-    [_ math.mul![n. fact!math.sub![n. 1]]]
+    [_ mul![n. fact!sub![n. 1]]]
   ]
 ]
 > fact!10 ⏎
@@ -895,7 +895,7 @@ stack. So tail-recursive loops run at any depth:
 countdown:(n:_)[
   n. ?? [
     [0 done]
-    [_ countdown!math.sub![n. 1]]   # tail call — trampolines
+    [_ countdown!sub![n. 1]]   # tail call — trampolines
   ]
 ]
 > countdown!100000 ⏎
@@ -943,5 +943,5 @@ value??[[p1 r1] [p2] [_ r3] [_]]   # multi-pattern match (bare [p] = match,no-op
 7. **Functions take one Thing** — pass a list when you need multiple values.
 8. **Immutable by default** — names rebind; cells (`{ }`) opt into mutability.
 9. **Pattern matching is the primary control-flow mechanism.**
-10. **Namespaced libraries** — `math`, `list`, `text`, `logic`, `file`.
+10. **Flat library** — every builtin (`add`, `map`, `split`, `eq`, `read`, …) lives at the top level, no namespaces.
 11. **Whitespace matters** — no space between a name and its postfix `.`.

@@ -26,12 +26,12 @@ assert![solo.0. hello]
 assert![solo.~. hello]
 
 #Lisp spine: head / tail / prepend#
-assert![list.head![[a b c]] a]
-assert![list.tail![[a b c]] [b c]]
-assert![list.prepend![z [a b c]] [z a b c]]
+assert![head![[a b c]] a]
+assert![tail![[a b c]] [b c]]
+assert![prepend![z [a b c]] [z a b c]]
 #head of empty is NULL, tail of empty is []#
-assert![list.head![[]] NULL]
-assert![list.tail![[]] []]
+assert![head![[]] NULL]
+assert![tail![[]] []]
 #head/tail compose to rebuild a list with prepend#
 xs:[1 2 3]
-assert![list.prepend![list.head![xs.] list.tail![xs.]] xs.]
+assert![prepend![head![xs.] tail![xs.]] xs.]

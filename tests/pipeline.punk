@@ -1,21 +1,21 @@
 #Pipeline `|`: `a | f!` desugars to `f!a` (LHS wrapped as a single arg)#
 
 #Single-stage pipeline#
-assert![[a b c] | list.head! a]
-assert![[a b c] | list.tail! [b c]]
+assert![[a b c] | head! a]
+assert![[a b c] | tail! [b c]]
 
 #Multi-stage pipeline (left-associative): a | f! | g! == g!f!a#
-assert![hello | text.toList! | list.head! h]
-assert![hello | text.toList! | list.len! 5]
+assert![hello | split! | head! h]
+assert![hello | split! | len! 5]
 
 #Whitespace around `|` is irrelevant#
-assert![[1 2 3]|list.len! 3]
-assert![[1 2 3]   |   list.head! 1]
+assert![[1 2 3]|len! 3]
+assert![[1 2 3]   |   head! 1]
 
 #Pipelines compose with normal calls#
-chars:hello | text.toList!
+chars:hello | split!
 assert![chars. [h e l l o]]
-assert![chars. | list.len! 5]
+assert![chars. | len! 5]
 
 #Dotted callee on RHS works (deref-only postfix)#
-assert![[x y z] | list.tail! [y z]]
+assert![[x y z] | tail! [y z]]

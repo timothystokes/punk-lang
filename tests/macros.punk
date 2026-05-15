@@ -21,6 +21,6 @@ when![TRUE [ran<greeting.]]
 assert![ran> hello]
 
 #Code can be built up and then executed#
-prog:list.concat![[log!] [[skipped]]]
+prog:concat![[log!] [[skipped]]]
 #prog. is the list value [log! skipped]; we don't run it here, just check shape#
-assert![list.len![prog.] 2]
+assert![len![prog.] 2]

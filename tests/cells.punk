@@ -9,11 +9,11 @@ counter<5
 assert![counter> 5]
 
 #Update by read-modify-write#
-counter<math.add![counter> 1]
+counter<add![counter> 1]
 assert![counter> 6]
 
 #Cells can hold any Thing, including lists#
 buffer:{[]}
-buffer<list.concat![buffer> [hello]]
-buffer<list.concat![buffer> [world]]
+buffer<concat![buffer> [hello]]
+buffer<concat![buffer> [world]]
 assert![buffer> [hello world]]

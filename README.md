@@ -85,7 +85,7 @@ The following characters have special meaning in Punk and cannot appear in Thing
 
 **Escaping Special Characters:** To use a special character as literal text, prefix it with `\` for each instance. For example, `\.` is a literal full stop, `\/` is a literal forward slash, `\\` is a literal backslash, and `\+` is a literal plus sign. The escape must be repeated for each occurrence — `\.\.\.` is three dots.
 
-**Spaces inside a Thing:** A regular space is the delimiter between Things in a list, so it can't appear inside a Thing's value. Use `+` to embed a literal space. `Hello+World` is one Thing of length 11; `[Hello World]` is a list of two Things. A standalone `+` (with whitespace around it) is a one-character Thing whose value is a single space — useful as a delimiter argument: `text.join![[John Doe] +]` yields `John+Doe`.
+**Spaces inside a Thing:** A regular space is the delimiter between Things in a list, so it can't appear inside a Thing's value. Use `+` to embed a literal space. `Hello+World` is one Thing of length 11; `[Hello World]` is a list of two Things. A standalone `+` (with whitespace around it) is a one-character Thing whose value is a single space — useful as a delimiter argument: `join![[John Doe] +]` yields `John+Doe`.
 
 #### Things
 - Can contain any character except the special characters listed above
@@ -206,7 +206,7 @@ Punk supports controlled mutability through *cells*: lexically scoped boxes whos
 
 ```punk
 counter:{0}                       # bind counter to a cell containing 0
-counter<math.add![counter> 1]     # increment
+counter<add![counter> 1]     # increment
 log!counter>                      # prints 1
 ```
 
@@ -296,35 +296,35 @@ Functions are defined by a pattern connected to an expression (List) that can be
 
 **Every function takes exactly one Thing as its parameter.** Since a List is a single Thing, you can effectively pass multiple values by wrapping them in a List `[ ]`.
 
-Punk has no methods. Operations live in function libraries (like `math`, `list`, `text`), and the target Thing is passed as the argument. For example, use `list.map![numbers. (n:_)[...]]` rather than `numbers.map`.
+Punk has no methods. Operations live in function libraries (like `math`, `list`, `text`), and the target Thing is passed as the argument. For example, use `map![numbers. (n:_)[...]]` rather than `numbers.map`.
 
 To call a named function, write the name immediately followed by `!`. The `!` implicitly dereferences the name. For example:
 
 ```punk
-double:(n:_)[math.mul![n. 2]]   # Define a function named 'double'
+double:(n:_)[mul![n. 2]]   # Define a function named 'double'
 double!4                        # Returns 8  — the value of the last expression
 ```
 
 If a function name is followed by postfix `.` (not `!`), the result is a *reference* to the function itself, suitable for passing to another function:
 
 ```punk
-double:(n:_)[math.mul![n. 2]]
-list.map![numbers. double.]    # Passes the list and the function reference to map
+double:(n:_)[mul![n. 2]]
+map![numbers. double.]    # Passes the list and the function reference to map
 ```
 
 Punk supports anonymous functions, which are useful for higher-order functions that accept a function as a parameter.
 
 ```punk
-list.map![people. (person:_)[person.name.]]
+map![people. (person:_)[person.name.]]
 ```
 Returns a list of names from a list of people that contain an element called `name`.
 
-There are a number of built-in functions such as those within the `math` global namespace.
+There are a number of built-in functions (`add!`, `map!`, `eq!`, …) all available at the top level — see "Library Functions" below.
 
 #### Named Function Example
 
 ```punk
-sum:(a:_ b:_)[math.add![a. b.]]
+sum:(a:_ b:_)[add![a. b.]]
 sum![2 3]      # Returns 5
 ```
 
@@ -336,8 +336,8 @@ bodies, conditional branches (`?` / `??`), and the eval primitive `[…]!`.
 
 ```punk
 compute:(x:_)[
-    y:math.add![x. 1]
-    math.mul![y. 10]
+    y:add![x. 1]
+    mul![y. 10]
 ]
 compute!4      # Returns 50
 ```
@@ -349,8 +349,8 @@ for a single Thing and `(name:*)` for a run of Things, then dereference the
 binding inside the body with `name.`:
 
 ```punk
-double:(n:_)[math.mul![n. 2]]
-add:(a:_ b:_)[math.add![a. b.]]
+double:(n:_)[mul![n. 2]]
+add:(a:_ b:_)[add![a. b.]]
 all:(xs:*)[xs.]
 ```
 
@@ -387,7 +387,7 @@ A named function can refer to itself by name from inside its own body
 fact:(n:_)[
   n. ?? [
     [0 1]
-    [_ math.mul![n. fact!math.sub![n. 1]]]
+    [_ mul![n. fact!sub![n. 1]]]
   ]
 ]
 fact!5      # 120
@@ -403,13 +403,13 @@ via the spine) run at any depth:
 countdown:(n:_)[
   n. ?? [
     [0 done]
-    [_ countdown!math.sub![n. 1]]    # tail call — trampolines
+    [_ countdown!sub![n. 1]]    # tail call — trampolines
   ]
 ]
 countdown!100000      # done
 ```
 
-Non-tail recursion (like `math.mul![n. fact!...]` above) still uses the
+Non-tail recursion (like `mul![n. fact!...]` above) still uses the
 JS stack and is bounded by it.
 
 ## Multi-arity Dispatch
@@ -422,8 +422,8 @@ Punk has no overloads — every function takes one Thing. The Clojure-style
 greet:(*)[
   *. ?? [
     [()              hello]
-    [(name:_)        math.add![hi+ name.]]
-    [(first:_ last:_) math.add![first. math.add![+ last.]]]
+    [(name:_)        add![hi+ name.]]
+    [(first:_ last:_) add![first. add![+ last.]]]
   ]
 ]
 greet![]              # hello
@@ -438,9 +438,9 @@ execution explicit. Pipelines are left-associative, so `a | f! | g!`
 means `g!(f!a)`:
 
 ```punk
-hello | text.toList! | list.head!     # h
-[1 2 3] | list.len!                   # 3
-[a b c] | list.tail!                  # [b c]
+hello | split! | head!     # h
+[1 2 3] | len!                   # 3
+[a b c] | tail!                  # [b c]
 ```
 
 The LHS is wrapped as a single-element argument, so a list value isn't
@@ -448,7 +448,7 @@ spread across positional slots. For multi-argument stages, wrap in a
 lambda:
 
 ```punk
-5 | (n:_)[math.add![n. 10]]!          # 15
+5 | (n:_)[add![n. 10]]!          # 15
 ```
 
 Whitespace around `|` is irrelevant; the RHS is a deref chain only
@@ -473,141 +473,138 @@ The body list is captured as data when `when!` is called; only `body!`
 (applying `!` to the value) evaluates the forms — and they evaluate in
 the **caller's** scope, so they see the variables the caller sees.
 
-You can also build code by composing lists with `list.concat!` and run
+You can also build code by composing lists with `concat!` and run
 the result, giving Lisp-style template macros without a separate
 syntax for quote/unquote.
 
 ## Library Functions
 
-Punk provides library functions organized in namespaces. These are independent functions that take Things as arguments — they are not methods attached to objects.
+Punk provides library functions at the top level — they're plain Things in the global scope. There are no namespaces; every builtin is just a name like `add`, `map`, `split`. Pick a unique name when you bind your own and you won't shadow them.
 
-Common built-in function libraries (each name is dereferenced in the usual way, e.g. `math.add!`):
-
-### Mathematical Operations (`math` namespace)
+### Mathematical Operations
 ```punk
-math.add!     # Add two numbers
-math.sub!     # Subtract two numbers
-math.mul!     # Multiply two numbers
-math.div!     # Divide two numbers
-math.pow!     # Power function
-math.sqrt!    # Square root
-math.mod!     # Modulo (remainder after division)
-math.min!     # Find minimum value in a list
-math.max!     # Find maximum value in a list
-math.isnum!   # Check if a Thing is a number (returns TRUE or FALSE)
+add!     # Add two numbers
+sub!     # Subtract two numbers
+mul!     # Multiply two numbers
+div!     # Divide two numbers
+pow!     # Power function
+sqrt!    # Square root
+mod!     # Modulo (remainder after division)
+min!     # Find minimum value in a list
+max!     # Find maximum value in a list
+isnum!   # Check if a Thing is a number (returns TRUE or FALSE)
 ```
 
 Example usage:
 ```punk
-math.add![5 3]    # Returns 8
-math.mul![4 7]   # Returns 28
+add![5 3]   # Returns 8
+mul![4 7]   # Returns 28
 ```
 
-### List Operations (`list` namespace)
+### List Operations
 
 These functions operate on lists by taking the list as the first argument. They return new lists without modifying the original.
 
 ```punk
-list.map!       # Transform each element: takes [list, function]
-list.filter!    # Filter elements: takes [list, function]
-list.reduce!    # Reduce to single value: takes [list, function, initial]
-list.flatMap!   # Transform and flatten: takes [list, function]
-list.len!       # Get length: takes list
-list.concat!    # Concatenate: takes [list, list, ...]
-list.range!     # Generate range: takes [start, end, step]
-list.slice!     # Extract portion: takes [list, start, end]
-list.find!      # Find index: takes [list, value]
-list.contains!  # Check contains: takes [list, value]
-list.sort!      # Sort list: takes list, returns sorted copy
-list.head!      # First element (NULL if empty): takes list
-list.tail!      # All but the first (always a list): takes list
-list.prepend!   # Add an item to the front: takes [item, list]
+map!       # Transform each element: takes [list, function]
+filter!    # Filter elements: takes [list, function]
+reduce!    # Reduce to single value: takes [list, function, initial]
+flatMap!   # Transform and flatten: takes [list, function]
+len!       # Get length: takes list
+concat!    # Concatenate: takes [list, list, ...]
+range!     # Generate range: takes [start, end, step]
+slice!     # Extract portion: takes [list, start, end]
+find!      # Find index: takes [list, value]
+contains!  # Check contains: takes [list, value]
+sort!      # Sort list: takes list, returns sorted copy
+head!      # First element (NULL if empty): takes list
+tail!      # All but the first (always a list): takes list
+prepend!   # Add an item to the front: takes [item, list]
 ```
 
-Together, `list.head!`, `list.tail!`, `list.prepend!` and `list.concat!` form a Lisp-style spine — every other list traversal can be written recursively in terms of them.
+Together, `head!`, `tail!`, `prepend!` and `concat!` form a Lisp-style spine — every other list traversal can be written recursively in terms of them.
 
-### Text Operations (`text` namespace)
+### Text Operations
 
 ```punk
-text.upper!     # Convert to uppercase: takes text
-text.lower!     # Convert to lowercase: takes text
-text.trim!      # Remove whitespace: takes text
-text.split!     # Split into list: takes [text delimiter]
-text.join!      # Join list into text: takes [list delimiter]
-text.replace!   # Replace text: takes [text search replacement]
-text.toList!    # Decompose into a List of single-character Things
-text.fromList!  # Inverse of toList: rejoin a List of Things into one text Thing
+upper!     # Convert to uppercase: takes text
+lower!     # Convert to lowercase: takes text
+trim!      # Remove whitespace: takes text
+split!     # With [text delim]: split into list at each delim.
+           # With one Thing: decompose into a List of single-character Things.
+join!      # With [list delim]: glue with delim between elements.
+           # With one list: concatenate elements with nothing between.
+replace!   # Replace text: takes [text search replacement]
 ```
 
 Punk has no separate "string" type — text is just a Thing. Operations like
-length, first/last, slice, `startsWith`, or substring search are not
-mirrored in `text.*`; instead, decompose with `text.toList!` and use the
-existing `list.*` functions. Reassemble with `text.fromList!` when needed.
+length, first/last, slice, `startsWith`, or substring search are not mirrored
+as text-specific calls; instead, decompose with `split!` and use the existing
+list operations. Reassemble with `join!` when needed.
 
 ```punk
-list.len![text.toList!hello]                              # 5
-text.fromList![list.slice![text.toList!hello 0 2]]        # he
+len![split!hello]                       # 5
+join![slice![split!hello 0 2]]          # he
 
 #startsWith#
 startsWith:(s:_ p:_)[
-  chars: text.toList!s.
-  prefix: text.toList!p.
-  logic.eq![list.slice![chars. 0 list.len![prefix.]] prefix.]
+  chars: split!s.
+  prefix: split!p.
+  eq![slice![chars. 0 len![prefix.]] prefix.]
 ]
-startsWith![hello he]                                     # TRUE
+startsWith![hello he]                    # TRUE
 ```
 
-Only the genuine character-class operations (`upper`/`lower`/`trim`) and
-delimiter ops (`split`/`join`/`replace`) live in `text.*`.
+`split!`/`join!` are inverses: `join!split!hello.` round-trips to `hello`.
 
-### File Operations (`file` namespace)
+### File Operations
 
 ```punk
-file.read!      # Read file: takes filename, returns list of lines
-file.write!     # Write file: takes [filename, content]
+read!      # Read file: takes filename, returns list of lines
+write!     # Write file: takes [filename, content]
 ```
 
 Example:
 ```punk
 #Read a file#
-lines:file.read!myfile\.txt
+lines:read!myfile\.txt
 
 #Write a file (content can be list of lines or text)#
-file.write![[output\.txt] [line1 line2 line3]]
+write![[output\.txt] [line1 line2 line3]]
 ```
 
-### Logic Operations (`logic` namespace)
+### Logic Operations
 
 Logic functions compare Things and combine truth values. `NULL` and `FALSE` are falsy; every other Thing (including `0`, the empty list, and arbitrary atoms) is truthy.
 
 ```punk
-logic.gt!   # Greater than: takes [a b] (works with numbers or text)
-logic.lt!   # Less than: takes [a b] (works with numbers or text)
-logic.eq!   # Equal: takes [a b] (deep equality)
-logic.not!  # Logical NOT: TRUE if its Thing is falsy, FALSE otherwise
-logic.and!  # Variadic AND: TRUE iff every Thing in the list is truthy
-logic.or!   # Variadic OR: TRUE if any Thing in the list is truthy
+gt!   # Greater than: takes [a b] (works with numbers or text)
+lt!   # Less than: takes [a b] (works with numbers or text)
+eq!   # Equal: takes [a b] (deep equality)
+not!  # Logical NOT: TRUE if its Thing is falsy, FALSE otherwise
+and!  # Variadic AND: TRUE iff every Thing in the list is truthy
+or!   # Variadic OR: TRUE if any Thing in the list is truthy
 ```
 
-The `logic.gt!` and `logic.lt!` functions work on both numbers and text. For text, they compare using alphanumeric order (e.g., `xyz` is greater than `abc`).
+The `gt!` and `lt!` functions work on both numbers and text. For text, they compare using alphanumeric order (e.g., `xyz` is greater than `abc`).
 
-The `logic.eq!` function performs deep equality checking:
+The `eq!` function performs deep equality checking:
 ```punk
-logic.eq![[1 2 3] [1 2 3]]      # Returns TRUE
-logic.eq![5 5]                  # Returns TRUE
-logic.eq![[a:1 b:2] [a:1 b:2]]  # Returns TRUE
+eq![[1 2 3] [1 2 3]]      # Returns TRUE
+eq![5 5]                  # Returns TRUE
+eq![[a:1 b:2] [a:1 b:2]]  # Returns TRUE
 ```
 
-`logic.and!` and `logic.or!` are variadic and eager — every argument is evaluated before the call. Empty `and` is `TRUE`, empty `or` is `FALSE` (their identity values):
+`and!` and `or!` are variadic and eager — every argument is evaluated before the call. Empty `and` is `TRUE`, empty `or` is `FALSE` (their identity values):
 
 ```punk
-logic.not!hello                 # FALSE  (hello is truthy)
-logic.not!NULL                  # TRUE
-logic.and![TRUE TRUE TRUE]      # TRUE
-logic.and![TRUE FALSE TRUE]     # FALSE
-logic.or![FALSE NULL hello]     # TRUE
-logic.and![]                    # TRUE
-logic.or![]                     # FALSE
+not!hello                 # FALSE  (hello is truthy)
+not!NULL                  # TRUE
+and![TRUE TRUE TRUE]      # TRUE
+and![TRUE FALSE TRUE]     # FALSE
+or![FALSE NULL hello]     # TRUE
+and![]                    # TRUE
+or![]                     # FALSE
 ```
 
 ### Log Function
@@ -629,8 +626,8 @@ silent on success and throws a Punk-shaped error on failure, so a passing test
 file produces no output of its own.
 
 ```punk
-assert![math.add![2 3] 5]              # silent: pass
-assert![list.concat![[1 2] [3 4]] [1 2 3 4]]
+assert![add![2 3] 5]              # silent: pass
+assert![concat![[1 2] [3 4]] [1 2 3 4]]
 assert![NULL NULL]
 assert![1 2]                           # Error: assert failed: expected 2 got 1
 ```

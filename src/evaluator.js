@@ -29,36 +29,36 @@ class Evaluator {
         });
 
         const math = {
-            add: builtin('math.add', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            add: builtin('add', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') + b.get('b')),
-            sub: builtin('math.sub', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            sub: builtin('sub', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') - b.get('b')),
-            mul: builtin('math.mul', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            mul: builtin('mul', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') * b.get('b')),
-            div: builtin('math.div', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            div: builtin('div', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') / b.get('b')),
-            pow: builtin('math.pow', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            pow: builtin('pow', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => Math.pow(b.get('a'), b.get('b'))),
-            mod: builtin('math.mod', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            mod: builtin('mod', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') % b.get('b')),
-            sqrt: builtin('math.sqrt', P.pat(P.wild()),
+            sqrt: builtin('sqrt', P.pat(P.wild()),
                 (b) => Math.sqrt(b.get('0'))),
-            isnum: builtin('math.isnum', P.pat(P.wild()),
+            isnum: builtin('isnum', P.pat(P.wild()),
                 (b) => typeof b.get('0') === 'number' && !isNaN(b.get('0'))),
             // Variadic: `(*)` matches any number of Things.
-            min: builtin('math.min', P.pat(P.star()),
-                (b, arg) => this.reduceNumeric('math.min', arg, Math.min)),
-            max: builtin('math.max', P.pat(P.star()),
-                (b, arg) => this.reduceNumeric('math.max', arg, Math.max)),
+            min: builtin('min', P.pat(P.star()),
+                (b, arg) => this.reduceNumeric('min', arg, Math.min)),
+            max: builtin('max', P.pat(P.star()),
+                (b, arg) => this.reduceNumeric('max', arg, Math.max)),
         };
 
         const truthy = v => v !== null && v !== false;
         const logic = {
-            gt: builtin('logic.gt', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            gt: builtin('gt', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') > b.get('b')),
-            lt: builtin('logic.lt', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            lt: builtin('lt', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => b.get('a') < b.get('b')),
-            eq: builtin('logic.eq', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
+            eq: builtin('eq', P.pat(P.named('a', P.wild()), P.named('b', P.wild())),
                 (b) => this.deepEqual(b.get('a'), b.get('b'))),
             // Truthy semantics across `not`/`and`/`or`: NULL and FALSE are
             // falsy; every other Punk Thing (including 0, the empty list,
@@ -66,78 +66,81 @@ class Evaluator {
             // Takes any single Thing (including an empty list). Using `(*)`
             // and reading `arg` directly avoids `(_)`'s "exactly-one-element"
             // interpretation when the input is itself a list.
-            not: builtin('logic.not', P.pat(P.star()),
+            not: builtin('not', P.pat(P.star()),
                 (b, arg) => !truthy(arg)),
             // Variadic: any number of Things; empty list returns the identity
             // (TRUE for `and`, FALSE for `or`).
-            and: builtin('logic.and', P.pat(P.star()),
+            and: builtin('and', P.pat(P.star()),
                 (b, arg) => (Array.isArray(arg) ? arg : [arg]).every(truthy)),
-            or: builtin('logic.or', P.pat(P.star()),
+            or: builtin('or', P.pat(P.star()),
                 (b, arg) => (Array.isArray(arg) ? arg : [arg]).some(truthy)),
         };
 
         const stringOps = {
-            upper: builtin('text.upper', P.pat(P.wild()),
+            upper: builtin('upper', P.pat(P.wild()),
                 (b) => String(b.get('0')).toUpperCase()),
-            lower: builtin('text.lower', P.pat(P.wild()),
+            lower: builtin('lower', P.pat(P.wild()),
                 (b) => String(b.get('0')).toLowerCase()),
-            trim: builtin('text.trim', P.pat(P.wild()),
+            trim: builtin('trim', P.pat(P.wild()),
                 (b) => String(b.get('0')).trim()),
-            split: builtin('text.split', P.pat(P.named('text', P.wild()), P.named('delim', P.wild())),
-                (b) => String(b.get('text')).split(String(b.get('delim')))),
-            join: builtin('text.join', P.pat(P.named('list', P.wild()), P.named('delim', P.wild())),
-                (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('text.join expects a List as the first Thing');
-                    return list.join(String(b.get('delim')));
+            // split: with a delimiter, splits a text Thing at each delimiter.
+            // With a single Thing and no delimiter, decomposes it into a List
+            // of single-character Things — the bridge that lets list.* handle
+            // "string" tasks (length, first/last, slice, contains, ...).
+            split: builtin('split', P.pat(P.star()),
+                (b, arg) => {
+                    if (Array.isArray(arg)) {
+                        if (arg.length === 1) return Array.from(String(arg[0]));
+                        if (arg.length === 2) return String(arg[0]).split(String(arg[1]));
+                        throw this.punkError('split expects one Thing or [text delim]');
+                    }
+                    return Array.from(String(arg));
                 }),
-            replace: builtin('text.replace', P.pat(P.named('text', P.wild()), P.named('search', P.wild()), P.named('with', P.wild())),
-                (b) => String(b.get('text')).split(String(b.get('search'))).join(String(b.get('with')))),
-            // text.toList: decompose any Thing into a List of single-character
-            // Things. This is the bridge that lets list.* handle "string" tasks
-            // like length, first/last, slice, startsWith, contains — Punk
-            // doesn't need a parallel text.len / text.startsWith / ...
-            toList: builtin('text.toList', P.pat(P.wild()),
-                (b) => Array.from(String(b.get('0')))),
-            // text.fromList: inverse of toList. Concatenates a List of Things
-            // back into a single text Thing. Non-text elements are stringified.
-            fromList: builtin('text.fromList', P.pat(P.wild()),
-                (b) => {
-                    const list = b.get('0');
-                    if (!Array.isArray(list)) throw this.punkError('text.fromList expects a List');
+            // join: inverse of split. With a List and a delimiter, concatenates
+            // the elements with the delimiter between them. With just a List,
+            // concatenates with nothing between (so `join!split!hello.` round-trips).
+            join: builtin('join', P.pat(P.star()),
+                (b, arg) => {
+                    if (Array.isArray(arg) && arg.length === 2 && Array.isArray(arg[0])) {
+                        return arg[0].map(x => String(x)).join(String(arg[1]));
+                    }
+                    const list = Array.isArray(arg) && arg.length === 1 ? arg[0] : arg;
+                    if (!Array.isArray(list)) throw this.punkError('join expects a List');
                     return list.map(x => String(x)).join('');
                 }),
+            replace: builtin('replace', P.pat(P.named('text', P.wild()), P.named('search', P.wild()), P.named('with', P.wild())),
+                (b) => String(b.get('text')).split(String(b.get('search'))).join(String(b.get('with')))),
         };
 
         const listOps = {
-            map: builtin('list.map', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+            map: builtin('map', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.map expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('map expects a List as the first Thing');
                     return list.map(item => this.callFunction(b.get('fn'), item));
                 }),
-            filter: builtin('list.filter', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+            filter: builtin('filter', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.filter expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('filter expects a List as the first Thing');
                     return list.filter(item => this.callFunction(b.get('fn'), item));
                 }),
-            reduce: builtin('list.reduce', P.pat(P.named('list', P.wild()), P.named('fn', P.wild()), P.named('init', P.wild())),
+            reduce: builtin('reduce', P.pat(P.named('list', P.wild()), P.named('fn', P.wild()), P.named('init', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.reduce expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('reduce expects a List as the first Thing');
                     return list.reduce((acc, item) => this.callFunction(b.get('fn'), [acc, item]), b.get('init'));
                 }),
-            flatMap: builtin('list.flatMap', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+            flatMap: builtin('flatMap', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.flatMap expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('flatMap expects a List as the first Thing');
                     return list.flatMap(item => {
                         const r = this.callFunction(b.get('fn'), item);
                         return Array.isArray(r) ? r : [r];
                     });
                 }),
-            len: builtin('list.len', P.pat(P.wild()),
+            len: builtin('len', P.pat(P.wild()),
                 (b) => {
                     const list = b.get('0');
                     return Array.isArray(list) ? list.length : 1;
@@ -145,30 +148,30 @@ class Evaluator {
             // Lisp spine: head/tail/prepend. Empty-list head returns NULL,
             // empty-list tail returns []. Together with `list.concat!` these
             // are enough to express any recursive list algorithm.
-            head: builtin('list.head', P.pat(P.wild()),
+            head: builtin('head', P.pat(P.wild()),
                 (b) => {
                     const list = b.get('0');
                     if (!Array.isArray(list)) return list;
                     return list.length === 0 ? null : list[0];
                 }),
-            tail: builtin('list.tail', P.pat(P.wild()),
+            tail: builtin('tail', P.pat(P.wild()),
                 (b) => {
                     const list = b.get('0');
                     if (!Array.isArray(list)) return [];
                     return list.slice(1);
                 }),
-            prepend: builtin('list.prepend', P.pat(P.named('item', P.wild()), P.named('list', P.wild())),
+            prepend: builtin('prepend', P.pat(P.named('item', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.prepend expects a List as the second Thing');
+                    if (!Array.isArray(list)) throw this.punkError('prepend expects a List as the second Thing');
                     return [b.get('item'), ...list];
                 }),
-            concat: builtin('list.concat', P.pat(P.star()),
+            concat: builtin('concat', P.pat(P.star()),
                 (b, arg) => {
                     const lists = Array.isArray(arg) ? arg : [arg];
                     return lists.flat();
                 }),
-            range: builtin('list.range', P.pat(P.named('start', P.wild()), P.named('end', P.wild()), P.named('step', P.wild())),
+            range: builtin('range', P.pat(P.named('start', P.wild()), P.named('end', P.wild()), P.named('step', P.wild())),
                 (b) => {
                     const start = b.get('start'), end = b.get('end'), step = b.get('step');
                     const result = [];
@@ -176,29 +179,29 @@ class Evaluator {
                     else if (step < 0) for (let i = start; i > end; i += step) result.push(i);
                     return result;
                 }),
-            slice: builtin('list.slice', P.pat(P.named('list', P.wild()), P.named('start', P.wild()), P.named('end', P.wild())),
+            slice: builtin('slice', P.pat(P.named('list', P.wild()), P.named('start', P.wild()), P.named('end', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.slice expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('slice expects a List as the first Thing');
                     return list.slice(b.get('start'), b.get('end'));
                 }),
-            find: builtin('list.find', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
+            find: builtin('find', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.find expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('find expects a List as the first Thing');
                     const i = list.findIndex(item => this.deepEqual(item, b.get('value')));
                     return i >= 0 ? i : null;
                 }),
-            contains: builtin('list.contains', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
+            contains: builtin('contains', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
                 (b) => {
                     const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('list.contains expects a List as the first Thing');
+                    if (!Array.isArray(list)) throw this.punkError('contains expects a List as the first Thing');
                     return list.some(item => this.deepEqual(item, b.get('value')));
                 }),
-            sort: builtin('list.sort', P.pat(P.wild()),
+            sort: builtin('sort', P.pat(P.wild()),
                 (b) => {
                     const list = b.get('0');
-                    if (!Array.isArray(list)) throw this.punkError('list.sort expects a List');
+                    if (!Array.isArray(list)) throw this.punkError('sort expects a List');
                     return [...list].sort((a, c) => {
                         if (typeof a === 'string' && typeof c === 'string') return a.localeCompare(c);
                         if (typeof a === 'number' && typeof c === 'number') return a - c;
@@ -210,7 +213,7 @@ class Evaluator {
         const fs = require('fs');
 
         const fileOps = {
-            read: builtin('file.read', P.pat(P.wild()),
+            read: builtin('read', P.pat(P.wild()),
                 (b) => {
                     try {
                         return fs.readFileSync(String(b.get('0')), 'utf8').split('\n');
@@ -218,7 +221,7 @@ class Evaluator {
                         throw this.punkError(`Cannot read file: ${err.message}`);
                     }
                 }),
-            write: builtin('file.write', P.pat(P.named('path', P.wild()), P.named('content', P.wild())),
+            write: builtin('write', P.pat(P.named('path', P.wild()), P.named('content', P.wild())),
                 (b) => {
                     try {
                         const content = b.get('content');
@@ -253,11 +256,44 @@ class Evaluator {
             }
         );
 
-        this.setName('math', math);
-        this.setName('logic', logic);
-        this.setName('list', listOps);
-        this.setName('text', stringOps);
-        this.setName('file', fileOps);
+        this.setName('add', math.add);
+        this.setName('sub', math.sub);
+        this.setName('mul', math.mul);
+        this.setName('div', math.div);
+        this.setName('pow', math.pow);
+        this.setName('mod', math.mod);
+        this.setName('sqrt', math.sqrt);
+        this.setName('isnum', math.isnum);
+        this.setName('min', math.min);
+        this.setName('max', math.max);
+        this.setName('gt', logic.gt);
+        this.setName('lt', logic.lt);
+        this.setName('eq', logic.eq);
+        this.setName('not', logic.not);
+        this.setName('and', logic.and);
+        this.setName('or', logic.or);
+        this.setName('upper', stringOps.upper);
+        this.setName('lower', stringOps.lower);
+        this.setName('trim', stringOps.trim);
+        this.setName('split', stringOps.split);
+        this.setName('join', stringOps.join);
+        this.setName('replace', stringOps.replace);
+        this.setName('map', listOps.map);
+        this.setName('filter', listOps.filter);
+        this.setName('reduce', listOps.reduce);
+        this.setName('flatMap', listOps.flatMap);
+        this.setName('len', listOps.len);
+        this.setName('head', listOps.head);
+        this.setName('tail', listOps.tail);
+        this.setName('prepend', listOps.prepend);
+        this.setName('concat', listOps.concat);
+        this.setName('range', listOps.range);
+        this.setName('slice', listOps.slice);
+        this.setName('find', listOps.find);
+        this.setName('contains', listOps.contains);
+        this.setName('sort', listOps.sort);
+        this.setName('read', fileOps.read);
+        this.setName('write', fileOps.write);
         this.setName('log', log);
         this.setName('assert', assertFn);
     }
