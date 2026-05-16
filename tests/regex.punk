@@ -21,20 +21,20 @@ assert!(maybe!abc123 got-it)
 
 #3. Capture groups are accessible by position via `name.<i>`#
 parts:{m:"(\w+)-(\w+)"}(
-  prepend!(m.1. prepend!(m.2. ()))
+  prep!(m.1. prep!(m.2. ()))
 )
 assert!(parts!John-Doe (John Doe))
 
 #4. Named groups are reachable via `name.<groupname>`#
 who:{m:"(?<first>\w+)-(?<last>\w+)"}(
-  prepend!(m.first. prepend!(m.last. ()))
+  prep!(m.first. prep!(m.last. ()))
 )
 assert!(who!Ada-Lovelace (Ada Lovelace))
 
 #5. Multiple regex slots: caller passes a list, one entry per slot.
  Regex captures are always text (strings), not Things-by-shape.#
 both:{a:"\d+" b:"[a-z]+"}(
-  prepend!(a.0. prepend!(b.0. ()))
+  prep!(a.0. prep!(b.0. ()))
 )
 r5:both!(42 hello)
 assert!(len!r5. 2)

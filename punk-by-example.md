@@ -38,7 +38,7 @@ the `.` character is reserved for dereferencing {introduced in §2}:
 
 ```punk
 > 3,14 ⏎
-3.14
+3,14
 ```
 
 ## 2. Binding and dereferencing
@@ -48,7 +48,7 @@ just the literal Thing `name` — to retrieve the value bound to it, you have
 to *dereference* it with a postfix `.`:
 
 ```punk
-> name:Alice
+> name:Alice ⏎
 > name. ⏎
 Alice
 ```
@@ -173,7 +173,7 @@ There's no way to embed a literal space inside a Thing — multi-word text
 is naturally a list, e.g. `(John Doe)`.
 
 Punk doesn't have a separate "string" type — text is just a Thing, no
-different from any other. The list builtins (`slice!`, `sort!`, `prepend!`,
+different from any other. The list builtins (`slice!`, `sort!`, `prep!`,
 `concat!`, `find!`, `contains!`, `map!`, `filter!`, `len!`) are polymorphic:
 hand them a text Thing or a number and they auto-decompose into chars/digits,
 do the work, and rewrap to the same shape — no manual `split!`/`join!`:
@@ -185,7 +185,7 @@ he
 23
 > sort!hello ⏎
 ehllo
-> prepend!(W hello) ⏎
+> prep!(W hello) ⏎
 Whello
 > concat!(foo bar) ⏎
 foobar
@@ -193,7 +193,7 @@ foobar
 2
 > contains!(hello e) ⏎
 TRUE
-> map!(abc upper.) ⏎
+> map!(upper. abc) ⏎
 ABC
 > len!hello ⏎
 5
@@ -308,13 +308,13 @@ A named Thing inside a list lets you treat the list like an associative
 record:
 
 ```punk
-> person:(name:Alice age:30)
+> person:(name:Alice age:30) ⏎
 > person.name. ⏎
 Alice
 ```
 
 ```punk
-> person:(name:Alice age:30)
+> person:(name:Alice age:30) ⏎
 > person.age. ⏎
 30
 ```
@@ -330,19 +330,19 @@ no special "index sugar" — `0`, `1`, `~` {last} are just names for steps,
 and they need a terminator like any other name:
 
 ```punk
-> numbers:(10 20 30)
+> numbers:(10 20 30) ⏎
 > numbers.0. ⏎
 10
 ```
 
 ```punk
-> numbers:(10 20 30)
+> numbers:(10 20 30) ⏎
 > numbers.1. ⏎
 20
 ```
 
 ```punk
-> numbers:(10 20 30)
+> numbers:(10 20 30) ⏎
 > numbers.~. ⏎
 30
 ```
@@ -384,6 +384,23 @@ Chains compose by adding steps. Read each step left-to-right:
 ```punk
 > ((name:Tim age:44) (name:John age:30)).0.name. ⏎
 Tim
+```
+
+Postfix indexing is polymorphic: text and numbers drill down to
+characters/digits, so the same `.0.` / `.~.` / `.N~M.` chain works at
+every level.
+
+```punk
+> word:Steve ⏎
+Steve
+> word.0. ⏎
+S
+> word.~. ⏎
+e
+> word.1~3. ⏎
+tev
+> (Tim Bob).0.0. ⏎
+T
 ```
 
 ## 9. List operations
@@ -446,37 +463,37 @@ dereferences that bound value:
 
 ```punk
 > map!(
-    (1 2 3)
     {n:_}(*!(n. 2))
+    (1 2 3)
   ) ⏎
 (2 4 6)
 ```
 
 ```punk
 > filter!(
-    (1 2 3 4)
     {n:_}(=!(%!(n. 2) 0))
+    (1 2 3 4)
   ) ⏎
 (2 4)
 ```
 
 `reduce`'s function is called with two Things — the accumulator and the
 next element — so it uses the pattern `{acc:_ item:_}` and dereferences
-the bindings by name:
+the bindings by name. Argument order is **fn, init, list** {Clojure-style}:
 
 ```punk
 > reduce!(
-    (1 2 3 4)
     {acc:_ item:_}(+!(acc. item.))
     0
+    (1 2 3 4)
   ) ⏎
 10
 ```
 
-### The Lisp spine: `.0.` / `.1~.` / `prepend`
+### The Lisp spine: `.0.` / `.1~.` / `prep`
 
 Three primitives are enough to walk and rebuild any list. `xs.0.` returns
-the first element; `xs.1~.` returns the rest as a list; `prepend!` puts an
+the first element; `xs.1~.` returns the rest as a list; `prep!` puts an
 item back on the front. Slice sugar generalises: `xs.N~.` is the tail from
 index N, `xs.N~M.` is the inclusive range, `xs.~M.` is everything up to and
 including M.
@@ -486,7 +503,7 @@ including M.
 a
 > (a b c).1~. ⏎
 (b c)
-> prepend!(z (a b c)) ⏎
+> prep!(z (a b c)) ⏎
 (z a b c)
 > ().1~. ⏎
 ()
@@ -523,7 +540,7 @@ integer list `(N N+1 … M)`; a reversed range is empty.
 ()
 > -2~2 ⏎
 (-2 -1 0 1 2)
-> map!(1~4 {n:_}(*!(n. n.))) ⏎
+> map!({n:_}(*!(n. n.)) 1~4) ⏎
 (1 4 9 16)
 ```
 
@@ -536,7 +553,7 @@ unbounded range"*.
 
 `a | f.` is exactly the same as `f!a`, but reads left-to-right. The
 trailing `.` on each stage hands over the function **value** to the
-pipe {same rule as `map!(xs f.)`}, and the pipe itself performs the
+pipe {same rule as `map!(f. xs)`}, and the pipe itself performs the
 call with the LHS as a single argument:
 
 ```punk
@@ -546,12 +563,66 @@ h
 3
 ```
 
+`|` is a standalone token, so whitespace either side is optional —
+write it however reads best:
+
+```punk
+> hello|split.|head. ⏎
+h
+> hello | split. | head. ⏎
+h
+> hello  |  split.  |  head. ⏎
+h
+```
+
 `a | f. | g.` means `g!{f!a}`. For multi-argument stages, wrap in a
 lambda: `5 | {n:_}(+!(n. 10)).`.
 
 A stage can be any expression that evaluates to a function value, not
 just a bare deref. So `a | getFn!key` is fine when `getFn!key` returns
 a callable — the pipe takes that value and applies it to `a`.
+
+### Pipe-fn binding `name:|`
+
+A pipeline that's missing its left-hand value is a function value
+waiting for one. Binding it with `name:|` — `:` and the first `|`
+**tight together, no space** — names that deferred pipeline. Subsequent
+`|`s follow normal pipeline spacing.
+
+```punk
+> twice:|inc.|inc. ⏎
+> twice!5 ⏎
+7
+> twice!100 ⏎
+102
+```
+
+It composes named functions and partials freely, and the result is a
+first-class function value — usable wherever a function value goes
+{`map!`, `?` branches, other pipelines, …}.
+
+```punk
+> flow:|inc.|*'2.|+'1. ⏎
+> flow!3 ⏎
+9
+> map!(twice. (1 2 3)) ⏎
+(3 4 5)
+> 5?twice. ⏎
+7
+```
+
+A single stage is allowed {it just aliases the function}:
+
+```punk
+> flip:|inc. ⏎
+> flip!5 ⏎
+6
+```
+
+Two rules to keep it unambiguous:
+
+- `:` and the first `|` must be adjacent — `x: |f.` is rejected.
+- At least one stage is required — `x:|` is rejected.
 
 ## 10. Functions
 
@@ -568,7 +639,7 @@ A function over a single argument names it once and dereferences with
 `name.`:
 
 ```punk
-> double:{n:_}(*!(n. 2))
+> double:{n:_}(*!(n. 2)) ⏎
 > double!5 ⏎
 10
 ```
@@ -579,7 +650,7 @@ Earlier expressions can prepare values that the last expression uses:
 > compute:{x:_}(
     y:+!(x. 1)
     *!(y. 10)
-  )
+  ) ⏎
 > compute!4 ⏎
 50
 ```
@@ -587,7 +658,7 @@ Earlier expressions can prepare values that the last expression uses:
 A function over two arguments gives each one a name:
 
 ```punk
-> add:{a:_ b:_}(+!(a. b.))
+> add:{a:_ b:_}(+!(a. b.)) ⏎
 > +!(5 3) ⏎
 8
 ```
@@ -600,19 +671,19 @@ as passed** — scalar stays scalar, list stays list. That means you can
 skip naming altogether for the simplest cases:
 
 ```punk
-> processOne:{_}(_.)
+> processOne:{_}(_.) ⏎
 > processOne!hello ⏎
 hello
 
-> processTwo:{_ _}(+!(_.0. _.1.))
+> processTwo:{_ _}(+!(_.0. _.1.)) ⏎
 > processTwo!(3 4) ⏎
 7
 
-> processN:{___}(len!_.)
+> processN:{___}(len!_.) ⏎
 > processN!(a b c) ⏎
 3
 
-> processAandN:{a:_ ___}(+!(a. len!_.))
+> processAandN:{a:_ ___}(+!(a. len!_.)) ⏎
 > processAandN!(10 b c) ⏎
 13
 ```
@@ -621,7 +692,7 @@ hello
 pattern uses positional named params:
 
 ```punk
-> pairAll:{a:_ b:_}(_.)
+> pairAll:{a:_ b:_}(_.) ⏎
 > pairAll!(1 2) ⏎
 (1 2)
 ```
@@ -631,8 +702,8 @@ gives you the function itself {suitable for passing as an argument}; using
 `!` instead *calls* it:
 
 ```punk
-> double:{n:_}(*!(n. 2))
-> map!((1 2 3) double.) ⏎
+> double:{n:_}(*!(n. 2)) ⏎
+> map!(double. (1 2 3)) ⏎
 (2 4 6)
 ```
 
@@ -640,7 +711,7 @@ You don't have to bind a function to a name. Anonymous functions are
 written the same way, and dropped in where you need them:
 
 ```punk
-> map!((1 2 3) {n:_}(^!(n. 2))) ⏎
+> map!({n:_}(^!(n. 2)) (1 2 3)) ⏎
 (1 4 9)
 ```
 
@@ -684,6 +755,20 @@ Partials can be further partialled by name:
 
 `!` always invokes — under-arity on a fixed-arity function is an error.
 Reach for `'` explicitly when you want to defer the call.
+
+The list builtins `map!`/`filter!`/`reduce!`/`flatMap!` take the
+**function first**, then the data — so partials over them build reusable
+transformers naturally:
+
+```punk
+> incAll:map'{n:_}(+!(n. 1)) ⏎
+> incAll!(1 2 3) ⏎
+(2 3 4)
+
+> sum:reduce'(+. 0) ⏎
+> sum!(1 2 3 4 5) ⏎
+15
+```
 
 ## 12. Pattern matching
 
@@ -733,7 +818,7 @@ Multi-branch — wildcard as a catch-all:
       {2}(two)
       {_}(other)
     )
-  )
+  ) ⏎
 > classify!1 ⏎
 one
 > classify!9 ⏎
@@ -743,9 +828,21 @@ other
 If/else falls out for free: a literal-match branch plus a wildcard.
 
 ```punk
-> v:TRUE
+> v:TRUE ⏎
 > v.?({TRUE}(yes) {_}(no)) ⏎
 yes
+```
+
+`?` is a standalone token — whitespace either side is optional. Drop
+the spaces for terse code, keep them for emphasis:
+
+```punk
+> 5?{5}(yes) ⏎
+yes
+> 5 ? {5}(yes) ⏎
+yes
+> 5 ? ( {1}(one) {5}(five) {_}(other) ) ⏎
+five
 ```
 
 Branches are real function values, so:
@@ -757,9 +854,9 @@ Branches are real function values, so:
   of any expression that evaluates to one.
 
 ```punk
-> yes:{1}(one)
-> no:{_}(other)
-> dispatch:{x:_}(x.?(yes. no.))
+> yes:{1}(one) ⏎
+> no:{_}(other) ⏎
+> dispatch:{x:_}(x.?(yes. no.)) ⏎
 > dispatch!1 ⏎
 one
 > dispatch!9 ⏎
@@ -775,7 +872,7 @@ positional index (so `slot.name` works) **and** bound at top level:
 ```punk
 > parseDate:{s:"^(?<y>\d{4})-(?<m>\d{2})-(?<d>\d{2})$"}(
     (s.y. s.m. s.d.)
-  )
+  ) ⏎
 > parseDate!2024-01-15 ⏎
 (2024 01 15)
 ```
@@ -783,7 +880,7 @@ positional index (so `slot.name` works) **and** bound at top level:
 Multiple regex slots match positional elements of a list arg:
 
 ```punk
-> both:{a:"\d+" b:"[a-z]+"}(prepend!(a.0. prepend!(b.0. ())))
+> both:{a:"\d+" b:"[a-z]+"}(prep!(a.0. prep!(b.0. ()))) ⏎
 > both!(42 hello) ⏎
 (42 hello)
 ```
@@ -797,7 +894,7 @@ statement:
     {n:"^\d+$"}(number)
     {w:"^[a-z]+$"}(word)
     {_}(other)
-  ))
+  )) ⏎
 > classify!123 ⏎
 number
 > classify!hello ⏎
@@ -873,22 +970,22 @@ binding, it creates a new one. When you genuinely need mutation, use a
 Create a cell with `[ ]`, read it with `->`, write to it with `<-`:
 
 ```punk
-> counter:[0]
+> counter:[0] ⏎
 > counter-> ⏎
 0
 ```
 
 ```punk
-> counter:[0]
-> counter<-5
+> counter:[0] ⏎
+> counter<-5 ⏎
 > counter-> ⏎
 5
 ```
 
 ```punk
-> counter:[0]
-> counter<-5
-> counter<-+!(counter-> 1)
+> counter:[0] ⏎
+> counter<-5 ⏎
+> counter<-+!(counter-> 1) ⏎
 > counter-> ⏎
 6
 ```
@@ -909,7 +1006,7 @@ when something applies `!` to the containing list.
 {nothing runs — the list is held as data}
 
 ```punk
-> held:(log!(hi))
+> held:(log!(hi)) ⏎
 > held! ⏎
 hi
 ```
@@ -932,7 +1029,7 @@ A function can take a `(…)` argument and apply `!` to it itself —
 that's all there is to a "macro". For example:
 
 ```punk
-> when:{test:_ body:_}(test.?{TRUE}(body!))
+> when:{test:_ body:_}(test.?{TRUE}(body!)) ⏎
 > when!(TRUE (log!(hi))) ⏎
 hi
 > when!(FALSE (log!(nope))) ⏎

@@ -113,22 +113,22 @@ class Evaluator {
         };
 
         const listOps = {
-            map: builtin('map', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+            map: builtin('map', P.pat(P.named('fn', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items, rewrap } = this.decompose(b.get('list'));
                     return rewrap(items.map(item => this.callFunction(b.get('fn'), item)));
                 }),
-            filter: builtin('filter', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+            filter: builtin('filter', P.pat(P.named('fn', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items, rewrap } = this.decompose(b.get('list'));
                     return rewrap(items.filter(item => this.callFunction(b.get('fn'), item)));
                 }),
-            reduce: builtin('reduce', P.pat(P.named('list', P.wild()), P.named('fn', P.wild()), P.named('init', P.wild())),
+            reduce: builtin('reduce', P.pat(P.named('fn', P.wild()), P.named('init', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items } = this.decompose(b.get('list'));
                     return items.reduce((acc, item) => this.callFunction(b.get('fn'), [acc, item]), b.get('init'));
                 }),
-            flatMap: builtin('flatMap', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
+            flatMap: builtin('flatMap', P.pat(P.named('fn', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items } = this.decompose(b.get('list'));
                     return items.flatMap(item => {
@@ -139,9 +139,9 @@ class Evaluator {
             len: builtin('len', P.pat(P.star()),
                 (b, arg) => this.smartLen(arg)),
             // Lisp spine helpers. `head!`/`tail!` are gone — use the
-            // postfix slice forms `xs.0.` and `xs.1~.` instead. `prepend!`
+            // postfix slice forms `xs.0.` and `xs.1~.` instead. `prep!`
             // and `concat!` are the structural builders for that spine.
-            prepend: builtin('prepend', P.pat(P.named('item', P.wild()), P.named('list', P.wild())),
+            prep: builtin('prep', P.pat(P.named('item', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items, rewrap } = this.decompose(b.get('list'));
                     return rewrap([b.get('item'), ...items]);
@@ -274,7 +274,7 @@ class Evaluator {
         this.setName('reduce', listOps.reduce);
         this.setName('flatMap', listOps.flatMap);
         this.setName('len', listOps.len);
-        this.setName('prepend', listOps.prepend);
+        this.setName('prep', listOps.prep);
         this.setName('concat', listOps.concat);
         this.setName('slice', listOps.slice);
         this.setName('find', listOps.find);
@@ -294,6 +294,7 @@ class Evaluator {
         if (v === true) return 'TRUE';
         if (v === false) return 'FALSE';
         if (v === undefined) return '<nothing>';
+        if (typeof v === 'number') return String(v).replace('.', ',');
         if (Array.isArray(v)) return '(' + v.map(x => this.formatValue(x)).join(' ') + ')';
         if (typeof v === 'string') {
             return v.replace(/\\/g, '\\\\');
@@ -338,7 +339,7 @@ class Evaluator {
     /**
      * Decompose any "thing-like" value into a list of items plus a rewrap
      * fn that puts the items back into the original shape. Lets list
-     * builtins (slice/prepend/concat/find/contains/sort/map/filter) work
+     * builtins (slice/prep/concat/find/contains/sort/map/filter) work
      * directly on text and numbers without explicit split!/join!.
      */
     decompose(v) {
@@ -410,7 +411,11 @@ class Evaluator {
     }
 
     setName(name, value) {
-        this.scopes[this.scopes.length - 1].set(name, value);
+        const top = this.scopes[this.scopes.length - 1];
+        if (top.has(name)) {
+            throw new Error(`Cannot rebind '${name}': named Things are immutable. Use a cell '[...]' with '<-' for mutable state.`);
+        }
+        top.set(name, value);
     }
 
     getName(name) {
@@ -837,7 +842,7 @@ class Evaluator {
             });
         }
         if (fn && fn.type === 'Partial') {
-            const more = arg === null ? [] : (Array.isArray(arg) ? arg : [arg]);
+            const more = arg === null ? [] : [arg];
             const combined = [...fn.args, ...more];
             const finalArg = combined.length === 0 ? null
                 : (combined.length === 1 ? combined[0] : combined);
@@ -934,6 +939,16 @@ class Evaluator {
             if (named !== undefined) obj = named;
         }
         obj = this.asList(obj);
+        // Text/number slicing drills into chars/digits and rewraps to the
+        // original shape, keeping postfix slices polymorphic with slice!.
+        if (typeof obj === 'string' || typeof obj === 'number') {
+            const { items, rewrap } = this.decompose(obj);
+            const len = items.length;
+            const start = node.start == null ? 0 : node.start;
+            const end = node.end == null ? len - 1 : node.end;
+            if (start >= len || start > end) return rewrap([]);
+            return rewrap(items.slice(start, Math.min(end + 1, len)));
+        }
         if (!Array.isArray(obj)) obj = [obj];
         const len = obj.length;
         const start = node.start == null ? 0 : node.start;
@@ -986,19 +1001,18 @@ class Evaluator {
                 }
                 throw new Error(`No Named Thing found with name: ${node.name}`);
             }
-            
-            // Treat single Thing as a list of one Thing when accessed by index
-            if (/^\d+$/.test(node.name)) {
-                const index = parseInt(node.name);
-                if (index === 0) {
-                    return obj;
+
+            // Text / number drill-down: text indexes characters, numbers
+            // index digits (incl. the comma separator). Keeps the polymorphic
+            // "everything-is-list-shaped" feel consistent with map!/slice!/len!.
+            if (typeof obj === 'string' || typeof obj === 'number') {
+                if (/^\d+$/.test(node.name) || node.name === '~') {
+                    const chars = typeof obj === 'string'
+                        ? Array.from(obj)
+                        : Array.from(this.formatValue(obj));
+                    if (node.name === '~') return chars[chars.length - 1];
+                    return chars[parseInt(node.name)];
                 }
-                return undefined; // Out of bounds for single Thing
-            }
-            
-            // Handle ~ for single Thing (it is the only item)
-            if (node.name === '~') {
-                return obj;
             }
             
             if (typeof obj === 'object' && obj.name !== undefined) {

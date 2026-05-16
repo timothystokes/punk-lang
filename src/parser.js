@@ -167,6 +167,34 @@ class Parser {
                 if (this.peek().leadingWhitespace) {
                     throw new Error("Binding ':' must be tight: no whitespace after ':' in 'name:value'");
                 }
+                // `name:|stage. | stage.` — headless-pipe function binding.
+                // The `:` and first `|` must be adjacent (the leadingWhitespace
+                // check above guarantees that). Desugars to `{_}(_. | s1 | s2 | …)`
+                // so the evaluator needs no changes.
+                if (this.check('PIPE')) {
+                    const stages = [];
+                    while (this.match('PIPE')) {
+                        if (this.isAtEnd() || this.check('PIPE')) {
+                            throw new Error("`name:|` needs a pipe stage after each `|`");
+                        }
+                        let stage = this.primary();
+                        stage = this.postfix(stage);
+                        if (stage.type === 'Thing') {
+                            throw new Error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
+                        }
+                        stages.push(stage);
+                    }
+                    if (stages.length === 0) {
+                        throw new Error("`name:|` needs at least one pipe stage");
+                    }
+                    let acc = { type: 'Dereference', name: '_' };
+                    for (const stage of stages) {
+                        acc = { type: 'FunctionCall', callee: stage, arg: acc };
+                    }
+                    const pattern = { type: 'Pattern', elements: [{ type: 'Wildcard' }] };
+                    const body = { type: 'List', elements: [acc] };
+                    return { type: 'FunctionDef', name, pattern, body };
+                }
                 const value = this.expression();
                 if (value && value.type === 'Pattern' && this.check('LEFT_BRACKET')) {
                     if (this.peek().leadingWhitespace) {

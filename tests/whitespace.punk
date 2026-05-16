@@ -25,7 +25,7 @@ assert!(sum!(2 3) 5)
 
 #3. Pattern braces tolerate inner whitespace.#
 swap:{ a:_   b:_ }(
-  prepend!(b. prepend!(a. ()))
+  prep!(b. prep!(a. ()))
 )
 assert!(swap!(1 2) (2 1))
 

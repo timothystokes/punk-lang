@@ -20,17 +20,18 @@ assert!(matrix.0. (1 2))
 assert!(matrix.0.0. 1)
 assert!(matrix.~.~. 4)
 
-#A single Thing behaves as a 1-element list#
+#Text drills down to chars under postfix indexing#
 solo:hello
-assert!(solo.0. hello)
-assert!(solo.~. hello)
+assert!(solo.0. h)
+assert!(solo.~. o)
+assert!(solo.1~3. ell)
 
-#Lisp spine: index / slice / prepend#
+#Lisp spine: index / slice / prep#
 assert!((a b c).0. a)
 assert!((a b c).1~. (b c))
-assert!(prepend!(z (a b c)) (z a b c))
+assert!(prep!(z (a b c)) (z a b c))
 #slicing an empty list yields an empty list#
 assert!(().1~. ())
-#index 0 + slice from 1 compose to rebuild a list with prepend#
+#index 0 + slice from 1 compose to rebuild a list with prep#
 xs:(1 2 3)
-assert!(prepend!(xs.0. xs.1~.) xs.)
+assert!(prep!(xs.0. xs.1~.) xs.)

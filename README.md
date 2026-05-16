@@ -117,7 +117,7 @@ Examples:
 ```punk
 42        # Integer
 -17       # Negative integer
-3,14159   # European decimal {equals 3.14159}
+3,14159   # Decimal {comma is the decimal separator; `.` is reserved for dereferencing}
 ```
 
 #### Comments
@@ -287,7 +287,7 @@ Functions are defined by a pattern connected to an expression {List} that can be
 
 **Every function takes exactly one Thing as its parameter.** Since a List is a single Thing, you can effectively pass multiple values by wrapping them in a List `( )`.
 
-Punk has no methods. Operations live in function libraries {like `math`, `list`, `text`}, and the target Thing is passed as the argument. For example, use `map!(numbers. {n:_}(...))` rather than `numbers.map`.
+Punk has no methods. Operations live in function libraries {like `math`, `list`, `text`}, and the target Thing is passed as the argument. For example, use `map!({n:_}(...) numbers.)` rather than `numbers.map`. Higher-order list builtins take the **function first** {Clojure-style} — this composes naturally with partial application (`map'fn.`).
 
 To call a named function, write the name immediately followed by `!`. The `!` implicitly dereferences the name. For example:
 
@@ -300,13 +300,13 @@ If a function name is followed by postfix `.` {not `!`}, the result is a *refere
 
 ```punk
 double:{n:_}(*!(n. 2))
-map!(numbers. double.)    # Passes the list and the function reference to map
+map!(double. numbers.)    # Passes the function reference and the list to map
 ```
 
 Punk supports anonymous functions, which are useful for higher-order functions that accept a function as a parameter.
 
 ```punk
-map!(people. {person:_}(person.name.))
+map!({person:_}(person.name.) people.)
 ```
 Returns a list of names from a list of people that contain an element called `name`.
 
@@ -414,7 +414,7 @@ Punk has no overloads — every function takes one Thing. The Clojure-style
 ```punk
 describe:{___}(
   _.?(
-    {(name:_)}(prepend!(name. (one)))
+    {(name:_)}(prep!(name. (one)))
     {(first:_ last:_)}(two)
     {_}(other)
   )
@@ -447,7 +447,7 @@ parseDate!2024-01-15      # (2024 01 15)
 
 ```punk
 both:{a:"\d+" b:"[a-z]+"}(
-  prepend!(a.0. prepend!(b.0. ()))
+  prep!(a.0. prep!(b.0. ()))
 )
 both!(42 hello)           # (42 hello)
 ```
@@ -581,10 +581,10 @@ Example usage:
 These functions operate on lists by taking the list as the first argument. They return new lists without modifying the original.
 
 ```punk
-map!       # Transform each element: takes (list, function)
-filter!    # Filter elements: takes (list, function)
-reduce!    # Reduce to single value: takes (list, function, initial)
-flatMap!   # Transform and flatten: takes (list, function)
+map!       # Transform each element: takes (function, list)
+filter!    # Filter elements: takes (function, list)
+reduce!    # Reduce to single value: takes (function, initial, list)
+flatMap!   # Transform and flatten: takes (function, list)
 len!       # Shape-aware size:
            #   list     → item count
            #   text     → character count   {len!hello → 5}
@@ -599,7 +599,7 @@ slice!     # Extract a sublist. Two forms:
 find!      # Find index: takes (list, value)
 contains!  # Check contains: takes (list, value)
 sort!      # Sort list: takes list, returns sorted copy
-prepend!   # Add an item to the front: takes (item, list)
+prep!   # Add an item to the front: takes (item, list)
 ```
 
 For indexing and first/rest the postfix-dot chain does the job:
@@ -610,7 +610,7 @@ The same `~` is a **range literal** at the expression level: `1~5` is the
 list `(1 2 3 4 5)`, `0~3` is `(0 1 2 3)`, a reversed range `5~1` is `()`.
 Open forms (`1~`, `~5`, `~`) are lazy and only legal where context supplies
 a bound — forcing one elsewhere errors with "Cannot force an unbounded
-range". Together, the slice forms plus `prepend!` and `concat!` form a
+range". Together, the slice forms plus `prep!` and `concat!` form a
 Lisp-style spine — every other list traversal can be written recursively in
 terms of them.
 
@@ -636,11 +636,11 @@ characters/digits, run the op, and rewrap to the original shape. `split!` and
 slice!(hello 0~1)                        # he         {text in, text out}
 slice!(12345 1~2)                        # 23         {number in, number out}
 sort!hello                               # ehllo
-prepend!(W hello)                        # Whello
+prep!(W hello)                        # Whello
 concat!(foo bar)                         # foobar
 find!(hello l)                           # 2
 contains!(hello e)                       # TRUE
-map!(abc upper.)                         # ABC
+map!(upper. abc)                         # ABC
 len!hello                                # 5          {smart len}
 
 #startsWith collapses to a plain slice + equality.#

@@ -18,3 +18,11 @@ assert!(twoPlus!7 10)
 #partial preserves zero-args identity: applying with no extension invokes as-is#
 addFive:+'(2 3)
 assert!(addFive! 5)
+
+#partial of higher-order list ops (function-first order)#
+inc:{n:_}(+!(n. 1))
+incAll:map'inc.
+assert!(incAll!(1 2 3) (2 3 4))
+
+sum:reduce'(+. 0)
+assert!(sum!(1 2 3 4 5) 15)

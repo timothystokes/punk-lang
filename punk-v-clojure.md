@@ -22,8 +22,7 @@ hello
 ```
 **Clojure**
 ```clojure
-;; A bare word would be resolved as a var, so quote it to keep it literal
-user=> 'hello
+user=> 'hello ⏎
 hello
 ```
 
@@ -34,7 +33,7 @@ hello
 ```
 **Clojure**
 ```clojure
-user=> 42
+user=> 42 ⏎
 42
 ```
 
@@ -45,7 +44,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> true
+user=> true ⏎
 true
 ```
 
@@ -56,7 +55,7 @@ FALSE
 ```
 **Clojure**
 ```clojure
-user=> false
+user=> false ⏎
 false
 ```
 
@@ -67,7 +66,7 @@ NULL
 ```
 **Clojure**
 ```clojure
-user=> nil
+user=> nil ⏎
 nil
 ```
 
@@ -77,11 +76,11 @@ for dereferencing}. Clojure uses `.`.
 **Punk**
 ```punk
 > 3,14 ⏎
-3.14
+3,14
 ```
 **Clojure**
 ```clojure
-user=> 3.14
+user=> 3.14 ⏎
 3.14
 ```
 
@@ -102,8 +101,8 @@ means, only what `.` retrieves.}*
 
 **Clojure**
 ```clojure
-user=> (def name 'Alice)
-user=> name
+user=> (def name 'Alice) ⏎
+user=> name ⏎
 Alice
 ```
 *{in Clojure a bare symbol auto-dereferences; you'd need `'name` to
@@ -120,7 +119,7 @@ hello
 ```
 **Clojure**
 ```clojure
-user=> (println 'hello)
+user=> (println 'hello) ⏎
 hello
 ```
 
@@ -131,7 +130,7 @@ hello world
 ```
 **Clojure**
 ```clojure
-user=> (println 'hello 'world)
+user=> (println 'hello 'world) ⏎
 hello world
 ```
 
@@ -147,7 +146,7 @@ Clojure uses operator symbols {`+`, `-`, …}.
 ```
 **Clojure**
 ```clojure
-user=> (+ 5 3)
+user=> (+ 5 3) ⏎
 8
 ```
 
@@ -158,7 +157,7 @@ user=> (+ 5 3)
 ```
 **Clojure**
 ```clojure
-user=> (- 10 4)
+user=> (- 10 4) ⏎
 6
 ```
 
@@ -169,7 +168,7 @@ user=> (- 10 4)
 ```
 **Clojure**
 ```clojure
-user=> (* 6 7)
+user=> (* 6 7) ⏎
 42
 ```
 
@@ -180,7 +179,7 @@ user=> (* 6 7)
 ```
 **Clojure**
 ```clojure
-user=> (/ 20 4)
+user=> (/ 20 4) ⏎
 5
 ```
 
@@ -191,7 +190,7 @@ user=> (/ 20 4)
 ```
 **Clojure**
 ```clojure
-user=> (Math/pow 2 8)
+user=> (Math/pow 2 8) ⏎
 256.0
 ```
 
@@ -202,7 +201,7 @@ user=> (Math/pow 2 8)
 ```
 **Clojure**
 ```clojure
-user=> (mod 10 3)
+user=> (mod 10 3) ⏎
 1
 ```
 
@@ -215,7 +214,7 @@ Variadic min/max:
 ```
 **Clojure**
 ```clojure
-user=> (min 3 1 4 1 5)
+user=> (min 3 1 4 1 5) ⏎
 1
 ```
 
@@ -226,7 +225,7 @@ user=> (min 3 1 4 1 5)
 ```
 **Clojure**
 ```clojure
-user=> (max 3 1 4 1 5)
+user=> (max 3 1 4 1 5) ⏎
 5
 ```
 
@@ -242,7 +241,7 @@ HELLO
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/upper-case "hello")
+user=> (clojure.string/upper-case "hello") ⏎
 "HELLO"
 ```
 
@@ -253,7 +252,7 @@ bob
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/lower-case "BOB")
+user=> (clojure.string/lower-case "BOB") ⏎
 "bob"
 ```
 
@@ -264,7 +263,7 @@ user=> (clojure.string/lower-case "BOB")
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/split "a,b,c" #",")
+user=> (clojure.string/split "a,b,c" #",") ⏎
 ["a" "b" "c"]
 ```
 
@@ -275,7 +274,7 @@ John+Doe
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/join "+" ["John" "Doe"])
+user=> (clojure.string/join "+" ["John" "Doe"]) ⏎
 "John+Doe"
 ```
 
@@ -286,8 +285,8 @@ a,b,c
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/join ", " ["a" "b" "c"])
-"a, b, c"
+user=> (clojure.string/join "," ["a" "b" "c"]) ⏎
+"a,b,c"
 ```
 
 Punk's `split!` has two forms: with a delimiter it splits at each
@@ -304,7 +303,7 @@ str`, and `clojure.string/join`.
 ```
 **Clojure**
 ```clojure
-user=> (seq "hello")
+user=> (seq "hello") ⏎
 (\h \e \l \l \o)
 ```
 
@@ -317,7 +316,7 @@ user=> (seq "hello")
 ```
 **Clojure**
 ```clojure
-user=> (count "hello")
+user=> (count "hello") ⏎
 5
 ```
 
@@ -328,7 +327,7 @@ he
 ```
 **Clojure**
 ```clojure
-user=> (subs "hello" 0 2)
+user=> (subs "hello" 0 2) ⏎
 "he"
 ```
 
@@ -338,15 +337,15 @@ user=> (subs "hello" 0 2)
 ```punk
 > startsWith:{s:_ p:_}(
     =!(slice!(s. 0 len!p.) p.)
-  )
+  ) ⏎
 > startsWith!(hello he) ⏎
 TRUE
 ```
 **Clojure**
 ```clojure
 user=> (defn starts-with? [s p]
-         (= (subs s 0 (count p)) p))
-user=> (starts-with? "hello" "he")
+         (= (subs s 0 (count p)) p)) ⏎
+user=> (starts-with? "hello" "he") ⏎
 true
 ```
 
@@ -363,7 +362,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (> 10 5)
+user=> (> 10 5) ⏎
 true
 ```
 
@@ -374,7 +373,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (< 3 8)
+user=> (< 3 8) ⏎
 true
 ```
 
@@ -385,7 +384,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (= 5 5)
+user=> (= 5 5) ⏎
 true
 ```
 
@@ -396,7 +395,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (pos? (compare "xyz" "abc"))
+user=> (pos? (compare "xyz" "abc")) ⏎
 true
 ```
 
@@ -407,7 +406,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (= [1 2 3] [1 2 3])
+user=> (= [1 2 3] [1 2 3]) ⏎
 true
 ```
 
@@ -418,7 +417,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (not false)
+user=> (not false) ⏎
 true
 ```
 
@@ -429,7 +428,7 @@ FALSE
 ```
 **Clojure**
 ```clojure
-user=> (not 'hello)
+user=> (not 'hello) ⏎
 false
 ```
 
@@ -440,7 +439,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (and true true true)
+user=> (and true true true) ⏎
 true
 ```
 
@@ -451,7 +450,7 @@ FALSE
 ```
 **Clojure**
 ```clojure
-user=> (and true false true)
+user=> (and true false true) ⏎
 false
 ```
 
@@ -462,7 +461,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (or false nil 'hello)
+user=> (or false nil 'hello) ⏎
 hello
 ```
 *{Clojure's `or` returns the first truthy value, not `true` — but it's
@@ -480,7 +479,7 @@ map entry — in Clojure that's an actual map.
 ```
 **Clojure**
 ```clojure
-user=> [1 2 3]
+user=> [1 2 3] ⏎
 [1 2 3]
 ```
 
@@ -491,32 +490,32 @@ user=> [1 2 3]
 ```
 **Clojure**
 ```clojure
-user=> '[Alice Bob Charlie]
+user=> '[Alice Bob Charlie] ⏎
 [Alice Bob Charlie]
 ```
 
 **Punk**
 ```punk
-> person:(name:Alice age:30)
+> person:(name:Alice age:30) ⏎
 > person.name. ⏎
 Alice
 ```
 **Clojure**
 ```clojure
-user=> (def person {:name 'Alice :age 30})
-user=> (:name person)
+user=> (def person {:name 'Alice :age 30}) ⏎
+user=> (:name person) ⏎
 Alice
 ```
 
 **Punk**
 ```punk
-> person:(name:Alice age:30)
+> person:(name:Alice age:30) ⏎
 > person.age. ⏎
 30
 ```
 **Clojure**
 ```clojure
-user=> (:age person)
+user=> (:age person) ⏎
 30
 ```
 
@@ -526,14 +525,14 @@ Punk: `list.0.`, `list.~.`. Clojure: `nth` / `first` / `last`.
 
 **Punk**
 ```punk
-> numbers:(10 20 30)
+> numbers:(10 20 30) ⏎
 > numbers.0. ⏎
 10
 ```
 **Clojure**
 ```clojure
-user=> (def numbers [10 20 30])
-user=> (nth numbers 0)
+user=> (def numbers [10 20 30]) ⏎
+user=> (nth numbers 0) ⏎
 10
 ```
 
@@ -544,7 +543,7 @@ user=> (nth numbers 0)
 ```
 **Clojure**
 ```clojure
-user=> (nth numbers 1)
+user=> (nth numbers 1) ⏎
 20
 ```
 
@@ -555,7 +554,7 @@ user=> (nth numbers 1)
 ```
 **Clojure**
 ```clojure
-user=> (last numbers)
+user=> (last numbers) ⏎
 30
 ```
 
@@ -566,7 +565,7 @@ user=> (last numbers)
 ```
 **Clojure**
 ```clojure
-user=> (nth [10 20 30] 0)
+user=> (nth [10 20 30] 0) ⏎
 10
 ```
 
@@ -577,7 +576,7 @@ user=> (nth [10 20 30] 0)
 ```
 **Clojure**
 ```clojure
-user=> (last [10 20 30])
+user=> (last [10 20 30]) ⏎
 30
 ```
 
@@ -591,7 +590,7 @@ Tim
 ```
 **Clojure**
 ```clojure
-user=> (:person (merge {:person 'John} {:person 'Tim}))
+user=> (:person (merge {:person 'John} {:person 'Tim})) ⏎
 Tim
 ```
 
@@ -604,7 +603,7 @@ Chained indexing:
 ```
 **Clojure**
 ```clojure
-user=> (get-in [[1 2] [3 4] [5 6]] [0 0])
+user=> (get-in [[1 2] [3 4] [5 6]] [0 0]) ⏎
 1
 ```
 
@@ -615,7 +614,7 @@ user=> (get-in [[1 2] [3 4] [5 6]] [0 0])
 ```
 **Clojure**
 ```clojure
-user=> (last (last [[1 2] [3 4] [5 6]]))
+user=> (last (last [[1 2] [3 4] [5 6]])) ⏎
 6
 ```
 
@@ -626,8 +625,33 @@ Tim
 ```
 **Clojure**
 ```clojure
-user=> (:name (first [{:name 'Tim :age 44} {:name 'John :age 30}]))
+user=> (:name (first [{:name 'Tim :age 44} {:name 'John :age 30}])) ⏎
 Tim
+```
+
+Postfix indexing is polymorphic in Punk: text and numbers drill down to
+characters/digits with the same `.N.` / `.~.` / `.N~M.` chain. Clojure
+requires explicit conversion (`seq`/`subs`/`nth`).
+
+**Punk**
+```punk
+> word:Steve ⏎
+Steve
+> word.0. ⏎
+S
+> word.1~3. ⏎
+tev
+> (Tim Bob).0.0. ⏎
+T
+```
+**Clojure**
+```clojure
+user=> (first "Steve") ⏎
+\S
+user=> (subs "Steve" 1 4) ⏎
+"tev"
+user=> (first (first ["Tim" "Bob"])) ⏎
+\T
 ```
 
 ## 9. List operations
@@ -639,7 +663,7 @@ Tim
 ```
 **Clojure**
 ```clojure
-user=> (count [1 2 3 4])
+user=> (count [1 2 3 4]) ⏎
 4
 ```
 
@@ -650,7 +674,7 @@ user=> (count [1 2 3 4])
 ```
 **Clojure**
 ```clojure
-user=> (concat [1 2] [3 4])
+user=> (concat [1 2] [3 4]) ⏎
 (1 2 3 4)
 ```
 
@@ -661,7 +685,7 @@ user=> (concat [1 2] [3 4])
 ```
 **Clojure** {Punk drops `range` since steps other than 1 aren't supported}
 ```clojure
-user=> (range 0 11)
+user=> (range 0 11) ⏎
 (0 1 2 3 4 5 6 7 8 9 10)
 ```
 
@@ -674,7 +698,7 @@ user=> (range 0 11)
 ```
 **Clojure**
 ```clojure
-user=> (subvec [0 1 2 3 4 5] 0 3)
+user=> (subvec [0 1 2 3 4 5] 0 3) ⏎
 [0 1 2]
 ```
 
@@ -685,7 +709,7 @@ user=> (subvec [0 1 2 3 4 5] 0 3)
 ```
 **Clojure**
 ```clojure
-user=> (subvec [0 1 2 3 4 5] 2 4)
+user=> (subvec [0 1 2 3 4 5] 2 4) ⏎
 [2 3]
 ```
 
@@ -698,7 +722,7 @@ Search:
 ```
 **Clojure**
 ```clojure
-user=> (.indexOf [1 2 3] 2)
+user=> (.indexOf [1 2 3] 2) ⏎
 1
 ```
 
@@ -709,7 +733,7 @@ TRUE
 ```
 **Clojure**
 ```clojure
-user=> (boolean (some #{2} [1 2 3]))
+user=> (boolean (some #{2} [1 2 3])) ⏎
 true
 ```
 
@@ -718,51 +742,51 @@ true
 **Punk**
 ```punk
 > map!(
-    (1 2 3)
     {n:_}(*!(n. 2))
+    (1 2 3)
   ) ⏎
 (2 4 6)
 ```
 **Clojure**
 ```clojure
-user=> (map (fn [n] (* n 2)) [1 2 3])
+user=> (map (fn [n] (* n 2)) [1 2 3]) ⏎
 (2 4 6)
 ```
 
 **Punk**
 ```punk
 > filter!(
-    (1 2 3 4)
     {n:_}(=!(%!(n. 2) 0))
+    (1 2 3 4)
   ) ⏎
 (2 4)
 ```
 **Clojure**
 ```clojure
-user=> (filter even? [1 2 3 4])
+user=> (filter even? [1 2 3 4]) ⏎
 (2 4)
 ```
 
 **Punk**
 ```punk
 > reduce!(
-    (1 2 3 4)
     {acc:_ item:_}(+!(acc. item.))
     0
+    (1 2 3 4)
   ) ⏎
 10
 ```
 **Clojure**
 ```clojure
-user=> (reduce + 0 [1 2 3 4])
+user=> (reduce + 0 [1 2 3 4]) ⏎
 10
 ```
 
-### The Lisp spine: `.0.` / `.1~.` / `prepend`
+### The Lisp spine: `.0.` / `.1~.` / `prep`
 
 Punk replaces Clojure's `first`/`rest` with slice sugar on the postfix-dot
 chain: `xs.0.` is `first`, `xs.1~.` is `rest`, and the slice generalises to
-`xs.N~M.` (inclusive). `prepend!` plays the part of `cons`.
+`xs.N~M.` (inclusive). `prep!` plays the part of `cons`.
 
 **Punk**
 ```punk
@@ -770,7 +794,7 @@ chain: `xs.0.` is `first`, `xs.1~.` is `rest`, and the slice generalises to
 a
 > (a b c).1~. ⏎
 (b c)
-> prepend!(z (a b c)) ⏎
+> prep!(z (a b c)) ⏎
 (z a b c)
 > ().0. ⏎
 NULL
@@ -779,15 +803,15 @@ NULL
 ```
 **Clojure**
 ```clojure
-user=> (first '[a b c])
+user=> (first '[a b c]) ⏎
 a
-user=> (rest '[a b c])
+user=> (rest '[a b c]) ⏎
 (b c)
-user=> (cons 'z '[a b c])
+user=> (cons 'z '[a b c]) ⏎
 (z a b c)
-user=> (first [])
+user=> (first []) ⏎
 nil
-user=> (rest [])
+user=> (rest []) ⏎
 ()
 ```
 
@@ -810,7 +834,7 @@ sum:{lst:_}(
   (if (empty? lst)
     0
     (+ (first lst) (sum (rest lst)))))
-user=> (sum [1 2 3 4 5])
+user=> (sum [1 2 3 4 5]) ⏎
 15
 ```
 
@@ -831,11 +855,11 @@ list of integers and indexes into it.
 ```
 **Clojure**
 ```clojure
-user=> (range 1 6)
+user=> (range 1 6) ⏎
 (1 2 3 4 5)
-user=> (reduce + (range 1 101))
+user=> (reduce + (range 1 101)) ⏎
 5050
-user=> (subvec (vec (range 1 11)) 2 5)
+user=> (subvec (vec (range 1 11)) 2 5) ⏎
 [3 4 5]
 ```
 
@@ -856,10 +880,61 @@ h
 ```
 **Clojure**
 ```clojure
-user=> (-> "hello" seq first)
+user=> (-> "hello" seq first) ⏎
 \h
-user=> (-> [1 2 3] count)
+user=> (-> [1 2 3] count) ⏎
 3
+```
+
+`|` is a standalone token — whitespace either side is optional. Same
+freedom as Clojure's `->` reader macro, just expressed as infix:
+
+```punk
+> hello|split.|head. ⏎
+h
+> hello | split. | head. ⏎
+h
+```
+
+### Pipe-fn binding `name:|` — point-free composition
+
+A headless pipeline is a deferred function. Bind it with `:|`
+{adjacent, no space} and it's a reusable function value — Punk's
+equivalent of Clojure's `comp`, expressed in the language's own
+pipeline grammar.
+
+**Punk**
+```punk
+> twice:|inc.|inc. ⏎
+> twice!5 ⏎
+7
+> flow:|inc.|*'2.|+'1. ⏎
+> flow!3 ⏎
+9
+```
+**Clojure**
+```clojure
+user=> (def twice (comp inc inc)) ⏎
+user=> (twice 5) ⏎
+7
+user=> (def flow (comp #(+ % 1) #(* % 2) inc)) ⏎
+user=> (flow 3) ⏎
+9
+```
+
+Pipe-fns are first-class — map them, branch on them, pipe them again:
+
+**Punk**
+```punk
+> map!(twice. (1 2 3)) ⏎
+(3 4 5)
+> 5?twice. ⏎
+7
+```
+**Clojure**
+```clojure
+user=> (map twice [1 2 3]) ⏎
+(3 4 5)
 ```
 
 ## 10. Functions
@@ -869,14 +944,14 @@ Both use **last-expression-is-value** body semantics.
 
 **Punk**
 ```punk
-> double:{n:_}(*!(n. 2))
+> double:{n:_}(*!(n. 2)) ⏎
 > double!5 ⏎
 10
 ```
 **Clojure**
 ```clojure
-user=> (defn double [n] (* n 2))
-user=> (double 5)
+user=> (defn double [n] (* n 2)) ⏎
+user=> (double 5) ⏎
 10
 ```
 
@@ -887,7 +962,7 @@ Multi-statement body {in Clojure, use `let` for local bindings}:
 > compute:{x:_}(
     y:+!(x. 1)
     *!(y. 10)
-  )
+  ) ⏎
 > compute!4 ⏎
 50
 ```
@@ -895,8 +970,8 @@ Multi-statement body {in Clojure, use `let` for local bindings}:
 ```clojure
 user=> (defn compute [x]
          (let [y (+ x 1)]
-           (* y 10)))
-user=> (compute 4)
+           (* y 10))) ⏎
+user=> (compute 4) ⏎
 50
 ```
 
@@ -904,14 +979,14 @@ Two arguments:
 
 **Punk**
 ```punk
-> add:{a:_ b:_}(+!(a. b.))
+> add:{a:_ b:_}(+!(a. b.)) ⏎
 > +!(5 3) ⏎
 8
 ```
 **Clojure**
 ```clojure
-user=> (defn add [a b] (+ a b))
-user=> (add 5 3)
+user=> (defn add [a b] (+ a b)) ⏎
+user=> (add 5 3) ⏎
 8
 ```
 
@@ -920,28 +995,28 @@ Variadic parameter — Punk's `{___}` {three underscores} maps to Clojure's
 
 **Punk**
 ```punk
-> all:{___}(_.)
+> all:{___}(_.) ⏎
 > all!(a b c) ⏎
 (a b c)
 ```
 **Clojure**
 ```clojure
-user=> (defn all [& xs] xs)
-user=> (all 'a 'b 'c)
+user=> (defn all [& xs] xs) ⏎
+user=> (all 'a 'b 'c) ⏎
 (a b c)
 ```
 
 **Punk**
 ```punk
-> pairAll:{a:_ b:_}(_.)
+> pairAll:{a:_ b:_}(_.) ⏎
 > pairAll!(1 2) ⏎
 (1 2)
 ```
 **Clojure**
 ```clojure
 ;; No exact equivalent — Clojure params don't double as "the whole input"
-user=> (defn pair-all [a b] [a b])
-user=> (pair-all 1 2)
+user=> (defn pair-all [a b] [a b]) ⏎
+user=> (pair-all 1 2) ⏎
 [1 2]
 ```
 
@@ -950,36 +1025,36 @@ implicit `_` binding stands in for the raw argument:
 
 **Punk**
 ```punk
-> processOne:{_}(_.)
+> processOne:{_}(_.) ⏎
 > processOne!hello ⏎
 hello
-> processTwo:{_ _}(+!(_.0. _.1.))
+> processTwo:{_ _}(+!(_.0. _.1.)) ⏎
 > processTwo!(3 4) ⏎
 7
-> processN:{___}(len!_.)
+> processN:{___}(len!_.) ⏎
 > processN!(a b c) ⏎
 3
 ```
 **Clojure**
 ```clojure
 ;; Clojure requires a binding name; nearest equivalents:
-user=> (defn process-one [x] x)
-user=> (defn process-two [[a b]] (+ a b))
-user=> (defn process-n [& xs] (count xs))
+user=> (defn process-one [x] x) ⏎
+user=> (defn process-two [[a b]] (+ a b)) ⏎
+user=> (defn process-n [& xs] (count xs)) ⏎
 ```
 
 Functions are first-class values:
 
 **Punk**
 ```punk
-> double:{n:_}(*!(n. 2))
-> map!((1 2 3) double.) ⏎
+> double:{n:_}(*!(n. 2)) ⏎
+> map!(double. (1 2 3)) ⏎
 (2 4 6)
 ```
 **Clojure**
 ```clojure
-user=> (defn double [n] (* n 2))
-user=> (map double [1 2 3])
+user=> (defn double [n] (* n 2)) ⏎
+user=> (map double [1 2 3]) ⏎
 (2 4 6)
 ```
 
@@ -987,12 +1062,12 @@ Anonymous functions:
 
 **Punk**
 ```punk
-> map!((1 2 3) {n:_}(^!(n. 2))) ⏎
+> map!({n:_}(^!(n. 2)) (1 2 3)) ⏎
 (1 4 9)
 ```
 **Clojure**
 ```clojure
-user=> (map #(* % %) [1 2 3])
+user=> (map #(* % %) [1 2 3]) ⏎
 (1 4 9)
 ```
 
@@ -1011,8 +1086,8 @@ same job.
 ```
 **Clojure**
 ```clojure
-user=> (def add-ten (partial + 10))
-user=> (add-ten 5)
+user=> (def add-ten (partial + 10)) ⏎
+user=> (add-ten 5) ⏎
 15
 ```
 
@@ -1027,9 +1102,9 @@ Pre-bind multiple positions with the args-list form `'(a b)`:
 ```
 **Clojure**
 ```clojure
-user=> (defn add3 [a b c] (+ a b c))
-user=> (def add12 (partial add3 1 2))
-user=> (add12 10)
+user=> (defn add3 [a b c] (+ a b c)) ⏎
+user=> (def add12 (partial add3 1 2)) ⏎
+user=> (add12 10) ⏎
 13
 ```
 
@@ -1044,9 +1119,9 @@ Partials can be further partialled by name:
 ```
 **Clojure**
 ```clojure
-user=> (def add-one (partial add3 1))
-user=> (def two-plus (partial add-one 2))
-user=> (two-plus 7)
+user=> (def add-one (partial add3 1)) ⏎
+user=> (def two-plus (partial add-one 2)) ⏎
+user=> (two-plus 7) ⏎
 10
 ```
 
@@ -1055,6 +1130,28 @@ partial application a primary operator — symmetric with the call
 operator `!`. `!` always invokes; under-arity on a fixed-arity function
 is an error rather than an implicit partial. Use `'` explicitly when
 you want to defer the call.
+
+The function-first arg order on `map`/`filter`/`reduce`/`flatMap` is
+deliberate — it lets you build reusable transformers via partial:
+
+**Punk**
+```punk
+> incAll:map'{n:_}(+!(n. 1)) ⏎
+> incAll!(1 2 3) ⏎
+(2 3 4)
+> sum:reduce'(+. 0) ⏎
+> sum!(1 2 3 4 5) ⏎
+15
+```
+**Clojure**
+```clojure
+user=> (def inc-all (partial map inc)) ⏎
+user=> (inc-all [1 2 3]) ⏎
+(2 3 4)
+user=> (def sum (partial reduce + 0)) ⏎
+user=> (sum [1 2 3 4 5]) ⏎
+15
+```
 
 ## 11. Pattern dispatch
 
@@ -1081,7 +1178,7 @@ an inline literal:
 
 **Punk**
 ```punk
-> isFive:{5}(yes)
+> isFive:{5}(yes) ⏎
 > 5?isFive. ⏎
 yes
 > 3?isFive. ⏎
@@ -1091,9 +1188,9 @@ yes
 ```
 **Clojure**
 ```clojure
-user=> (when (five? 5) 'yes)
+user=> (when (five? 5) 'yes) ⏎
 yes
-user=> (when (five? 3) 'yes)
+user=> (when (five? 3) 'yes) ⏎
 nil
 ```
 
@@ -1106,13 +1203,13 @@ Pass a list of function values; the first match wins.
 
 **Punk**
 ```punk
-> classify:{x:_}(
-    x.?(
+> classify:{_}(
+    _.?(
       {1}(one)
       {2}(two)
       {_}(other)
     )
-  )
+  ) ⏎
 > classify!1 ⏎
 one
 > classify!9 ⏎
@@ -1124,10 +1221,10 @@ user=> (defn classify [x]
          (cond
            (= x 1) 'one
            (= x 2) 'two
-           :else   'other))
-user=> (classify 1)
+           :else   'other)) ⏎
+user=> (classify 1) ⏎
 one
-user=> (classify 9)
+user=> (classify 9) ⏎
 other
 ```
 
@@ -1135,11 +1232,24 @@ If/else is a literal-match plus a wildcard:
 
 **Punk**
 ```punk
-> v.?({TRUE}(yes) {_}(no))
+> v.?({TRUE}(yes) {_}(no)) ⏎
 ```
 **Clojure**
 ```clojure
 (if v 'yes 'no)
+```
+
+`?` is a standalone token like `|` — whitespace either side is
+optional, so dispatch can be terse or spaced:
+
+**Punk**
+```punk
+> 5?{5}(yes) ⏎
+yes
+> 5 ? {5}(yes) ⏎
+yes
+> 5 ? ( {1}(one) {5}(five) {_}(other) ) ⏎
+five
 ```
 
 Branches see their pattern bindings, so dispatch on shape is one form:
@@ -1148,7 +1258,7 @@ Branches see their pattern bindings, so dispatch on shape is one form:
 ```punk
 describe:{___}(
   _.?(
-    {(name:_)}(prepend!(name. (one)))
+    {(name:_)}(prep!(name. (one)))
     {(first:_ last:_)}(two)
     {_}(other)
   )
@@ -1205,7 +1315,7 @@ level — most Punk escapes become "just put the character in a string."
 ```
 **Clojure**
 ```clojure
-user=> "."
+user=> "." ⏎
 "."
 ```
 
@@ -1216,7 +1326,7 @@ user=> "."
 ```
 **Clojure**
 ```clojure
-user=> "/"
+user=> "/" ⏎
 "/"
 ```
 
@@ -1227,7 +1337,7 @@ user=> "/"
 ```
 **Clojure**
 ```clojure
-user=> "\\"
+user=> "\\" ⏎
 "\\"
 ```
 
@@ -1238,7 +1348,7 @@ user=> "\\"
 ```
 **Clojure**
 ```clojure
-user=> ["Hello" "." "world."]
+user=> ["Hello" "." "world."] ⏎
 ["Hello" "." "world."]
 ```
 
@@ -1255,7 +1365,7 @@ strings have no such restriction.
 ```
 **Clojure**
 ```clojure
-user=> "Hello World"
+user=> "Hello World" ⏎
 "Hello World"
 ```
 
@@ -1266,7 +1376,7 @@ user=> "Hello World"
 ```
 **Clojure**
 ```clojure
-user=> (count "Hello World")
+user=> (count "Hello World") ⏎
 11
 ```
 
@@ -1277,7 +1387,7 @@ user=> (count "Hello World")
 ```
 **Clojure**
 ```clojure
-user=> (count ["Hello World"])
+user=> (count ["Hello World"]) ⏎
 1
 ```
 
@@ -1288,7 +1398,7 @@ John-Doe
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/join "-" ["John" "Doe"])
+user=> (clojure.string/join "-" ["John" "Doe"]) ⏎
 "John-Doe"
 ```
 
@@ -1303,7 +1413,7 @@ a+b
 ```
 **Clojure**
 ```clojure
-user=> "a+b"
+user=> "a+b" ⏎
 "a+b"
 ```
 
@@ -1313,46 +1423,46 @@ Punk cells map directly to Clojure atoms.
 
 **Punk**
 ```punk
-> counter:[0]
+> counter:[0] ⏎
 > counter-> ⏎
 0
 ```
 **Clojure**
 ```clojure
-user=> (def counter (atom 0))
-user=> @counter
+user=> (def counter (atom 0)) ⏎
+user=> @counter ⏎
 0
 ```
 
 **Punk**
 ```punk
-> counter:[0]
-> counter<-5
+> counter:[0] ⏎
+> counter<-5 ⏎
 > counter-> ⏎
 5
 ```
 **Clojure**
 ```clojure
-user=> (def counter (atom 0))
-user=> (reset! counter 5)
-user=> @counter
+user=> (def counter (atom 0)) ⏎
+user=> (reset! counter 5) ⏎
+user=> @counter ⏎
 5
 ```
 
 **Punk**
 ```punk
-> counter:[0]
-> counter<-5
-> counter<-+!(counter-> 1)
+> counter:[0] ⏎
+> counter<-5 ⏎
+> counter<-+!(counter-> 1) ⏎
 > counter-> ⏎
 6
 ```
 **Clojure**
 ```clojure
-user=> (def counter (atom 0))
-user=> (reset! counter 5)
-user=> (swap! counter inc)
-user=> @counter
+user=> (def counter (atom 0)) ⏎
+user=> (reset! counter 5) ⏎
+user=> (swap! counter inc) ⏎
+user=> @counter ⏎
 6
 ```
 
@@ -1370,21 +1480,21 @@ held as data, with `eval` evaluating it.
 
 **Clojure**
 ```clojure
-user=> (def held '(println "hi"))
+user=> (def held '(println "hi")) ⏎
 #'user/held
 ```
 *{nothing runs}*
 
 **Punk**
 ```punk
-> held:(log!(hi))
+> held:(log!(hi)) ⏎
 > held! ⏎
 hi
 ```
 **Clojure**
 ```clojure
-user=> (def held '(println "hi"))
-user=> (eval held)
+user=> (def held '(println "hi")) ⏎
+user=> (eval held) ⏎
 hi
 ```
 
@@ -1395,7 +1505,7 @@ hi
 ```
 **Clojure**
 ```clojure
-user=> (eval '(println "hi"))
+user=> (eval '(println "hi")) ⏎
 hi
 ```
 
@@ -1405,7 +1515,7 @@ real `defmacro` form for this, but the everyday analogue is `when`.
 
 **Punk**
 ```punk
-> when:{test:_ body:_}(test.?{TRUE}(body!))
+> when:{test:_ body:_}(test.?{TRUE}(body!)) ⏎
 > when!(TRUE (log!(hi))) ⏎
 hi
 > when!(FALSE (log!(nope))) ⏎
@@ -1413,16 +1523,16 @@ hi
 **Clojure**
 ```clojure
 ;; `when` already exists in core
-user=> (when true (println "hi"))
+user=> (when true (println "hi")) ⏎
 hi
-user=> (when false (println "nope"))
+user=> (when false (println "nope")) ⏎
 nil
 ```
 ```clojure
 ;; If you wanted to define it yourself — this is what a Clojure macro looks like
 user=> (defmacro my-when [test & body]
-         `(if ~test (do ~@body)))
-user=> (my-when true (println "hi"))
+         `(if ~test (do ~@body))) ⏎
+user=> (my-when true (println "hi")) ⏎
 hi
 ```
 
@@ -1450,7 +1560,7 @@ fact:{n:_}(
   (if (zero? n)
     1
     (* n (fact (dec n)))))
-user=> (fact 10)
+user=> (fact 10) ⏎
 3628800
 ```
 
@@ -1473,7 +1583,7 @@ done
   (if (zero? n)
     'done
     (recur (dec n))))                ;; explicit `recur`
-user=> (countdown 100000)
+user=> (countdown 100000) ⏎
 done
 ```
 
@@ -1500,7 +1610,7 @@ done
 | Code as data      | `(forms)` {data} / `(forms)!` {run}     | `'(forms)` / `(eval '(forms))`       |
 | Tail call         | implicit {in tail position}             | explicit `(recur …)`                 |
 | Pipeline          | `a \| f. \| g.`                         | `(-> a f g)`                         |
-| Spine             | `xs.0.` `xs.1~.` `prepend!` | `first` `rest` `cons`              |
+| Spine             | `xs.0.` `xs.1~.` `prep!` | `first` `rest` `cons`              |
 
 ## Where the languages part ways
 

@@ -41,3 +41,18 @@ assert!(xs.9~. ())
 assert!(().0~. ())
 #slice result chains like any list#
 assert!(xs.1~3.0. 20)
+
+#Polymorphic drill-down: text and numbers index like lists of chars/digits#
+word:Steve
+assert!(word.0. S)
+assert!(word.3. v)
+assert!(word.~. e)
+assert!(word.0~2. Ste)
+assert!(word.~2. Ste)
+n:12345
+assert!(len!n. 5)
+assert!(n.1~3. 234)
+#chain: list -> text -> char#
+names:(Tim Bob)
+assert!(names.0.0. T)
+assert!(names.~.~. b)

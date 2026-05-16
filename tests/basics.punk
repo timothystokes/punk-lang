@@ -15,3 +15,10 @@ assert!(NULL NULL)
 #Lists hold Things in order#
 xs:(a b c)
 assert!(xs. (a b c))
+
+#Names are immutable: each function call gets its own scope, so a name
+ used inside a function body is a fresh binding per call — not a rebind
+ of any outer name. Shadowing across scopes is fine.#
+double:{n:_}(d:*!(n. 2) d.)
+assert!(double!5 10)
+assert!(double!7 14)
