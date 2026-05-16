@@ -1,0 +1,41 @@
+#`len!` is shape-aware: list → count, text → chars, number → digit count,
+ range → span or INFINITE, function → AST size, atomic → 1, NULL → 0.
+ The arg list `(...)` after `!` IS the operand, so `len!(a b c)` is 3.#
+
+#Lists count their items.#
+assert!(len!(a b c) 3)
+assert!(len!() 0)
+
+#A single Thing reports its character length directly.#
+assert!(len!hello 5)
+assert!(len!a 1)
+
+#Numbers count their digits {including a decimal comma, ignoring sign}.#
+assert!(len!42 2)
+assert!(len!100 3)
+assert!(len!-7 1)
+assert!(len!3,14 4)
+
+#Ranges measure their span; unbounded ranges report INFINITE.#
+assert!(len!1~5 5)
+assert!(len!1~10 10)
+assert!(len!1~ INFINITE)
+assert!(len!~5 INFINITE)
+
+#TRUE/FALSE are atomic = 1; NULL is empty = 0.#
+assert!(len!TRUE 1)
+assert!(len!FALSE 1)
+assert!(len!NULL 0)
+
+#A user function reports the size of its definition {AST node count > 1}.#
+double:{n:_}(*!(n. 2))
+assert!(>!(len!double. 1) TRUE)
+
+#A builtin function is atomic = 1.#
+assert!(len!+. 1)
+
+#Wrapping wraps: an outer paren adds one layer of args, so a single-item
+ outer paren containing a list value has length 1.#
+assert!(len!((a b c)) 1)
+assert!(len!(()) 1)
+

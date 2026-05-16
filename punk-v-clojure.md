@@ -92,7 +92,7 @@ at the top level {and a bare symbol auto-dereferences its var}.
 
 **Punk**
 ```punk
-> name:Alice
+> name:Alice ⏎
 > name. ⏎
 Alice
 ```
@@ -103,7 +103,6 @@ means, only what `.` retrieves.}*
 **Clojure**
 ```clojure
 user=> (def name 'Alice)
-#'user/name
 user=> name
 Alice
 ```
@@ -138,12 +137,12 @@ hello world
 
 ## 4. Arithmetic
 
-Punk's arithmetic primitives are bare names {`add!`, `sub!`, …};
+Punk's arithmetic primitives are bare names {`+!`, `-!`, …};
 Clojure uses operator symbols {`+`, `-`, …}.
 
 **Punk**
 ```punk
-> add!(5 3) ⏎
+> +!(5 3) ⏎
 8
 ```
 **Clojure**
@@ -154,7 +153,7 @@ user=> (+ 5 3)
 
 **Punk**
 ```punk
-> sub!(10 4) ⏎
+> -!(10 4) ⏎
 6
 ```
 **Clojure**
@@ -165,7 +164,7 @@ user=> (- 10 4)
 
 **Punk**
 ```punk
-> mul!(6 7) ⏎
+> *!(6 7) ⏎
 42
 ```
 **Clojure**
@@ -176,7 +175,7 @@ user=> (* 6 7)
 
 **Punk**
 ```punk
-> div!(20 4) ⏎
+> /!(20 4) ⏎
 5
 ```
 **Clojure**
@@ -187,7 +186,7 @@ user=> (/ 20 4)
 
 **Punk**
 ```punk
-> pow!(2 8) ⏎
+> ^!(2 8) ⏎
 256
 ```
 **Clojure**
@@ -198,7 +197,7 @@ user=> (Math/pow 2 8)
 
 **Punk**
 ```punk
-> mod!(10 3) ⏎
+> %!(10 3) ⏎
 1
 ```
 **Clojure**
@@ -276,8 +275,8 @@ John+Doe
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/join " " ["John" "Doe"])
-"John Doe"
+user=> (clojure.string/join "+" ["John" "Doe"])
+"John+Doe"
 ```
 
 **Punk**
@@ -309,9 +308,11 @@ user=> (seq "hello")
 (\h \e \l \l \o)
 ```
 
-**Punk**
+**Punk** {`len!` is shape-aware: text → char count, list → item count, range → span}
 ```punk
-> len!(split!hello) ⏎
+> len!hello ⏎
+5
+> len!split!hello ⏎
 5
 ```
 **Clojure**
@@ -320,25 +321,23 @@ user=> (count "hello")
 5
 ```
 
-**Punk**
+**Punk** {list builtins are polymorphic on text/numbers}
 ```punk
-> join!(slice!(split!hello 0 2)) ⏎
+> slice!(hello 0~1) ⏎
 he
 ```
 **Clojure**
 ```clojure
-user=> (apply str (take 2 "hello"))
+user=> (subs "hello" 0 2)
 "he"
 ```
 
-`startsWith` built from the spine:
+`startsWith` built from the same polymorphic ops:
 
 **Punk**
 ```punk
 > startsWith:{s:_ p:_}(
-    chars: split!s.
-    prefix: split!p.
-    eq!(slice!(chars. 0 len!(prefix.)) prefix.)
+    =!(slice!(s. 0 len!p.) p.)
   )
 > startsWith!(hello he) ⏎
 TRUE
@@ -359,7 +358,7 @@ everything else is truthy.
 
 **Punk**
 ```punk
-> gt!(10 5) ⏎
+> >!(10 5) ⏎
 TRUE
 ```
 **Clojure**
@@ -370,7 +369,7 @@ true
 
 **Punk**
 ```punk
-> lt!(3 8) ⏎
+> <!(3 8) ⏎
 TRUE
 ```
 **Clojure**
@@ -381,7 +380,7 @@ true
 
 **Punk**
 ```punk
-> eq!(5 5) ⏎
+> =!(5 5) ⏎
 TRUE
 ```
 **Clojure**
@@ -392,7 +391,7 @@ true
 
 **Punk**
 ```punk
-> gt!(xyz abc) ⏎
+> >!(xyz abc) ⏎
 TRUE
 ```
 **Clojure**
@@ -403,7 +402,7 @@ true
 
 **Punk**
 ```punk
-> eq!((1 2 3) (1 2 3)) ⏎
+> =!((1 2 3) (1 2 3)) ⏎
 TRUE
 ```
 **Clojure**
@@ -635,7 +634,7 @@ Tim
 
 **Punk**
 ```punk
-> len!((1 2 3 4)) ⏎
+> len!(1 2 3 4) ⏎
 4
 ```
 **Clojure**
@@ -657,28 +656,19 @@ user=> (concat [1 2] [3 4])
 
 **Punk**
 ```punk
-> range!(1 6 1) ⏎
-(1 2 3 4 5)
+> 0~10 ⏎
+(0 1 2 3 4 5 6 7 8 9 10)
 ```
-**Clojure**
+**Clojure** {Punk drops `range` since steps other than 1 aren't supported}
 ```clojure
-user=> (range 1 6 1)
-(1 2 3 4 5)
+user=> (range 0 11)
+(0 1 2 3 4 5 6 7 8 9 10)
 ```
 
 **Punk**
 ```punk
-> range!(0 10 2) ⏎
-(0 2 4 6 8)
-```
-**Clojure**
-```clojure
-user=> (range 0 10 2)
-(0 2 4 6 8)
-```
-
-**Punk**
-```punk
+> slice!((0 1 2 3 4 5) 0~2) ⏎
+(0 1 2)
 > slice!((0 1 2 3 4 5) 0 3) ⏎
 (0 1 2)
 ```
@@ -688,9 +678,9 @@ user=> (subvec [0 1 2 3 4 5] 0 3)
 [0 1 2]
 ```
 
-**Punk**
+**Punk** {`slice!` accepts a Range value for static bounds or `(start endExclusive)` for computed bounds}
 ```punk
-> slice!((0 1 2 3 4 5) 2 4) ⏎
+> slice!((0 1 2 3 4 5) 2~3) ⏎
 (2 3)
 ```
 **Clojure**
@@ -729,7 +719,7 @@ true
 ```punk
 > map!(
     (1 2 3)
-    {n:_}(mul!(n. 2))
+    {n:_}(*!(n. 2))
   ) ⏎
 (2 4 6)
 ```
@@ -743,7 +733,7 @@ user=> (map (fn [n] (* n 2)) [1 2 3])
 ```punk
 > filter!(
     (1 2 3 4)
-    {n:_}(eq!(mod!(n. 2) 0))
+    {n:_}(=!(%!(n. 2) 0))
   ) ⏎
 (2 4)
 ```
@@ -757,7 +747,7 @@ user=> (filter even? [1 2 3 4])
 ```punk
 > reduce!(
     (1 2 3 4)
-    {acc:_ item:_}(add!(acc. item.))
+    {acc:_ item:_}(+!(acc. item.))
     0
   ) ⏎
 10
@@ -768,22 +758,23 @@ user=> (reduce + 0 [1 2 3 4])
 10
 ```
 
-### The Lisp spine: `head` / `tail` / `prepend`
+### The Lisp spine: `.0.` / `.1~.` / `prepend`
 
-This is where Punk and Clojure line up most directly — Punk's names are
-just different spellings of `first` / `rest` / `cons`.
+Punk replaces Clojure's `first`/`rest` with slice sugar on the postfix-dot
+chain: `xs.0.` is `first`, `xs.1~.` is `rest`, and the slice generalises to
+`xs.N~M.` (inclusive). `prepend!` plays the part of `cons`.
 
 **Punk**
 ```punk
-> head!((a b c)) ⏎
+> (a b c).0. ⏎
 a
-> tail!((a b c)) ⏎
+> (a b c).1~. ⏎
 (b c)
 > prepend!(z (a b c)) ⏎
 (z a b c)
-> head!(()) ⏎
+> ().0. ⏎
 NULL
-> tail!(()) ⏎
+> ().1~. ⏎
 ()
 ```
 **Clojure**
@@ -805,9 +796,9 @@ Recursive `sum`:
 **Punk**
 ```punk
 sum:{lst:_}(
-  len!(lst.) ?? (
-    (0 0)
-    (_ add!(head!(lst.) sum!(tail!(lst.))))
+  len!lst.?(
+    {0}(0)
+    {_}(+!(lst.0. sum!(lst.1~.)))
   )
 )
 > sum!((1 2 3 4 5)) ⏎
@@ -822,6 +813,34 @@ sum:{lst:_}(
 user=> (sum [1 2 3 4 5])
 15
 ```
+
+### Range literals
+
+Punk's `N~M` is the inclusive cousin of Clojure's `(range a b)`. It also
+shares the `~` glyph with the slice form, so the same operator builds a
+list of integers and indexes into it.
+
+**Punk**
+```punk
+> 1~5 ⏎
+(1 2 3 4 5)
+> sum!(1~100) ⏎
+5050
+> (1~10).2~4. ⏎
+(3 4 5)
+```
+**Clojure**
+```clojure
+user=> (range 1 6)
+(1 2 3 4 5)
+user=> (reduce + (range 1 101))
+5050
+user=> (subvec (vec (range 1 11)) 2 5)
+[3 4 5]
+```
+
+Open forms (`1~`, `~5`, `~`) are lazy and only legal where context
+provides a bound; Clojure's `(range)` is similarly an unbounded lazy seq.
 
 ### Pipeline `|`
 
@@ -850,7 +869,7 @@ Both use **last-expression-is-value** body semantics.
 
 **Punk**
 ```punk
-> double:{n:_}(mul!(n. 2))
+> double:{n:_}(*!(n. 2))
 > double!5 ⏎
 10
 ```
@@ -866,8 +885,8 @@ Multi-statement body {in Clojure, use `let` for local bindings}:
 **Punk**
 ```punk
 > compute:{x:_}(
-    y:add!(x. 1)
-    mul!(y. 10)
+    y:+!(x. 1)
+    *!(y. 10)
   )
 > compute!4 ⏎
 50
@@ -885,8 +904,8 @@ Two arguments:
 
 **Punk**
 ```punk
-> add:{a:_ b:_}(add!(a. b.))
-> add!(5 3) ⏎
+> add:{a:_ b:_}(+!(a. b.))
+> +!(5 3) ⏎
 8
 ```
 **Clojure**
@@ -896,11 +915,12 @@ user=> (add 5 3)
 8
 ```
 
-Variadic parameter — Punk's `{*}` / `*.` maps to Clojure's `& args`:
+Variadic parameter — Punk's `{___}` {three underscores} maps to Clojure's
+`& args`. Inside any Punk function body, `_.` is the raw argument as passed:
 
 **Punk**
 ```punk
-> all:{*}(*.)
+> all:{___}(_.)
 > all!(a b c) ⏎
 (a b c)
 ```
@@ -913,7 +933,7 @@ user=> (all 'a 'b 'c)
 
 **Punk**
 ```punk
-> pairAll:{a:_ b:_}(*.)
+> pairAll:{a:_ b:_}(_.)
 > pairAll!(1 2) ⏎
 (1 2)
 ```
@@ -925,11 +945,34 @@ user=> (pair-all 1 2)
 [1 2]
 ```
 
+Anonymous slots — Punk patterns may omit names entirely, and the
+implicit `_` binding stands in for the raw argument:
+
+**Punk**
+```punk
+> processOne:{_}(_.)
+> processOne!hello ⏎
+hello
+> processTwo:{_ _}(+!(_.0. _.1.))
+> processTwo!(3 4) ⏎
+7
+> processN:{___}(len!_.)
+> processN!(a b c) ⏎
+3
+```
+**Clojure**
+```clojure
+;; Clojure requires a binding name; nearest equivalents:
+user=> (defn process-one [x] x)
+user=> (defn process-two [[a b]] (+ a b))
+user=> (defn process-n [& xs] (count xs))
+```
+
 Functions are first-class values:
 
 **Punk**
 ```punk
-> double:{n:_}(mul!(n. 2))
+> double:{n:_}(*!(n. 2))
 > map!((1 2 3) double.) ⏎
 (2 4 6)
 ```
@@ -944,7 +987,7 @@ Anonymous functions:
 
 **Punk**
 ```punk
-> map!((1 2 3) {n:_}(pow!(n. 2))) ⏎
+> map!((1 2 3) {n:_}(^!(n. 2))) ⏎
 (1 4 9)
 ```
 **Clojure**
@@ -953,131 +996,127 @@ user=> (map #(* % %) [1 2 3])
 (1 4 9)
 ```
 
-## 11. Pattern matching
+## 10b. Partial application `'`
 
-Clojure has no built-in destructure-and-dispatch pattern matcher in
-`core` — the standard tool is `core.match`. For most of Punk's `?`/`??`
-uses, idiomatic Clojure is `cond` / `case` / `if`.
+Punk's `'` mirrors `!` (same arg forms, same evaluation) but pre-binds
+the args and returns a Partial instead of invoking. Later `!` extends
+the captured args and runs the function. Clojure uses `partial` for the
+same job.
+
+**Punk**
+```punk
+> addTen:+'10 ⏎
+> addTen!5 ⏎
+15
+```
+**Clojure**
+```clojure
+user=> (def add-ten (partial + 10))
+user=> (add-ten 5)
+15
+```
+
+Pre-bind multiple positions with the args-list form `'(a b)`:
+
+**Punk**
+```punk
+> add3:{a:_ b:_ c:_}(+!(a. +!(b. c.))) ⏎
+> add12:add3'(1 2) ⏎
+> add12!10 ⏎
+13
+```
+**Clojure**
+```clojure
+user=> (defn add3 [a b c] (+ a b c))
+user=> (def add12 (partial add3 1 2))
+user=> (add12 10)
+13
+```
+
+Partials can be further partialled by name:
+
+**Punk**
+```punk
+> addOne:add3'1 ⏎
+> twoPlus:addOne'2 ⏎
+> twoPlus!7 ⏎
+10
+```
+**Clojure**
+```clojure
+user=> (def add-one (partial add3 1))
+user=> (def two-plus (partial add-one 2))
+user=> (two-plus 7)
+10
+```
+
+Where Clojure makes `partial` a higher-order function, Punk makes
+partial application a primary operator — symmetric with the call
+operator `!`. `!` always invokes; under-arity on a fixed-arity function
+is an error rather than an implicit partial. Use `'` explicitly when
+you want to defer the call.
+
+## 11. Pattern dispatch
+
+Clojure has no built-in destructure-and-dispatch matcher in `core` — the
+standard tool is `core.match`, or `cond` / `case` / `if`. Punk has one
+unified `?` operator that takes function values as branches; the first
+whose pattern matches the LHS value runs, else `NULL`.
 
 ```punk
-isTim:{Tim}             # matches exactly the Thing `Tim`
-isFive:{5}              # matches the number 5
-isPair:{_ _}            # matches any 2-element list
-startsWithThree:{3 *}   # matches any list starting with 3
+# Pattern-bearing function values are just functions
+isFive:{5}(yes)             # only matches the number 5
+firstChar:{(c:_ __)}(c.)    # destructure a list
 ```
 ```clojure
-;; Clojure analogues (predicates rather than reified patterns)
-(defn tim? [x] (= x 'Tim))
+;; Clojure equivalents (predicate + accessor, no reified pattern)
 (defn five? [x] (= x 5))
-(defn pair? [x] (and (sequential? x) (= 2 (count x))))
-(defn starts-with-three? [x]
-  (and (sequential? x) (= 3 (first x))))
+(defn first-char [[c & _]] c)
 ```
 
-### 11a. Conditionals — `?`
+### 11a. Single-branch dispatch
 
-Predicate form:
+Match → run body; miss → `NULL`. The branch can be a function ref or
+an inline literal:
 
 **Punk**
 ```punk
-> isFive:{5}
-> isFive?5 ⏎
-TRUE
-```
-**Clojure**
-```clojure
-user=> (defn five? [x] (= x 5))
-user=> (five? 5)
-true
-```
-
-**Punk**
-```punk
-> isFive?3 ⏎
-FALSE
-```
-**Clojure**
-```clojure
-user=> (five? 3)
-false
-```
-
-Match-or-null:
-
-**Punk**
-```punk
-> isFive?(5 yes) ⏎
+> isFive:{5}(yes)
+> 5?isFive. ⏎
+yes
+> 3?isFive. ⏎
+NULL
+> 5?{5}(yes) ⏎
 yes
 ```
 **Clojure**
 ```clojure
 user=> (when (five? 5) 'yes)
 yes
-```
-
-**Punk**
-```punk
-> isFive?(3 yes) ⏎
-NULL
-```
-**Clojure**
-```clojure
 user=> (when (five? 3) 'yes)
 nil
 ```
 
-Lazy evaluation of the `then` branch — Punk and Clojure's `when` / `if`
-agree here.
+The body is **lazy** — only the matched branch runs, so side effects in
+unmatched branches don't fire.
+
+### 11b. Multi-branch dispatch
+
+Pass a list of function values; the first match wins.
 
 **Punk**
 ```punk
-> isFive?(5 (log!matched mul!(5 2))!) ⏎
-matched
-10
-```
-**Clojure**
-```clojure
-user=> (when (five? 5)
-         (println 'matched)
-         (* 5 2))
-matched
-10
-```
-
-Bind first, test second:
-
-**Punk**
-```punk
-> isPair:{_ _}
-> pair:(1 2)
-> isPair?pair. ⏎
-TRUE
-```
-**Clojure**
-```clojure
-user=> (defn pair? [x] (and (sequential? x) (= 2 (count x))))
-user=> (def pair [1 2])
-user=> (pair? pair)
-true
-```
-
-### 11b. Multiple patterns — `??`
-
-Punk's `??` is closest to Clojure's `cond`, or `core.match`'s `match`
-when destructuring is involved.
-
-**Punk**
-```punk
-> wild:{_}
 > classify:{x:_}(
-    x.??(
-      (1 one)
-      (2 two)
-      (wild. other)
+    x.?(
+      {1}(one)
+      {2}(two)
+      {_}(other)
     )
   )
 > classify!1 ⏎
 one
+> classify!9 ⏎
+other
 ```
 **Clojure**
 ```clojure
@@ -1088,47 +1127,71 @@ user=> (defn classify [x]
            :else   'other))
 user=> (classify 1)
 one
-```
-
-**Punk**
-```punk
-> classify!9 ⏎
-other
-```
-**Clojure**
-```clojure
 user=> (classify 9)
 other
 ```
 
-A case with no body — Punk returns `NULL`, Clojure idiom is just `nil`:
+If/else is a literal-match plus a wildcard:
 
 **Punk**
 ```punk
-> isOne:{1}
-> 1??((isOne.)(_ other)) ⏎
-NULL
+> v.?({TRUE}(yes) {_}(no))
 ```
 **Clojure**
 ```clojure
-user=> (cond
-         (= 1 1) nil
-         :else   'other)
-nil
+(if v 'yes 'no)
 ```
+
+Branches see their pattern bindings, so dispatch on shape is one form:
 
 **Punk**
 ```punk
-> 9??((isOne.)(_ other)) ⏎
-other
+describe:{___}(
+  _.?(
+    {(name:_)}(prepend!(name. (one)))
+    {(first:_ last:_)}(two)
+    {_}(other)
+  )
+)
 ```
-**Clojure**
+**Clojure** (with `core.match`)
 ```clojure
-user=> (cond
-         (= 9 1) nil
-         :else   'other)
-other
+(require '[clojure.core.match :refer [match]])
+(defn describe [xs]
+  (match [xs]
+    [[name]]        ['just name]
+    [[first last]]  ['both first last]
+    :else            'something-else))
 ```
+
+### Regex slots
+
+Punk lets a pattern slot be a regex literal `"..."`. The slot binds to
+`(whole g1 g2 ...)`; `(?<name>...)` groups are also bound at top level
+inside the body. In `?` dispatch a non-matching regex skips the branch,
+so it acts like a regex case statement.
+
+**Punk**
+```punk
+classify:{x:_}(x.?(
+  {n:"^\d+$"}(number)
+  {w:"^[a-z]+$"}(word)
+  {_}(other)
+))
+```
+
+**Clojure** (closest equivalent is `condp re-matches` or `core.match`'s
+guard support, which is a bit more verbose):
+```clojure
+(defn classify [x]
+  (condp re-matches (str x)
+    #"^\d+$"   'number
+    #"^[a-z]+$" 'word
+    'other))
+```
+
+Punk's regex captures bind by name automatically, so `parseDate` is a
+single signature rather than `let`-destructuring after `re-find`.
 
 ## 12. Escaping special characters
 
@@ -1179,15 +1242,16 @@ user=> ["Hello" "." "world."]
 ["Hello" "." "world."]
 ```
 
-### The `+` space marker
+### Multi-word text
 
-Punk needs `+` to put a space *inside* one Thing because space is a
-delimiter. Clojure strings have no such restriction.
+Punk has no way to embed a space inside a single Thing — space is the
+list delimiter, full stop. Multi-word text is just a list. Clojure
+strings have no such restriction.
 
 **Punk**
 ```punk
-> Hello+World ⏎
-Hello+World
+> (Hello World) ⏎
+(Hello World)
 ```
 **Clojure**
 ```clojure
@@ -1197,8 +1261,8 @@ user=> "Hello World"
 
 **Punk**
 ```punk
-> len!(split!Hello+World) ⏎
-11
+> len!(Hello World) ⏎
+2
 ```
 **Clojure**
 ```clojure
@@ -1208,7 +1272,7 @@ user=> (count "Hello World")
 
 **Punk**
 ```punk
-> len!((Hello+World)) ⏎
+> len!((Hello World)) ⏎
 1
 ```
 **Clojure**
@@ -1219,19 +1283,23 @@ user=> (count ["Hello World"])
 
 **Punk**
 ```punk
-> join!((John Doe) +) ⏎
-John+Doe
+> join!((John Doe) -) ⏎
+John-Doe
 ```
 **Clojure**
 ```clojure
-user=> (clojure.string/join " " ["John" "Doe"])
-"John Doe"
+user=> (clojure.string/join "-" ["John" "Doe"])
+"John-Doe"
 ```
+
+`+`, `-`, `*`, `/`, `^`, `%`, `=`, `<`, and `>` are **not** special inside a
+Thing — they're ordinary characters. They become callable Thing-name
+builtins only when followed by `!` or `.`, e.g. `+!(1 2)` is 3.
 
 **Punk**
 ```punk
-> a\+b ⏎
-a\+b
+> a+b ⏎
+a+b
 ```
 **Clojure**
 ```clojure
@@ -1246,7 +1314,7 @@ Punk cells map directly to Clojure atoms.
 **Punk**
 ```punk
 > counter:[0]
-> counter> ⏎
+> counter-> ⏎
 0
 ```
 **Clojure**
@@ -1259,8 +1327,8 @@ user=> @counter
 **Punk**
 ```punk
 > counter:[0]
-> counter<5
-> counter> ⏎
+> counter<-5
+> counter-> ⏎
 5
 ```
 **Clojure**
@@ -1274,9 +1342,9 @@ user=> @counter
 **Punk**
 ```punk
 > counter:[0]
-> counter<5
-> counter<add!(counter> 1)
-> counter> ⏎
+> counter<-5
+> counter<-+!(counter-> 1)
+> counter-> ⏎
 6
 ```
 **Clojure**
@@ -1337,7 +1405,7 @@ real `defmacro` form for this, but the everyday analogue is `when`.
 
 **Punk**
 ```punk
-> when:{test:_ body:_}(test. ? (TRUE body!))
+> when:{test:_ body:_}(test.?{TRUE}(body!))
 > when!(TRUE (log!(hi))) ⏎
 hi
 > when!(FALSE (log!(nope))) ⏎
@@ -1368,9 +1436,9 @@ Non-tail recursion {uses the stack in both}:
 **Punk**
 ```punk
 fact:{n:_}(
-  n. ?? (
-    (0 1)
-    (_ mul!(n. fact!sub!(n. 1)))
+  n.?(
+    {0}(1)
+    {_}(*!(n. fact!-!(n. 1)))
   )
 )
 > fact!10 ⏎
@@ -1391,9 +1459,9 @@ Tail-call optimised loop:
 **Punk**
 ```punk
 countdown:{n:_}(
-  n. ?? (
-    (0 done)
-    (_ countdown!sub!(n. 1))   # implicit tail call
+  n.?(
+    {0}(done)
+    {_}(countdown!-!(n. 1))    # implicit tail call
   )
 )
 > countdown!100000 ⏎
@@ -1425,15 +1493,14 @@ done
 | Function value    | `f.`                                    | `f`                                  |
 | Anonymous fn      | `{n:_}(…)`                              | `(fn [n] …)` / `#(…)`                |
 | Last-expression body | yes                                  | yes                                  |
-| Variadic param    | `{*}` / `*.`                            | `& xs`                               |
-| Predicate         | `pattern?value`                         | `(pred? value)`                      |
-| Match-or-null     | `pattern?(v then)`                      | `(when (pred? v) then)`              |
-| Multi-pattern     | `v??((p1 r1) (p2 r2) …)`                | `(cond …)` / `core.match`            |
-| Cell / Atom       | `[value]` / `c>` / `c<v`                | `(atom value)` / `@a` / `(reset! a v)` |
+| Variadic param    | `{___}` / `_.`                          | `& xs`                               |
+| Dispatch (1 branch) | `value?fn.` / `value?{p}(body)`        | `(when (pred? v) then)`              |
+| Dispatch (n branches) | `value?(fn1 fn2 fn3)`                 | `(cond …)` / `core.match`            |
+| Cell / Atom       | `[value]` / `c->` / `c<-v`              | `(atom value)` / `@a` / `(reset! a v)` |
 | Code as data      | `(forms)` {data} / `(forms)!` {run}     | `'(forms)` / `(eval '(forms))`       |
 | Tail call         | implicit {in tail position}             | explicit `(recur …)`                 |
 | Pipeline          | `a \| f. \| g.`                         | `(-> a f g)`                         |
-| Spine             | `head!` `tail!` `prepend!` | `first` `rest` `cons`              |
+| Spine             | `xs.0.` `xs.1~.` `prepend!` | `first` `rest` `cons`              |
 
 ## Where the languages part ways
 
@@ -1452,9 +1519,10 @@ done
   trampolines automatically — at the cost of having to keep the rules
   in your head.
 
-* **Pattern matching.** Punk bakes patterns into the language with
-  `?` / `??`. Clojure ships `cond` / `case` / `if` in core and leaves
-  destructuring patterns to `core.match`.
+* **Pattern dispatch.** Punk has one unified `?` operator that takes
+  function values as branches and dispatches on pattern match. Clojure
+  ships `cond` / `case` / `if` in core and leaves destructuring patterns
+  to `core.match`.
 
 * **Macros.** Clojure macros are a separate syntactic phase {`defmacro`,
   `~`, `~@`}. Punk uses the homoiconic nature directly — a function

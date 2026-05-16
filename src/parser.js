@@ -45,10 +45,8 @@ class Parser {
         let expr = this.primary();
         expr = this.postfix(expr);
         
-        if (this.match('DOUBLE_QUESTION')) {
-            expr = this.multiplePatternMatch(expr);
-        } else if (this.match('QUESTION')) {
-            expr = this.conditional(expr);
+        if (this.match('QUESTION')) {
+            expr = this.dispatch(expr);
         }
         
         // Pipeline: `a | stage` desugars to `(stage)!a` where `stage` is
@@ -66,10 +64,9 @@ class Parser {
             if (stage.type === 'Thing') {
                 throw new Error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
             }
-            // Wrap LHS as a single-element list so a list value isn't
-            // spread across multiple positional slots.
-            const argList = { type: 'List', elements: [expr] };
-            expr = { type: 'FunctionCall', callee: stage, arg: argList };
+            // `a | f.` desugars to `f!a` — the LHS value goes in as the arg
+            // (no wrapping), so the pipeline mirrors a direct `!` call exactly.
+            expr = { type: 'FunctionCall', callee: stage, arg: expr };
         }
         
         return expr;
@@ -102,25 +99,59 @@ class Parser {
         }
         if (this.match('LEFT_PAREN')) {
             const pattern = this.pattern();
-            if (this.match('LEFT_BRACKET')) {
+            if (this.check('LEFT_BRACKET')) {
+                if (this.peek().leadingWhitespace) {
+                    throw new Error("Function literal must be tight: no whitespace between pattern '}' and body '(' in '{pattern}(body)'");
+                }
+                this.advance();
                 const body = this.list();
                 return { type: 'FunctionLiteral', pattern, body };
             }
             return pattern;
         }
         if (this.match('NUMBER')) {
-            return { type: 'Number', value: parseFloat(this.previous().literal) };
+            const num = parseFloat(this.previous().literal);
+            // Range literal: tight `N~`, `N~M` (no whitespace between tokens).
+            if (!this.isAtEnd() && !this.peek().leadingWhitespace && this.check('TILDE')) {
+                this.advance();
+                let end = null;
+                if (!this.isAtEnd() && !this.peek().leadingWhitespace && this.check('NUMBER')) {
+                    end = parseFloat(this.advance().literal);
+                }
+                return { type: 'Range', start: num, end };
+            }
+            return { type: 'Number', value: num };
+        }
+        // Open-start range literal `~N` (tight). Bare `~` outside a dereference
+        // step is reserved for the last-element name and is not a valid primary.
+        if (this.check('TILDE') && !this.isAtEnd()) {
+            const tildeTok = this.peek();
+            const next = this.tokens[this.current + 1];
+            if (next && next.type === 'NUMBER' && !next.leadingWhitespace) {
+                this.advance();
+                this.advance();
+                return { type: 'Range', start: null, end: parseFloat(next.literal) };
+            }
         }
         if (this.match('UNDERSCORE')) {
-            return { type: 'Wildcard' };
-        }
-        if (this.match('STAR')) {
+            // Postfix-adjacent `_` (e.g. `_.`, `_!`, `_'`) is an implicit
+            // dereference of the whole-argument binding — every function
+            // body has `_` bound to the raw arg as passed. Otherwise `_`
+            // is the single-Thing wildcard for patterns.
             if (!this.isAtEnd() && !this.peek().leadingWhitespace) {
                 const t = this.peek().type;
-                if (t === 'DOT' || t === 'BANG' || t === 'LESS' || t === 'GREATER' || t === 'QUESTION' || t === 'DOUBLE_QUESTION') {
-                    return { type: 'Dereference', name: '*' };
+                if (t === 'DOT' || t === 'BANG' || t === 'APOSTROPHE' || t === 'LEFT_ARROW' || t === 'RIGHT_ARROW') {
+                    return { type: 'Dereference', name: '_' };
                 }
             }
+            return { type: 'Wildcard' };
+        }
+        if (this.match('REGEX')) {
+            return { type: 'RegexLiteral', source: this.previous().literal };
+        }
+        if (this.match('TRIPLE_UNDERSCORE')) {
+            // `___` is the variadic wildcard for patterns. Pattern-only —
+            // bodies always use `_.` (not `___.`) for the whole-arg deref.
             return { type: 'StarWildcard' };
         }
         if (this.check('DOT')) {
@@ -128,21 +159,33 @@ class Parser {
         }
         if (this.match('THING')) {
             const name = this.previous().literal;
-            if (this.match('COLON')) {
+            if (this.check('COLON')) {
+                if (this.peek().leadingWhitespace) {
+                    throw new Error("Binding ':' must be tight: no whitespace before ':' in 'name:value'");
+                }
+                this.advance();
+                if (this.peek().leadingWhitespace) {
+                    throw new Error("Binding ':' must be tight: no whitespace after ':' in 'name:value'");
+                }
                 const value = this.expression();
-                if (value && value.type === 'Pattern' && this.match('LEFT_BRACKET')) {
+                if (value && value.type === 'Pattern' && this.check('LEFT_BRACKET')) {
+                    if (this.peek().leadingWhitespace) {
+                        throw new Error("Function literal must be tight: no whitespace between pattern '}' and body '(' in '{pattern}(body)'");
+                    }
+                    this.advance();
                     const body = this.list();
                     return { type: 'FunctionDef', name, pattern: value, body };
                 }
                 return { type: 'NamedThing', name, value };
             }
             // Postfix-dot deref: a bare Thing immediately followed (no whitespace)
-            // by `.`, `!`, `<`, `>`, `?`, or `??` is an implicit dereference of
-            // that name. The trailing operator is handled by postfix() or by the
-            // surrounding expression() loop (`?` / `??`).
+            // by `.`, `!`, `<-`, or `->` is an implicit dereference of that name.
+            // `?` is NOT in this list: `?` is value-first dispatch, so a bare
+            // Thing on the LHS of `?` is itself the value (e.g. `hello?{_}(yes)`).
+            // To dispatch on a bound name's value use the explicit `name.?...`.
             if (!this.isAtEnd() && !this.peek().leadingWhitespace) {
                 const t = this.peek().type;
-                if (t === 'DOT' || t === 'BANG' || t === 'LESS' || t === 'GREATER' || t === 'QUESTION' || t === 'DOUBLE_QUESTION') {
+                if (t === 'DOT' || t === 'BANG' || t === 'APOSTROPHE' || t === 'LEFT_ARROW' || t === 'RIGHT_ARROW') {
                     return { type: 'Dereference', name };
                 }
             }
@@ -152,15 +195,15 @@ class Parser {
     }
 
     // After reading a dereference step name (`name`, `0`, `~`), the next token
-    // must be one of `.`, `!`, `<`, `>` (no whitespace). Throws otherwise so
+    // must be one of `.`, `!`, `<-`, `->` (no whitespace). Throws otherwise so
     // that `lst.0` (missing terminator) is rejected with a clear message.
     expectStepCloser(name) {
         if (this.isAtEnd() || this.peek().leadingWhitespace) {
-            throw new Error(`Dereference step '${name}' must be terminated with '.', '!', '<' or '>'`);
+            throw new Error(`Dereference step '${name}' must be terminated with '.', '!', '<-' or '->'`);
         }
         const t = this.peek().type;
-        if (t !== 'DOT' && t !== 'BANG' && t !== 'LESS' && t !== 'GREATER') {
-            throw new Error(`Dereference step '${name}' must be terminated with '.', '!', '<' or '>'`);
+        if (t !== 'DOT' && t !== 'BANG' && t !== 'APOSTROPHE' && t !== 'LEFT_ARROW' && t !== 'RIGHT_ARROW') {
+            throw new Error(`Dereference step '${name}' must be terminated with '.', '!', '<-' or '->'`);
         }
     }
 
@@ -191,8 +234,34 @@ class Parser {
                 // Terminal `.`: end of chain (nothing follows or whitespace next).
                 if (this.isAtEnd() || this.peek().leadingWhitespace) break;
                 const nt = this.peek().type;
-                if (nt !== 'THING' && nt !== 'NUMBER' && nt !== 'TILDE') break;
+                // DOT followed by a non-name token (e.g. `!`, `<`, `>`) just
+                // acts as a chain terminator — let the outer postfix loop
+                // handle that next operator (e.g. `operator.!(x y)`).
+                if (nt !== 'THING' && nt !== 'NUMBER' && nt !== 'TILDE') continue;
                 const tok = this.advance();
+                // Slice sugar: `N~`, `N~M`, `~N` between the `.` and the next
+                // step-closer produces a sublist (inclusive end). Bare `~`
+                // remains the last-element accessor.
+                let isSlice = false;
+                let sliceStart = null;
+                let sliceEnd = null;
+                if (tok.type === 'NUMBER' && this.check('TILDE')) {
+                    this.advance();
+                    isSlice = true;
+                    sliceStart = parseInt(tok.literal, 10);
+                    if (this.check('NUMBER')) {
+                        sliceEnd = parseInt(this.advance().literal, 10);
+                    }
+                } else if (tok.type === 'TILDE' && this.check('NUMBER')) {
+                    isSlice = true;
+                    sliceEnd = parseInt(this.advance().literal, 10);
+                }
+                if (isSlice) {
+                    const label = `${sliceStart ?? ''}~${sliceEnd ?? ''}`;
+                    expr = { type: 'Slice', object: expr, start: sliceStart, end: sliceEnd };
+                    this.expectStepCloser(label);
+                    continue;
+                }
                 const name = tok.type === 'NUMBER' ? String(tok.literal)
                     : (tok.type === 'TILDE' ? '~' : tok.literal);
                 expr = { type: 'Dereference', object: expr, name };
@@ -205,12 +274,18 @@ class Parser {
                 expr = { type: 'FunctionCall', callee: expr, arg };
                 continue;
             }
-            if (t === 'GREATER') {
+            if (t === 'APOSTROPHE') {
+                this.advance();
+                const arg = this.parseCallArg();
+                expr = { type: 'PartialApplication', callee: expr, arg };
+                continue;
+            }
+            if (t === 'RIGHT_ARROW') {
                 this.advance();
                 expr = { type: 'CellRead', target: expr };
                 continue;
             }
-            if (t === 'LESS') {
+            if (t === 'LEFT_ARROW') {
                 this.advance();
                 const value = this.expression();
                 expr = { type: 'CellWrite', target: expr, value };
@@ -241,63 +316,30 @@ class Parser {
         return { type: 'Pattern', elements };
     }
 
-    // Pattern-first conditional. LHS is the pattern; what follows `?` is
-    // either a single value (predicate form → TRUE/FALSE) or a [list] with
-    // 1 or 2 elements:
+    // Value-first dispatch. LHS is the value to match against. RHS is one
+    // or more function-shaped branches; the first whose pattern matches
+    // the value runs (its body is evaluated in the function's closure
+    // with the matched bindings). No match → NULL.
     //
-    //   pattern ? value          → TRUE | FALSE
-    //   pattern ? [value]        → TRUE | FALSE  (equivalent)
-    //   pattern ? [value then]   → then | NULL
+    //   value ? fn.                    {single branch — fn ref or literal}
+    //   value ? {p}(body)              {single branch — function literal}
+    //   value ? (fn1 fn2 fn3)          {ordered list of branches}
     //
-    // For an "else" branch use `??`. The `then` slot is parsed as an AST
-    // node and held unevaluated here; the evaluator runs it lazily only on
-    // a successful match.
-    conditional(patternExpr) {
-        if (this.check('LEFT_BRACKET')) {
-            this.advance();
-            const elements = [];
+    // Branches inside `(...)` are parsed as expressions, not as a data
+    // list, so function literals and dereferences evaluate to actual
+    // function values rather than quoted forms.
+    dispatch(value) {
+        if (this.match('LEFT_BRACKET')) {
+            const branches = [];
             while (!this.check('RIGHT_BRACKET') && !this.isAtEnd()) {
-                elements.push(this.expression());
+                branches.push(this.expression());
             }
-            this.consume('RIGHT_BRACKET', "Expected ')' to close conditional");
-            if (elements.length < 1 || elements.length > 2) {
-                throw new Error(`Conditional '?' expects 1 or 2 elements inside [...], got ${elements.length}; use '??' for multi-branch matching`);
-            }
-            if (elements.length === 1) {
-                return { type: 'Predicate', pattern: patternExpr, value: elements[0] };
-            }
-            return {
-                type: 'Conditional',
-                pattern: patternExpr,
-                value: elements[0],
-                thenExpr: elements[1]
-            };
+            this.consume('RIGHT_BRACKET', "Expected ')' to close '?' branches");
+            return { type: 'Dispatch', value, branches };
         }
-        const value = this.expression();
-        return { type: 'Predicate', pattern: patternExpr, value };
-    }
-
-    // Multi-pattern match. LHS is a value; RHS is a list of cases, each
-    // of which is `[pattern]` (match → NULL, stop) or `[pattern result]`
-    // (match → evaluate result lazily, stop). Falling off the end with
-    // no match yields NULL.
-    //
-    //   value ?? [[p1 r1] [p2] [_ r3] [_]]
-    multiplePatternMatch(value) {
-        const cases = [];
-        this.consume('LEFT_BRACKET', "Expected '(' after '??'");
-        while (!this.check('RIGHT_BRACKET') && !this.isAtEnd()) {
-            this.consume('LEFT_BRACKET', "Expected '(' for case");
-            const pattern = this.expression();
-            let expression = null;
-            if (!this.check('RIGHT_BRACKET')) {
-                expression = this.expression();
-            }
-            this.consume('RIGHT_BRACKET', "Expected ')' after case");
-            cases.push({ pattern, expression });
-        }
-        this.consume('RIGHT_BRACKET', "Expected ')' after '??' cases");
-        return { type: 'MultiplePatternMatch', value, cases };
+        let branch = this.primary();
+        branch = this.postfix(branch);
+        return { type: 'Dispatch', value, branches: [branch] };
     }
 
     match(type) {

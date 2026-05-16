@@ -1,28 +1,33 @@
-#Pipeline `|`: `a | f.` desugars to `f!a` {LHS wrapped as a single arg}.
- The RHS is a function *value* {terminated by `.`}, same rule as `map!(xs f.)`.#
+#Pipeline `|`: `a | f.` desugars to `f!a` — the LHS becomes the call's
+ args list, exactly mirroring a direct `!` call. Multi-element list LHS
+ spread across multiple positional slots, so functions that want the
+ whole list as one binding should use the `___` variadic wildcard.#
+
+first:{xs:___}(xs.0.)
+rest:{xs:___}(xs.1~.)
 
 #Single stage#
-assert!((a b c) | head. a)
-assert!((a b c) | tail. (b c))
+assert!((a b c) | first. a)
+assert!((a b c) | rest. (b c))
 
 #Multi-stage pipeline {left-associative}: a | f. | g. == g!f!a#
-assert!(hello | split. | head. h)
+assert!(hello | split. | first. h)
 assert!(hello | split. | len. 5)
 
 #Whitespace around `|` is irrelevant#
 assert!((1 2 3)|len. 3)
-assert!((1 2 3)   |   head. 1)
+assert!((1 2 3)   |   first. 1)
 
 #Pipeline accepts dotted callees and derefs#
 chars:hello | split.
 #The result is bound the usual way#
 assert!(chars. | len. 5)
 
-#A list-valued LHS isn't spread across positional slots#
-assert!((x y z) | tail. (y z))
+#A list-valued LHS feeds straight through as the call's args list#
+assert!((x y z) | rest. (y z))
 
 #Any expression that evaluates to a function value works as a stage.
- Here `getFn!head` calls a function which returns the head fn itself,
+ Here `getFn!first` calls a function which returns the first fn itself,
  which is then applied to the LHS by the pipe.#
-getFn:{name:_}(name. ?? ((head head.) (tail tail.) (len len.)))
-assert!((a b c) | getFn!head a)
+getFn:{name:_}(name.?({first}(first.) {rest}(rest.) {len}(len.)))
+assert!((a b c) | getFn!first a)

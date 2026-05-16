@@ -1,19 +1,27 @@
-#Mutable cells with `[value]`, read `>`, write `<`#
+#Mutable cells with `[value]`, read `->`, write `<-`#
 
 #Create a cell#
 counter:[0]
-assert!(counter> 0)
+assert!(counter-> 0)
 
 #Write a new value#
-counter<5
-assert!(counter> 5)
+counter<-5
+assert!(counter-> 5)
 
 #Update by read-modify-write#
-counter<add!(counter> 1)
-assert!(counter> 6)
+counter<-+!(counter-> 1)
+assert!(counter-> 6)
 
 #Cells can hold any Thing, including lists#
 buffer:[()]
-buffer<concat!(buffer> (hello))
-buffer<concat!(buffer> (world))
-assert!(buffer> (hello world))
+buffer<-concat!(buffer-> (hello))
+buffer<-concat!(buffer-> (world))
+assert!(buffer-> (hello world))
+
+#Bare `<` and `>` are now ordinary Thing-name callables {lt and gt}, not
+ cell operators — only the arrow forms `<-` / `->` touch cells.#
+flag:[NULL]
+flag<-<!(3 5)
+assert!(flag-> TRUE)
+flag<->!(3 5)
+assert!(flag-> FALSE)

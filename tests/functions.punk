@@ -8,7 +8,7 @@ identity:{x:_}(x.)
 assert!(identity!hello hello)
 
 #Multi-param function — each parameter is named#
-plus:{a:_ b:_}(add!(a. b.))
+plus:{a:_ b:_}(+!(a. b.))
 assert!(plus!(5 3) 8)
 
 #Three-param function returning the last#
@@ -17,31 +17,51 @@ assert!(last3!(a b c) c)
 
 #Earlier expressions still run; only the LAST value is returned#
 seq:{x:_}(
-  y:add!(x. 1)
-  mul!(y. 10)
+  y:+!(x. 1)
+  *!(y. 10)
 )
 assert!(seq!4 50)
 
-#Variadic with `*` — name binds the whole match#
-all:{xs:*}(xs.)
+#Variadic with `___` — name binds the whole match#
+all:{xs:___}(xs.)
 assert!(all!(a b c) (a b c))
 
-#Anonymous variadic — `*.` derefs the whole argument as a list#
-allUnnamed:{*}(*.)
+#Anonymous variadic — `_.` derefs the whole argument as passed#
+allUnnamed:{___}(_.)
 assert!(allUnnamed!(a b c) (a b c))
 
-#`*.` is available in every function, even with positional named params#
-pairAll:{a:_ b:_}(*.)
+#`_.` is available in every function, even with positional named params#
+pairAll:{a:_ b:_}(_.)
 assert!(pairAll!(1 2) (1 2))
 
-#A trailing `*` slot is anonymous; `*.` still gives the full argument#
-trailing:{x:_ *}(*.)
+#A trailing `___` slot is anonymous; `_.` still gives the full argument#
+trailing:{x:_ ___}(_.)
 assert!(trailing!(1 2 3 4) (1 2 3 4))
 
+#Un-named single-slot patterns. `_.` is the raw arg as passed.#
+processOne:{_}(_.)
+assert!(processOne!hello hello)
+
+processTwo:{_ _}(+!(_.0. _.1.))
+assert!(processTwo!(3 4) 7)
+
+processN:{___}(len!_.)
+assert!(processN!(a b c) 3)
+
+processAandN:{a:_ ___}(+!(a. len!_.))
+assert!(processAandN!(10 b c) 13)
+
 #Function reference — `name.` is the value of the function#
-double:{n:_}(mul!(n. 2))
+double:{n:_}(*!(n. 2))
 ref:double.
 assert!(ref!21 42)
 
 #Higher-order: map applies the function to each element#
 assert!(map!((1 2 3) double.) (2 4 6))
+
+#reduce! with a builtin passed by name: +. is the add function value#
+assert!(reduce!((1 2 3 4 5) +. 0) 15)
+assert!(reduce!((2 3 4) *. 1) 24)
+
+#filter! with a builtin predicate#
+assert!(filter!((1 2 3 4) {n:_}(<!(n. 3))) (1 2))

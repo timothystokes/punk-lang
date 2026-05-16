@@ -6,18 +6,22 @@ assert!(join!((h e l l o)) hello)
 assert!(join!(split!world) world)
 
 #length via len once decomposed#
-assert!(len!(split!hello) 5)
-assert!(len!(split!a) 1)
+assert!(len!split!hello 5)
+assert!(len!split!a 1)
+
+#len! is smart: a single Thing returns its character length directly#
+assert!(len!hello 5)
+assert!(len!a 1)
 
 #first / last char via slice {no dedicated text helpers needed}#
-assert!(join!(slice!(split!hello 0 1)) h)
-assert!(join!(slice!(split!hello 4 5)) o)
+assert!(join!(slice!(split!hello 0~0)) h)
+assert!(join!(slice!(split!hello 4~4)) o)
 
-#startsWith: build the prefix list and compare#
+#startsWith: build the prefix list and compare {dynamic bounds use the 3-arg form}#
 startsWith:{s:_ p:_}(
-  chars: split!s.
-  prefix: split!p.
-  eq!(slice!(chars. 0 len!(prefix.)) prefix.)
+  chars:split!s.
+  prefix:split!p.
+  =!(slice!(chars. 0 len!prefix.) prefix.)
 )
 assert!(startsWith!(hello he) TRUE)
 assert!(startsWith!(hello world) FALSE)
@@ -31,19 +35,24 @@ assert!(contains!(split!hello z) FALSE)
 #list decompositions and have no list-side equivalent#
 assert!(upper!abc ABC)
 
-#`+` is the in-Thing space marker — Hello+World is ONE Thing, not two#
-assert!(len!(split!Hello+World) 11)
+#`+`, `*`, `^`, `%`, `=` are ordinary text characters — embedded between
+ letters/digits they're just part of the Thing. `Hello+World` is ONE
+ 11-character Thing, not two and not infix.#
+assert!(len!split!Hello+World 11)
 assert!(len!((Hello+World)) 1)
 
-#standalone `+` is a one-character space Thing#
-assert!(len!(split!+) 1)
+#A standalone `+` token (here a Thing followed by `)`) is one character#
+assert!(len!split!+ 1)
 
-#round-trip preserves embedded spaces#
+#round-trip preserves the `+` like any other char#
 assert!(join!(split!Hello+World) Hello+World)
 
-#join with `+` gives a single Thing with one embedded space#
+#join with `+` as separator just inserts the literal `+` character#
 assert!(join!((John Doe) +) John+Doe)
 assert!(len!((join!((John Doe) +))) 1)
 
-#literal `+` must be escaped as `\+`#
-assert!(len!(split!a\+b) 3)
+#a backslash-escaped char is still just that char#
+assert!(len!split!a\+b 3)
+
+#There is NO way to embed a literal space inside a Thing — use a list
+ instead. Multi-word text is naturally a list: (hello world).#

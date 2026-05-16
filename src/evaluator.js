@@ -115,98 +115,88 @@ class Evaluator {
         const listOps = {
             map: builtin('map', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('map expects a List as the first Thing');
-                    return list.map(item => this.callFunction(b.get('fn'), item));
+                    const { items, rewrap } = this.decompose(b.get('list'));
+                    return rewrap(items.map(item => this.callFunction(b.get('fn'), item)));
                 }),
             filter: builtin('filter', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('filter expects a List as the first Thing');
-                    return list.filter(item => this.callFunction(b.get('fn'), item));
+                    const { items, rewrap } = this.decompose(b.get('list'));
+                    return rewrap(items.filter(item => this.callFunction(b.get('fn'), item)));
                 }),
             reduce: builtin('reduce', P.pat(P.named('list', P.wild()), P.named('fn', P.wild()), P.named('init', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('reduce expects a List as the first Thing');
-                    return list.reduce((acc, item) => this.callFunction(b.get('fn'), [acc, item]), b.get('init'));
+                    const { items } = this.decompose(b.get('list'));
+                    return items.reduce((acc, item) => this.callFunction(b.get('fn'), [acc, item]), b.get('init'));
                 }),
             flatMap: builtin('flatMap', P.pat(P.named('list', P.wild()), P.named('fn', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('flatMap expects a List as the first Thing');
-                    return list.flatMap(item => {
+                    const { items } = this.decompose(b.get('list'));
+                    return items.flatMap(item => {
                         const r = this.callFunction(b.get('fn'), item);
                         return Array.isArray(r) ? r : [r];
                     });
                 }),
-            len: builtin('len', P.pat(P.wild()),
-                (b) => {
-                    const list = b.get('0');
-                    return Array.isArray(list) ? list.length : 1;
-                }),
-            // Lisp spine: head/tail/prepend. Empty-list head returns NULL,
-            // empty-list tail returns []. Together with `list.concat!` these
-            // are enough to express any recursive list algorithm.
-            head: builtin('head', P.pat(P.wild()),
-                (b) => {
-                    const list = b.get('0');
-                    if (!Array.isArray(list)) return list;
-                    return list.length === 0 ? null : list[0];
-                }),
-            tail: builtin('tail', P.pat(P.wild()),
-                (b) => {
-                    const list = b.get('0');
-                    if (!Array.isArray(list)) return [];
-                    return list.slice(1);
-                }),
+            len: builtin('len', P.pat(P.star()),
+                (b, arg) => this.smartLen(arg)),
+            // Lisp spine helpers. `head!`/`tail!` are gone — use the
+            // postfix slice forms `xs.0.` and `xs.1~.` instead. `prepend!`
+            // and `concat!` are the structural builders for that spine.
             prepend: builtin('prepend', P.pat(P.named('item', P.wild()), P.named('list', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('prepend expects a List as the second Thing');
-                    return [b.get('item'), ...list];
+                    const { items, rewrap } = this.decompose(b.get('list'));
+                    return rewrap([b.get('item'), ...items]);
                 }),
             concat: builtin('concat', P.pat(P.star()),
                 (b, arg) => {
-                    const lists = Array.isArray(arg) ? arg : [arg];
-                    return lists.flat();
+                    const args = Array.isArray(arg) ? arg : [arg];
+                    if (args.length === 0) return [];
+                    const first = this.decompose(args[0]);
+                    const all = args.flatMap(v => this.decompose(v).items);
+                    return first.rewrap(all);
                 }),
-            range: builtin('range', P.pat(P.named('start', P.wild()), P.named('end', P.wild()), P.named('step', P.wild())),
-                (b) => {
-                    const start = b.get('start'), end = b.get('end'), step = b.get('step');
-                    const result = [];
-                    if (step > 0) for (let i = start; i < end; i += step) result.push(i);
-                    else if (step < 0) for (let i = start; i > end; i += step) result.push(i);
-                    return result;
-                }),
-            slice: builtin('slice', P.pat(P.named('list', P.wild()), P.named('start', P.wild()), P.named('end', P.wild())),
-                (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('slice expects a List as the first Thing');
-                    return list.slice(b.get('start'), b.get('end'));
+            // slice! supports two forms:
+            //   slice!(list range)         — inclusive both ends, matches `xs.1~3.`
+            //   slice!(list start endExcl) — exclusive end, useful when bounds
+            //                                are computed at runtime
+            slice: builtin('slice', P.pat(P.star()),
+                (b, arg) => {
+                    const args = Array.isArray(arg) ? arg : [arg];
+                    if (args.length !== 2 && args.length !== 3) {
+                        throw this.punkError('slice expects (list range) or (list start end)');
+                    }
+                    const { items, rewrap } = this.decompose(args[0]);
+                    if (args.length === 2) {
+                        const r = args[1];
+                        if (!r || typeof r !== 'object' || r.type !== 'Range') {
+                            throw this.punkError('slice 2-arg form expects a Range as the second Thing');
+                        }
+                        const start = r.start == null ? 0 : r.start;
+                        const end = r.end == null ? items.length - 1 : r.end;
+                        if (start >= items.length || start > end) return rewrap([]);
+                        return rewrap(items.slice(start, Math.min(end + 1, items.length)));
+                    }
+                    return rewrap(items.slice(args[1], args[2]));
                 }),
             find: builtin('find', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('find expects a List as the first Thing');
-                    const i = list.findIndex(item => this.deepEqual(item, b.get('value')));
+                    const { items } = this.decompose(b.get('list'));
+                    const i = items.findIndex(item => this.deepEqual(item, b.get('value')));
                     return i >= 0 ? i : null;
                 }),
             contains: builtin('contains', P.pat(P.named('list', P.wild()), P.named('value', P.wild())),
                 (b) => {
-                    const list = b.get('list');
-                    if (!Array.isArray(list)) throw this.punkError('contains expects a List as the first Thing');
-                    return list.some(item => this.deepEqual(item, b.get('value')));
+                    const { items } = this.decompose(b.get('list'));
+                    return items.some(item => this.deepEqual(item, b.get('value')));
                 }),
-            sort: builtin('sort', P.pat(P.wild()),
-                (b) => {
-                    const list = b.get('0');
-                    if (!Array.isArray(list)) throw this.punkError('sort expects a List');
-                    return [...list].sort((a, c) => {
+            sort: builtin('sort', P.pat(P.star()),
+                (b, arg) => {
+                    const { items, rewrap } = this.decompose(arg);
+                    const sorted = [...items].sort((a, c) => {
                         if (typeof a === 'string' && typeof c === 'string') return a.localeCompare(c);
                         if (typeof a === 'number' && typeof c === 'number') return a - c;
                         return String(a).localeCompare(String(c));
                     });
+                    return rewrap(sorted);
                 }),
         };
 
@@ -235,8 +225,9 @@ class Evaluator {
         };
 
         const log = builtin('log', P.pat(P.star()), (b, arg) => {
-            if (Array.isArray(arg)) console.log(...arg.map(x => this.formatValue(x)));
-            else console.log(this.formatValue(arg));
+            const v = this.asList(arg);
+            if (Array.isArray(v)) console.log(...v.map(x => this.formatValue(x)));
+            else console.log(this.formatValue(v));
             return undefined;
         });
 
@@ -256,19 +247,19 @@ class Evaluator {
             }
         );
 
-        this.setName('add', math.add);
-        this.setName('sub', math.sub);
-        this.setName('mul', math.mul);
-        this.setName('div', math.div);
-        this.setName('pow', math.pow);
-        this.setName('mod', math.mod);
+        this.setName('+', math.add);
+        this.setName('-', math.sub);
+        this.setName('*', math.mul);
+        this.setName('/', math.div);
+        this.setName('^', math.pow);
+        this.setName('%', math.mod);
         this.setName('sqrt', math.sqrt);
         this.setName('isnum', math.isnum);
         this.setName('min', math.min);
         this.setName('max', math.max);
-        this.setName('gt', logic.gt);
-        this.setName('lt', logic.lt);
-        this.setName('eq', logic.eq);
+        this.setName('>', logic.gt);
+        this.setName('<', logic.lt);
+        this.setName('=', logic.eq);
         this.setName('not', logic.not);
         this.setName('and', logic.and);
         this.setName('or', logic.or);
@@ -283,11 +274,8 @@ class Evaluator {
         this.setName('reduce', listOps.reduce);
         this.setName('flatMap', listOps.flatMap);
         this.setName('len', listOps.len);
-        this.setName('head', listOps.head);
-        this.setName('tail', listOps.tail);
         this.setName('prepend', listOps.prepend);
         this.setName('concat', listOps.concat);
-        this.setName('range', listOps.range);
         this.setName('slice', listOps.slice);
         this.setName('find', listOps.find);
         this.setName('contains', listOps.contains);
@@ -308,23 +296,108 @@ class Evaluator {
         if (v === undefined) return '<nothing>';
         if (Array.isArray(v)) return '(' + v.map(x => this.formatValue(x)).join(' ') + ')';
         if (typeof v === 'string') {
-            // Render text Things so the output is valid Punk source again:
-            // a literal `+` in the value must be escaped as `\+`, and a
-            // literal space inside the Thing is shown as `+`. Without this,
-            // a single Thing containing a space would re-parse as two Things.
-            return v.replace(/\\/g, '\\\\').replace(/\+/g, '\\+').replace(/ /g, '+');
+            return v.replace(/\\/g, '\\\\');
         }
         if (v && typeof v === 'object') {
             if (v.type === 'Cell') return '[' + this.formatValue(v.contents) + ']';
             if (v.type === 'UserFunction' || v.type === 'FunctionLiteral') return '<function>';
             if (v.type === 'BuiltinFunction') return '<builtin>';
+            if (v.type === 'Partial') return '<partial>';
             if (v.type === 'Pattern') return '<pattern>';
+            if (v.type === 'Range') {
+                if (v.start != null && v.end != null) {
+                    return this.formatValue(this.materialiseRange(v));
+                }
+                return `${v.start ?? ''}~${v.end ?? ''}`;
+            }
         }
         return String(v);
     }
 
+    materialiseRange(r) {
+        if (r.start == null || r.end == null) {
+            throw this.punkError('Cannot force an unbounded range without context');
+        }
+        if (r.end < r.start) return [];
+        const out = new Array(r.end - r.start + 1);
+        for (let i = 0; i < out.length; i++) out[i] = r.start + i;
+        return out;
+    }
+
+    asList(v) {
+        if (v && typeof v === 'object' && v.type === 'Range') {
+            return this.materialiseRange(v);
+        }
+        return v;
+    }
+
+    asListOrRange(v) {
+        return this.asList(v);
+    }
+
+    /**
+     * Decompose any "thing-like" value into a list of items plus a rewrap
+     * fn that puts the items back into the original shape. Lets list
+     * builtins (slice/prepend/concat/find/contains/sort/map/filter) work
+     * directly on text and numbers without explicit split!/join!.
+     */
+    decompose(v) {
+        if (Array.isArray(v)) {
+            return { items: v, rewrap: (xs) => xs };
+        }
+        if (v && typeof v === 'object' && v.type === 'Range') {
+            return { items: this.materialiseRange(v), rewrap: (xs) => xs };
+        }
+        if (typeof v === 'string') {
+            return {
+                items: Array.from(v),
+                rewrap: (xs) => xs.map(x => typeof x === 'string' ? x : this.formatValue(x)).join('')
+            };
+        }
+        if (typeof v === 'number') {
+            return {
+                items: Array.from(String(v)),
+                rewrap: (xs) => {
+                    const s = xs.map(x => typeof x === 'string' ? x : this.formatValue(x)).join('');
+                    return /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : s;
+                }
+            };
+        }
+        return { items: [v], rewrap: (xs) => xs };
+    }
+
+    smartLen(v) {
+        if (v === null || v === undefined) return 0;
+        if (Array.isArray(v)) return v.length;
+        if (typeof v === 'string') return v.length;
+        if (typeof v === 'number') return String(Math.abs(v)).length;
+        if (typeof v === 'boolean') return 1;
+        if (v && typeof v === 'object') {
+            if (v.type === 'Range') {
+                if (v.start === null || v.end === null) return 'INFINITE';
+                return Math.max(0, v.end - v.start + 1);
+            }
+            if (v.type === 'Cell') return 1;
+            if (v.type === 'UserFunction') return this.countNodes(v.body);
+            if (v.type === 'BuiltinFunction') return 1;
+        }
+        return 1;
+    }
+
+    countNodes(node) {
+        if (node === null || node === undefined) return 0;
+        if (Array.isArray(node)) return node.reduce((n, c) => n + this.countNodes(c), 0);
+        if (typeof node !== 'object') return 1;
+        let n = 1;
+        for (const k of Object.keys(node)) {
+            if (k === 'type' || k === 'closure') continue;
+            n += this.countNodes(node[k]);
+        }
+        return n;
+    }
+
     reduceNumeric(name, arg, op) {
-        const list = Array.isArray(arg) ? arg : [arg];
+        const list = this.asList(Array.isArray(arg) ? arg : [arg]);
         if (list.length === 0) throw this.punkError(`${name} requires at least one Thing`);
         return op(...list);
     }
@@ -370,20 +443,22 @@ class Evaluator {
                 return this.evaluateList(node);
             case 'Pattern':
                 return this.evaluatePattern(node);
-            case 'Conditional':
-                return this.evaluateConditional(node);
-            case 'Predicate':
-                return this.evaluatePredicate(node);
-            case 'MultiplePatternMatch':
-                return this.evaluateMultiplePatternMatch(node);
+            case 'RegexLiteral':
+                return this.compileRegex(node);
+            case 'Dispatch':
+                return this.evaluateDispatch(node);
             case 'FunctionCall':
                 return this.evaluateFunctionCall(node);
+            case 'PartialApplication':
+                return this.evaluatePartialApplication(node);
             case 'FunctionDef':
                 return this.evaluateFunctionDef(node);
             case 'FunctionLiteral':
                 return this.evaluateFunctionLiteral(node);
             case 'Dereference':
                 return this.evaluateDereference(node);
+            case 'Slice':
+                return this.evaluateSlice(node);
             case 'CellLiteral':
                 return { type: 'Cell', contents: this.evaluate(node.value) };
             case 'CellRead': {
@@ -403,6 +478,8 @@ class Evaluator {
             }
             case 'Number':
                 return node.value;
+            case 'Range':
+                return { type: 'Range', start: node.start, end: node.end };
             case 'Thing':
                 if (node.value === 'TRUE') return true;
                 if (node.value === 'FALSE') return false;
@@ -470,6 +547,8 @@ class Evaluator {
         switch (element.type) {
             case 'Number':
                 return element.value;
+            case 'Range':
+                return this.evaluate(element);
             case 'Thing':
                 if (element.value === 'TRUE') return true;
                 if (element.value === 'FALSE') return false;
@@ -545,23 +624,17 @@ class Evaluator {
     evaluateTail(node) {
         if (!node || typeof node !== 'object') return this.evaluate(node);
         switch (node.type) {
-            case 'Conditional': {
+            case 'Dispatch': {
                 const value = this.evaluate(node.value);
-                const pattern = this.evaluate(node.pattern);
-                const bindings = this.matchPattern(value, pattern);
-                if (bindings) {
-                    return this.withScope(bindings, () => this.evaluateTail(node.thenExpr));
-                }
-                return null;
-            }
-            case 'MultiplePatternMatch': {
-                const value = this.evaluate(node.value);
-                for (const { pattern, expression } of node.cases) {
-                    const evaluatedPattern = this.evaluate(pattern);
+                for (const branchExpr of node.branches) {
+                    const fn = this.evaluate(branchExpr);
+                    if (!fn || fn.type !== 'UserFunction') {
+                        throw new Error("'?' branch must be a function value");
+                    }
+                    const evaluatedPattern = this.evaluatePattern(fn.pattern);
                     const bindings = this.matchPattern(value, evaluatedPattern);
                     if (bindings) {
-                        if (expression === null) return null;
-                        return this.withScope(bindings, () => this.evaluateTail(expression));
+                        return { __tc: true, fn, arg: value };
                     }
                 }
                 return null;
@@ -581,6 +654,9 @@ class Evaluator {
                 }
                 return this.callFunction(callee, arg);
             }
+            case 'PartialApplication': {
+                return this.evaluatePartialApplication(node);
+            }
             default:
                 return this.evaluate(node);
         }
@@ -599,33 +675,104 @@ class Evaluator {
         }
         if (element.type === 'Pattern') return this.evaluatePattern(element);
         if (element.type === 'Wildcard' || element.type === 'StarWildcard') return element;
+        if (element.type === 'RegexLiteral') return this.compileRegex(element);
         return this.evaluate(element);
     }
 
-    evaluatePredicate(node) {
-        const value = this.evaluate(node.value);
-        const pattern = this.evaluate(node.pattern);
-        return this.matchPattern(value, pattern) !== null;
-    }
-
-    evaluateConditional(node) {
-        const value = this.evaluate(node.value);
-        const pattern = this.evaluate(node.pattern);
-        const bindings = this.matchPattern(value, pattern);
-        if (bindings) {
-            return this.withScope(bindings, () => this.evaluate(node.thenExpr));
+    // Compile a RegexLiteral AST node into a self-contained value: the original
+    // source, a cached RegExp, and a `groupNames` array (index → name|null) so
+    // captured groups can be re-emitted as NamedThings in the right slots.
+    compileRegex(node) {
+        if (node.__compiled) return node;
+        let re;
+        try {
+            re = new RegExp(node.source);
+        } catch (e) {
+            throw new Error(`Invalid regex \"${node.source}\": ${e.message}`);
         }
-        return null;
+        return {
+            type: 'RegexLiteral',
+            source: node.source,
+            re,
+            groupNames: this.parseRegexGroupNames(node.source),
+            __compiled: true,
+        };
     }
 
-    evaluateMultiplePatternMatch(node) {
+    // Walk the regex source counting capturing groups (skipping `(?:`, `(?=`,
+    // `(?!`, `(?<=`, `(?<!`) so each capture index is paired with its name (or
+    // null for unnamed). Handles char classes and backslash escapes.
+    parseRegexGroupNames(source) {
+        const names = [null];
+        let i = 0;
+        while (i < source.length) {
+            const c = source[i];
+            if (c === '\\') { i += 2; continue; }
+            if (c === '[') {
+                i++;
+                while (i < source.length && source[i] !== ']') {
+                    if (source[i] === '\\') i++;
+                    i++;
+                }
+                i++;
+                continue;
+            }
+            if (c === '(') {
+                if (source[i + 1] === '?') {
+                    if (source[i + 2] === '<' && source[i + 3] !== '=' && source[i + 3] !== '!') {
+                        const end = source.indexOf('>', i + 3);
+                        if (end === -1) { i += 2; continue; }
+                        names.push(source.slice(i + 3, end));
+                        i = end + 1;
+                        continue;
+                    }
+                    i += 2;
+                    continue;
+                }
+                names.push(null);
+            }
+            i++;
+        }
+        return names;
+    }
+
+    // Render a value to text and run the compiled regex once. On match, build a
+    // list `(whole g1 g2 ...)` where each named group is wrapped as a NamedThing
+    // at its positional index so it's reachable by `m.name` AND by `m.<index>`.
+    // Returns `{ matchList, namedPairs }` or null.
+    runRegex(value, regexValue) {
+        const text = typeof value === 'string' ? value : this.formatValue(value);
+        const m = text.match(regexValue.re);
+        if (!m) return null;
+        const matchList = [m[0]];
+        const namedPairs = [];
+        for (let i = 1; i < m.length; i++) {
+            const captured = m[i] === undefined ? null : m[i];
+            const name = regexValue.groupNames[i];
+            if (name) {
+                matchList.push({ type: 'NamedThing', name, value: captured });
+                namedPairs.push([name, captured]);
+            } else {
+                matchList.push(captured);
+            }
+        }
+        return { matchList, namedPairs };
+    }
+
+    // Value-first dispatch: try each branch (a function value) in order;
+    // the first whose pattern matches the LHS value is called with the
+    // value as its arg. No branch matches → NULL.
+    evaluateDispatch(node) {
         const value = this.evaluate(node.value);
-        for (const { pattern, expression } of node.cases) {
-            const evaluatedPattern = this.evaluate(pattern);
+        for (const branchExpr of node.branches) {
+            const fn = this.evaluate(branchExpr);
+            if (!fn || fn.type !== 'UserFunction') {
+                throw new Error("'?' branch must be a function value");
+            }
+            const evaluatedPattern = this.evaluatePattern(fn.pattern);
             const bindings = this.matchPattern(value, evaluatedPattern);
             if (bindings) {
-                if (expression === null) return null;
-                return this.withScope(bindings, () => this.evaluate(expression));
+                return this.callFunction(fn, value);
             }
         }
         return null;
@@ -647,8 +794,40 @@ class Evaluator {
         return this.callFunction(callee, arg);
     }
 
+    // `'` is the partial-application operator. It mirrors `!` (same arg form
+    // and evaluation), but instead of invoking it returns a Partial value that
+    // carries the pre-bound args. A later `!` call extends those args and then
+    // invokes. `f'(a b)` ≡ pre-bind [a, b]; then `(f'(a b))!c` ≡ `f!(a b c)`.
+    evaluatePartialApplication(node) {
+        const callee = this.evaluate(node.callee);
+        let arg;
+        if (node.arg === null || node.arg === undefined) {
+            arg = null;
+        } else if (node.arg.type === 'List') {
+            arg = this.evaluateListAsCode(node.arg);
+        } else {
+            arg = this.evaluate(node.arg);
+        }
+        const newArgs = arg === null ? [] : (Array.isArray(arg) ? arg : [arg]);
+        if (callee && typeof callee === 'object' && callee.type === 'Partial') {
+            return { type: 'Partial', fn: callee.fn, args: [...callee.args, ...newArgs] };
+        }
+        return { type: 'Partial', fn: callee, args: newArgs };
+    }
+
     callFunction(fn, arg) {
         if (fn === null || fn === undefined) throw new Error('Undefined function Thing');
+        // A text Thing names a function: look it up in scope and call that.
+        // Enables macros like `infix:{a:_ op:_ b:_}(op.!(a. b.))` where the
+        // operator is passed by name as a Thing.
+        if (typeof fn === 'string') {
+            const resolved = this.getName(fn);
+            if (resolved === undefined) throw new Error(`Undefined Named Thing: ${fn}`);
+            if (typeof resolved === 'string' && resolved === fn) {
+                throw new Error('Target is not a function Thing');
+            }
+            return this.callFunction(resolved, arg);
+        }
         // A list value is a zero-parameter body: applying `!` evaluates its elements
         // as code in the current scope. This is the homoiconic "eval" path —
         // `[forms]!` and `.code!` (where code is bound to a list) go through here.
@@ -656,6 +835,13 @@ class Evaluator {
             return this.withScope(arg === null ? new Map() : new Map([['.', arg]]), () => {
                 return this.evaluateListValueAsCode(fn);
             });
+        }
+        if (fn && fn.type === 'Partial') {
+            const more = arg === null ? [] : (Array.isArray(arg) ? arg : [arg]);
+            const combined = [...fn.args, ...more];
+            const finalArg = combined.length === 0 ? null
+                : (combined.length === 1 ? combined[0] : combined);
+            return this.callFunction(fn.fn, finalArg);
         }
         if (fn && fn.type === 'BuiltinFunction') {
             const bindings = this.matchPattern(arg, fn.pattern);
@@ -671,12 +857,12 @@ class Evaluator {
             const savedScopes = this.scopes;
             try {
                 while (true) {
-                    const bindings = this.matchPattern(arg, this.evaluatePattern(fn.pattern));
+                    const bindings = this.matchPattern(arg, this.evaluatePattern(fn.pattern), { lenientRegex: true });
                     if (!bindings) {
                         throw new Error(`Input Thing does not match pattern ${this.formatPattern(this.evaluatePattern(fn.pattern))}`);
                     }
                     bindings.set('.', arg);
-                    bindings.set('*', Array.isArray(arg) ? arg : [arg]);
+                    bindings.set('_', arg);
                     this.scopes = fn.closure.slice();
                     const result = this.withScope(bindings, () => {
                         return this.evaluateBody(fn.body);
@@ -708,6 +894,7 @@ class Evaluator {
                 case 'StarWildcard': return '*';
                 case 'NamedThing': return `${el.name}:${fmtElement(el.value)}`;
                 case 'Pattern': return `(${el.elements.map(fmtElement).join(' ')})`;
+                case 'RegexLiteral': return `"${el.source}"`;
                 case 'Thing': return String(el.value);
                 case 'Number': return String(el.value);
                 default: return String(el.value !== undefined ? el.value : el.type);
@@ -740,16 +927,34 @@ class Evaluator {
         return v;
     }
 
+    evaluateSlice(node) {
+        let obj = this.evaluate(node.object);
+        if (typeof obj === 'string') {
+            const named = this.getName(obj);
+            if (named !== undefined) obj = named;
+        }
+        obj = this.asList(obj);
+        if (!Array.isArray(obj)) obj = [obj];
+        const len = obj.length;
+        const start = node.start == null ? 0 : node.start;
+        const end = node.end == null ? len - 1 : node.end;
+        if (start >= len || start > end) return [];
+        return obj.slice(start, Math.min(end + 1, len));
+    }
+
     evaluateDereference(node) {
         if (node.object) {
             let obj = this.evaluate(node.object);
-            
-            // If obj is a simple Thing value (string), try to resolve it as a name first
+
             if (typeof obj === 'string') {
                 const namedValue = this.getName(obj);
                 if (namedValue !== undefined) {
                     obj = namedValue;
                 }
+            }
+            // Range values act like lists for indexing/last/length access.
+            if (obj && typeof obj === 'object' && obj.type === 'Range') {
+                obj = this.asList(obj);
             }
             
             if (obj && typeof obj === 'object' && obj.type === 'Pattern') {
@@ -812,9 +1017,9 @@ class Evaluator {
         return value;
     }
 
-    matchPattern(value, pattern) {
+    matchPattern(value, pattern, opts) {
         const bindings = new Map();
-        const matched = this.matchPatternInternal(value, pattern, bindings);
+        const matched = this.matchPatternInternal(value, pattern, bindings, opts || {});
         if (matched) {
             if (!bindings.has('.')) bindings.set('.', value);
             // Bind numeric indices for list access
@@ -829,15 +1034,16 @@ class Evaluator {
         return null;
     }
 
-    matchPatternInternal(value, pattern, bindings) {
+    matchPatternInternal(value, pattern, bindings, opts) {
+        if (!opts) opts = {};
         if (pattern && pattern.type === 'Pattern') {
             if (!Array.isArray(value)) {
                 if (pattern.elements.length === 1) {
-                    return this.matchPatternInternal(value, pattern.elements[0], bindings);
+                    return this.matchPatternInternal(value, pattern.elements[0], bindings, opts);
                 }
                 return false;
             }
-            return this.matchListPattern(value, pattern.elements, bindings);
+            return this.matchListPattern(value, pattern.elements, bindings, opts);
         }
         if (pattern && pattern.type === 'Wildcard') {
             return true;
@@ -845,14 +1051,36 @@ class Evaluator {
         if (pattern && pattern.type === 'StarWildcard') {
             return true;
         }
+        // Bare regex constraint (no name): pure guard — match-or-fail in strict
+        // mode, always succeed in lenient mode. No top-level bindings: to
+        // capture groups, give the slot a name.
+        if (pattern && pattern.type === 'RegexLiteral') {
+            const result = this.runRegex(value, pattern);
+            if (result) return true;
+            return !!opts.lenientRegex;
+        }
         if (pattern && pattern.type === 'NamedThing') {
+            // Named regex slot: bind `name` to the match list. Named groups are
+            // reachable via `name.<groupname>`; the whole match is `name.0.`.
+            if (pattern.value && pattern.value.type === 'RegexLiteral') {
+                const result = this.runRegex(value, pattern.value);
+                if (result) {
+                    bindings.set(pattern.name, result.matchList);
+                    return true;
+                }
+                if (opts.lenientRegex) {
+                    bindings.set(pattern.name, null);
+                    return true;
+                }
+                return false;
+            }
             if (value && typeof value === 'object' && value.name !== undefined && value.value !== undefined) {
                 if (value.name !== pattern.name) return false;
-                if (!this.matchPatternInternal(value.value, pattern.value, bindings)) return false;
+                if (!this.matchPatternInternal(value.value, pattern.value, bindings, opts)) return false;
                 bindings.set(pattern.name, value.value);
                 return true;
             }
-            if (this.matchPatternInternal(value, pattern.value, bindings)) {
+            if (this.matchPatternInternal(value, pattern.value, bindings, opts)) {
                 bindings.set(pattern.name, value);
                 return true;
             }
@@ -861,7 +1089,7 @@ class Evaluator {
         if (pattern && pattern.type === 'Dereference') {
             const patternValue = this.evaluateDereference(pattern);
             if (patternValue && typeof patternValue === 'object' && patternValue.type === 'Pattern') {
-                return this.matchPatternInternal(value, patternValue, bindings);
+                return this.matchPatternInternal(value, patternValue, bindings, opts);
             }
             return value === patternValue;
         }
@@ -871,13 +1099,14 @@ class Evaluator {
         return value === pattern;
     }
 
-    matchListPattern(values, patterns, bindings) {
+    matchListPattern(values, patterns, bindings, opts) {
+        opts = opts || {};
         const isStar = p => p && (p.type === 'StarWildcard' || (p.type === 'NamedThing' && p.value && p.value.type === 'StarWildcard'));
         const starIndex = patterns.findIndex(isStar);
         if (starIndex === -1) {
             if (values.length !== patterns.length) return false;
             for (let i = 0; i < patterns.length; i++) {
-                if (!this.matchPatternInternal(values[i], patterns[i], bindings)) return false;
+                if (!this.matchPatternInternal(values[i], patterns[i], bindings, opts)) return false;
             }
             this.bindListIndexes(values, bindings);
             return true;
@@ -889,12 +1118,12 @@ class Evaluator {
         if (values.length < before.length + after.length) return false;
 
         for (let i = 0; i < before.length; i++) {
-            if (!this.matchPatternInternal(values[i], before[i], bindings)) return false;
+            if (!this.matchPatternInternal(values[i], before[i], bindings, opts)) return false;
         }
 
         const offset = values.length - after.length;
         for (let i = 0; i < after.length; i++) {
-            if (!this.matchPatternInternal(values[offset + i], after[i], bindings)) return false;
+            if (!this.matchPatternInternal(values[offset + i], after[i], bindings, opts)) return false;
         }
 
         const starPattern = patterns[starIndex];
@@ -914,6 +1143,10 @@ class Evaluator {
     }
 
     deepEqual(a, b) {
+        // Normalise Range values to materialised lists so `1~5` compares
+        // equal to `(1 2 3 4 5)`.
+        if (a && typeof a === 'object' && a.type === 'Range') a = this.asList(a);
+        if (b && typeof b === 'object' && b.type === 'Range') b = this.asList(b);
         // Handle identical references or primitive equality
         if (a === b) return true;
         

@@ -1,26 +1,34 @@
 #A "block of code" is just a list of forms. `!` runs it.#
 
-#`when` is a 4-line library function — no special-form needed#
+#`when` is a 4-line library function — no special-form needed.
+ The conditional is a single-branch dispatch: if `test` is TRUE, run
+ the body; otherwise NULL.#
 when:{test:_ body:_}(
-  test. ? (TRUE body!)
+  test.?{TRUE}(body!)
 )
 
 #Side-effect via a Cell so we can observe whether the body ran#
 ran:[NULL]
-when!(TRUE (ran<yes))
-assert!(ran> yes)
+when!(TRUE (ran<-yes))
+assert!(ran-> yes)
 
-ran<NULL
-when!(FALSE (ran<no))
-assert!(ran> NULL)
+ran<-NULL
+when!(FALSE (ran<-no))
+assert!(ran-> NULL)
 
 #The body sees the caller's scope#
 greeting:hello
-ran<NULL
-when!(TRUE (ran<greeting.))
-assert!(ran> hello)
+ran<-NULL
+when!(TRUE (ran<-greeting.))
+assert!(ran-> hello)
 
 #Code can be built up and then executed#
 prog:concat!((log!) ((skipped)))
 #prog. is the list value (log! skipped); we don't run it here, just check shape#
-assert!(len!(prog.) 2)
+assert!(len!prog. 2)
+
+#Language Extentions#
+infix:{operand1:_ operator:_ operand2:_}(
+  operator.!(operand1. operand2.)
+)
+assert!(infix!(5 + 10) 15)

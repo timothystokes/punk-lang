@@ -25,13 +25,12 @@ solo:hello
 assert!(solo.0. hello)
 assert!(solo.~. hello)
 
-#Lisp spine: head / tail / prepend#
-assert!(head!((a b c)) a)
-assert!(tail!((a b c)) (b c))
+#Lisp spine: index / slice / prepend#
+assert!((a b c).0. a)
+assert!((a b c).1~. (b c))
 assert!(prepend!(z (a b c)) (z a b c))
-#head of empty is NULL, tail of empty is ()#
-assert!(head!(()) NULL)
-assert!(tail!(()) ())
-#head/tail compose to rebuild a list with prepend#
+#slicing an empty list yields an empty list#
+assert!(().1~. ())
+#index 0 + slice from 1 compose to rebuild a list with prepend#
 xs:(1 2 3)
-assert!(prepend!(head!(xs.) tail!(xs.)) xs.)
+assert!(prepend!(xs.0. xs.1~.) xs.)

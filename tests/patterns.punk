@@ -1,72 +1,76 @@
-#Pattern matching with ? {single} and ?? {multi}#
+#Value-first dispatch with `?`: value?(fn1 fn2 ...) tries each function
+ in order; the first whose pattern matches `value` runs with `value` as
+ its arg. No match → NULL. A single function may be passed without `()`.#
 
-#Predicate form: pattern?value → TRUE / FALSE#
-isTim:{Tim}
-assert!(isTim?Tim TRUE)
-assert!(isTim?Bob FALSE)
-assert!(isTim?(Tim) TRUE)
+#Single-branch dispatch: function ref#
+isOne:{1}(yes)
+assert!(1?isOne. yes)
+assert!(2?isOne. NULL)
 
-#Match form: pattern?(value then) → then or NULL#
-isFive:{5}
-assert!(isFive?(5 yes) yes)
-assert!(isFive?(3 yes) NULL)
+#Single-branch dispatch: inline function literal#
+assert!(5?{5}(yes) yes)
+assert!(3?{5}(yes) NULL)
 
 #Wildcard pattern always matches#
-anything:{_}
-assert!(anything?hello TRUE)
-assert!(anything?(hello yes) yes)
+assert!(hello?{_}(matched) matched)
 
-#Lazy then-branch: only runs on match#
-counter:[0]
-isOne:{1}
-isOne?(1 (counter<add!(counter> 1))!)
-isOne?(2 (counter<add!(counter> 100))!)
-assert!(counter> 1)
-
-#Multi-pattern match with ?? - full (pattern result) cases#
-wild:{_}
+#Multi-branch dispatch: first match wins#
 classify:{x:_}(
-  x.??(
-    (1 one)
-    (2 two)
-    (wild. other)
+  x.?(
+    {1}(one)
+    {2}(two)
+    {_}(other)
   )
 )
 assert!(classify!1 one)
 assert!(classify!2 two)
 assert!(classify!9 other)
 
-#?? with bare (pattern) case: matches, no-op, stops, returns NULL#
-silent:{x:_}(
-  x.??(
-    (1 found)
-    (2)
-    (wild. other)
-  )
-)
-assert!(silent!1 found)
-assert!(silent!2 NULL)
-assert!(silent!9 other)
-
-#?? bare (_) catch-all: any non-listed value → NULL, doesn't fall through#
-catchall:{x:_}(
-  x.??(
-    (1 one)
-    (_)
-  )
-)
-assert!(catchall!1 one)
-assert!(catchall!99 NULL)
-
-#?? falls through to NULL when no case matches at all#
+#No catch-all → NULL when nothing matches#
 strict:{x:_}(
-  x.??(
-    (1 one)
-    (2 two)
+  x.?(
+    {1}(one)
+    {2}(two)
   )
 )
 assert!(strict!9 NULL)
 
+#Branches see their own bindings: the wildcard branch captures via `n`#
+describe:{x:_}(
+  x.?(
+    {1}(matched-one)
+    {2}(matched-two)
+    {n:_}(n.)
+  )
+)
+assert!(describe!1 matched-one)
+assert!(describe!2 matched-two)
+assert!(describe!9 9)
+
+#Lazy branches: only the matched branch runs#
+counter:[0]
+1?{1}((counter<-+!(counter-> 1))!)
+2?{1}((counter<-+!(counter-> 100))!)
+assert!(counter-> 1)
+
+#Branches can be a list of function references#
+yes:{1}(one)
+no:{_}(other)
+dispatch:{x:_}(x.?(yes. no.))
+assert!(dispatch!1 one)
+assert!(dispatch!9 other)
+
+#If/else: literal-match for TRUE, wildcard fallback#
+isTrue:{v:_}(
+  v.?(
+    {TRUE}(yes)
+    {_}(no)
+  )
+)
+assert!(isTrue!TRUE yes)
+assert!(isTrue!FALSE no)
+
 #Function body returns the last expression's value#
 greet:{s:_}(upper!s.)
 assert!(greet!hi HI)
+

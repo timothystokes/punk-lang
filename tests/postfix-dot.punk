@@ -1,4 +1,4 @@
-#Postfix-dot dereference: every chain step ends with `.`, `!`, `<` or `>`#
+#Postfix-dot dereference: every chain step ends with `.`, `!`, `<-` or `->`#
 
 #`name.` reads the value bound to `name`#
 greeting:hello
@@ -13,13 +13,13 @@ assert!(literal. hello)
 shout:{s:_}(upper!s.)
 assert!(shout!hello HELLO)
 
-#Implicit dereference before `>` and `<` for cells#
+#Implicit dereference before `->` and `<-` for cells#
 box:[0]
-box<7
-assert!(box> 7)
+box<-7
+assert!(box-> 7)
 
-#Chain through namespaces — `add!` is two steps, last terminated by `!`#
-assert!(add!(1 2) 3)
+#Chain through namespaces — `+!` is two steps, last terminated by `!`#
+assert!(+!(1 2) 3)
 
 #Index literals: every step needs its `.`#
 assert!((10 20 30).0. 10)
@@ -29,3 +29,15 @@ assert!((10 20 30).~. 30)
 data:((name:Alice age:30) (name:Bob age:40))
 assert!(data.0.name. Alice)
 assert!(data.~.age. 40)
+
+#Slice sugar: `N~` open end, `~N` open start, `N~M` both bounds {ends inclusive}#
+xs:(10 20 30 40 50)
+assert!(xs.0~. (10 20 30 40 50))
+assert!(xs.2~. (30 40 50))
+assert!(xs.1~3. (20 30 40))
+assert!(xs.~2. (10 20 30))
+#out-of-range slices yield ()#
+assert!(xs.9~. ())
+assert!(().0~. ())
+#slice result chains like any list#
+assert!(xs.1~3.0. 20)
