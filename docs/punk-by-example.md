@@ -514,10 +514,10 @@ a
 These compose nicely with recursion. Here's a hand-written `sum`:
 
 ```punk
-sum:{_}(
-  len!_.?(
+sum:{lst:_}(
+  len!lst.?(
     {0}(0)
-    {_}(+!(_.0. sum!(_.1~.)))
+    {_}(+!(lst.0. sum!(lst.1~.)))
   )
 )
 > sum!((1 2 3 4 5)) ⏎

@@ -326,8 +326,8 @@ name bindings they introduce. This rule applies uniformly to function
 bodies, dispatch branches {`?`}, and the eval primitive `(…)!`.
 
 ```punk
-compute:{x:_}(
-    y:+!(x. 1)
+compute:{_}(
+    y:+!(_. 1)
     *!(y. 10)
 )
 compute!4      # Returns 50
@@ -336,13 +336,13 @@ compute!4      # Returns 50
 ## Parameter Access
 
 Every parameter slot in a function pattern can be named or unnamed.
-Use `{name:_}` for a named single-Thing slot, `{_}` for an unnamed
-single-Thing slot, `{name:___}` for a named variadic run of Things,
-or `{___}` for an unnamed variadic. Dereference the binding inside the
-body with `name.`:
+For a single-arg function, prefer `{_}` and dereference with `_.`. Use
+`{name:_}` when you want to give the parameter a documenting name (or
+when the body would be clearer with one); `{name:___}` for a named
+variadic run of Things; `{___}` for an unnamed variadic.
 
 ```punk
-double:{n:_}(*!(n. 2))
+double:{_}(*!(_. 2))
 add:{a:_ b:_}(+!(a. b.))
 all:{xs:___}(xs.)
 ```
@@ -377,10 +377,10 @@ A named function can refer to itself by name from inside its own body
 {the binding is in scope before the body runs}:
 
 ```punk
-fact:{n:_}(
-  n.?(
+fact:{_}(
+  _.?(
     {0}(1)
-    {_}(*!(n. fact!-!(n. 1)))
+    {_}(*!(_. fact!-!(_. 1)))
   )
 )
 fact!5      # 120
@@ -393,16 +393,16 @@ stack frame. So tail-recursive loops {e.g. countdown, mutual recursion
 via the spine} run at any depth:
 
 ```punk
-countdown:{n:_}(
-  n.?(
+countdown:{_}(
+  _.?(
     {0}(done)
-    {_}(countdown!-!(n. 1))   # tail call — trampolines
+    {_}(countdown!-!(_. 1))   # tail call — trampolines
   )
 )
 countdown!100000      # done
 ```
 
-Non-tail recursion {like `*!(n. fact!...)` above} still uses the
+Non-tail recursion {like `*!(_. fact!...)` above} still uses the
 JS stack and is bounded by it.
 
 ## Multi-arity Dispatch
@@ -459,8 +459,8 @@ Failure rules differ by context:
   among several regex shapes:
 
 ```punk
-classify:{x:_}(
-  x.?(
+classify:{_}(
+  _.?(
     {n:"^\d+$"}(number)
     {w:"^[a-z]+$"}(word)
     {_}(other)
@@ -492,7 +492,7 @@ If a stage needs the LHS as a single list-shaped arg, give it a `{xs:___}`
 parameter or wrap in a lambda:
 
 ```punk
-5 | {n:_}(+!(n. 10)).          # 15
+5 | {_}(+!(_. 10)).            # 15
 ```
 
 Whitespace around `|` is irrelevant; the RHS is any expression that
