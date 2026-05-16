@@ -457,13 +457,13 @@ TRUE
 
 `map`, `filter`, and `reduce` all take a function as one of their
 arguments. We'll define proper functions in the next section; for now, here
-they are as inline anonymous functions. `{name:_}` is a pattern that
-matches a single Thing and binds it to `name`; inside the body `name.`
-dereferences that bound value:
+they are as inline anonymous functions. `{_}` is a pattern that matches a
+single Thing; inside the body `_.` dereferences it. {For named parameters,
+use `{name:_}` and dereference with `name.`.}
 
 ```punk
 > map!(
-    {n:_}(*!(n. 2))
+    {_}(*!(_. 2))
     (1 2 3)
   ) ⏎
 (2 4 6)
@@ -471,7 +471,7 @@ dereferences that bound value:
 
 ```punk
 > filter!(
-    {n:_}(=!(%!(n. 2) 0))
+    {_}(=!(%!(_. 2) 0))
     (1 2 3 4)
   ) ⏎
 (2 4)
@@ -514,10 +514,10 @@ a
 These compose nicely with recursion. Here's a hand-written `sum`:
 
 ```punk
-sum:{lst:_}(
-  len!lst.?(
+sum:{_}(
+  len!_.?(
     {0}(0)
-    {_}(+!(lst.0. sum!(lst.1~.)))
+    {_}(+!(_.0. sum!(_.1~.)))
   )
 )
 > sum!((1 2 3 4 5)) ⏎
@@ -540,7 +540,7 @@ integer list `(N N+1 … M)`; a reversed range is empty.
 ()
 > -2~2 ⏎
 (-2 -1 0 1 2)
-> map!({n:_}(*!(n. n.)) 1~4) ⏎
+> map!({_}(*!(_. _.)) 1~4) ⏎
 (1 4 9 16)
 ```
 
@@ -576,7 +576,7 @@ h
 ```
 
 `a | f. | g.` means `g!{f!a}`. For multi-argument stages, wrap in a
-lambda: `5 | {n:_}(+!(n. 10)).`.
+lambda: `5 | {_}(+!(_. 10)).`.
 
 A stage can be any expression that evaluates to a function value, not
 just a bare deref. So `a | getFn!key` is fine when `getFn!key` returns
@@ -635,11 +635,10 @@ of expressions evaluated in order, and the call's value is the **value
 of the last expression** {Clojure-style}. Earlier expressions run for
 their side effects and any name bindings they introduce.
 
-A function over a single argument names it once and dereferences with
-`name.`:
+A function over a single argument uses `{_}` and dereferences with `_.`:
 
 ```punk
-> double:{n:_}(*!(n. 2)) ⏎
+> double:{_}(*!(_. 2)) ⏎
 > double!5 ⏎
 10
 ```
@@ -647,8 +646,8 @@ A function over a single argument names it once and dereferences with
 Earlier expressions can prepare values that the last expression uses:
 
 ```punk
-> compute:{x:_}(
-    y:+!(x. 1)
+> compute:{_}(
+    y:+!(_. 1)
     *!(y. 10)
   ) ⏎
 > compute!4 ⏎
@@ -702,7 +701,7 @@ gives you the function itself {suitable for passing as an argument}; using
 `!` instead *calls* it:
 
 ```punk
-> double:{n:_}(*!(n. 2)) ⏎
+> double:{_}(*!(_. 2)) ⏎
 > map!(double. (1 2 3)) ⏎
 (2 4 6)
 ```
@@ -711,7 +710,7 @@ You don't have to bind a function to a name. Anonymous functions are
 written the same way, and dropped in where you need them:
 
 ```punk
-> map!({n:_}(^!(n. 2)) (1 2 3)) ⏎
+> map!({_}(^!(_. 2)) (1 2 3)) ⏎
 (1 4 9)
 ```
 
@@ -761,7 +760,7 @@ The list builtins `map!`/`filter!`/`reduce!`/`flatMap!` take the
 transformers naturally:
 
 ```punk
-> incAll:map'{n:_}(+!(n. 1)) ⏎
+> incAll:map'{_}(+!(_. 1)) ⏎
 > incAll!(1 2 3) ⏎
 (2 3 4)
 
@@ -812,8 +811,8 @@ NULL
 Multi-branch — wildcard as a catch-all:
 
 ```punk
-> classify:{x:_}(
-    x.?(
+> classify:{_}(
+    _.?(
       {1}(one)
       {2}(two)
       {_}(other)
@@ -848,7 +847,7 @@ five
 Branches are real function values, so:
 
 - their pattern bindings are visible inside the body
-  (e.g. `{n:_}(n.)` returns whatever `x` was);
+  (e.g. `{n:_}(n.)` returns whatever was matched);
 - a tail-position self-call inside a branch trampolines;
 - branches can be named functions, inline literals, or dereferences
   of any expression that evaluates to one.
@@ -856,7 +855,7 @@ Branches are real function values, so:
 ```punk
 > yes:{1}(one) ⏎
 > no:{_}(other) ⏎
-> dispatch:{x:_}(x.?(yes. no.)) ⏎
+> dispatch:{_}(_.?(yes. no.)) ⏎
 > dispatch!1 ⏎
 one
 > dispatch!9 ⏎
@@ -890,7 +889,7 @@ the branch** in a `?` dispatch — so `?` works as a regex-driven case
 statement:
 
 ```punk
-> classify:{x:_}(x.?(
+> classify:{_}(_.?(
     {n:"^\d+$"}(number)
     {w:"^[a-z]+$"}(word)
     {_}(other)
@@ -1045,10 +1044,10 @@ A named function can call itself by name; the binding is in scope
 before the body runs:
 
 ```punk
-fact:{n:_}(
-  n.?(
+fact:{_}(
+  _.?(
     {0}(1)
-    {_}(*!(n. fact!-!(n. 1)))
+    {_}(*!(_. fact!-!(_. 1)))
   )
 )
 > fact!10 ⏎
@@ -1061,10 +1060,10 @@ result — Punk trampolines the call instead of growing the JavaScript
 stack. So tail-recursive loops run at any depth:
 
 ```punk
-countdown:{n:_}(
-  n.?(
+countdown:{_}(
+  _.?(
     {0}(done)
-    {_}(countdown!-!(n. 1))   # tail call — trampolines
+    {_}(countdown!-!(_. 1))   # tail call — trampolines
   )
 )
 > countdown!100000 ⏎
@@ -1092,6 +1091,7 @@ function.                          # reference to the function itself
 value?fn.                          # single-branch dispatch
 value?{p}(body)                    # inline literal branch
 value?(fn1 fn2 fn3)                # ordered branches; first match wins, else NULL
+{_}(body)                          # anonymous function {single arg, deref via `_.`}
 {name:_}(body)                     # anonymous function {named parameter}
 _.                                 # inside a body: the raw argument as passed
 [value]  name->  name<-v           # cell create / read / write

@@ -247,8 +247,8 @@ isOne:{1}(matched)
 1?isOne.                         # matched
 9?isOne.                         # NULL
 
-classify:{x:_}(
-  x.?(
+classify:{_}(
+  _.?(
     {1}(one)
     {2}(two)
     {_}(other)               # wildcard catch-all
@@ -276,7 +276,7 @@ Branches can be any expression that evaluates to a function value — a named fu
 ```punk
 yes:{1}(one)
 no:{_}(other)
-dispatch:{x:_}(x.?(yes. no.))
+dispatch:{_}(_.?(yes. no.))
 dispatch!1                       # one
 dispatch!9                       # other
 ```
@@ -287,26 +287,26 @@ Functions are defined by a pattern connected to an expression {List} that can be
 
 **Every function takes exactly one Thing as its parameter.** Since a List is a single Thing, you can effectively pass multiple values by wrapping them in a List `( )`.
 
-Punk has no methods. Operations live in function libraries {like `math`, `list`, `text`}, and the target Thing is passed as the argument. For example, use `map!({n:_}(...) numbers.)` rather than `numbers.map`. Higher-order list builtins take the **function first** {Clojure-style} — this composes naturally with partial application (`map'fn.`).
+Punk has no methods. Operations live in function libraries {like `math`, `list`, `text`}, and the target Thing is passed as the argument. For example, use `map!({_}(...) numbers.)` rather than `numbers.map`. Higher-order list builtins take the **function first** {Clojure-style} — this composes naturally with partial application (`map'fn.`).
 
 To call a named function, write the name immediately followed by `!`. The `!` implicitly dereferences the name. For example:
 
 ```punk
-double:{n:_}(*!(n. 2))   # Define a function named 'double'
+double:{_}(*!(_. 2))            # Define a function named 'double'
 double!4                        # Returns 8  — the value of the last expression
 ```
 
 If a function name is followed by postfix `.` {not `!`}, the result is a *reference* to the function itself, suitable for passing to another function:
 
 ```punk
-double:{n:_}(*!(n. 2))
+double:{_}(*!(_. 2))
 map!(double. numbers.)    # Passes the function reference and the list to map
 ```
 
 Punk supports anonymous functions, which are useful for higher-order functions that accept a function as a parameter.
 
 ```punk
-map!({person:_}(person.name.) people.)
+map!({_}(_.name.) people.)
 ```
 Returns a list of names from a list of people that contain an element called `name`.
 

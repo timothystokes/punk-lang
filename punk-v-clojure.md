@@ -742,7 +742,7 @@ true
 **Punk**
 ```punk
 > map!(
-    {n:_}(*!(n. 2))
+    {_}(*!(_. 2))
     (1 2 3)
   ) ⏎
 (2 4 6)
@@ -756,7 +756,7 @@ user=> (map (fn [n] (* n 2)) [1 2 3]) ⏎
 **Punk**
 ```punk
 > filter!(
-    {n:_}(=!(%!(n. 2) 0))
+    {_}(=!(%!(_. 2) 0))
     (1 2 3 4)
   ) ⏎
 (2 4)
@@ -944,7 +944,7 @@ Both use **last-expression-is-value** body semantics.
 
 **Punk**
 ```punk
-> double:{n:_}(*!(n. 2)) ⏎
+> double:{_}(*!(_. 2)) ⏎
 > double!5 ⏎
 10
 ```
@@ -959,8 +959,8 @@ Multi-statement body {in Clojure, use `let` for local bindings}:
 
 **Punk**
 ```punk
-> compute:{x:_}(
-    y:+!(x. 1)
+> compute:{_}(
+    y:+!(_. 1)
     *!(y. 10)
   ) ⏎
 > compute!4 ⏎
@@ -1047,7 +1047,7 @@ Functions are first-class values:
 
 **Punk**
 ```punk
-> double:{n:_}(*!(n. 2)) ⏎
+> double:{_}(*!(_. 2)) ⏎
 > map!(double. (1 2 3)) ⏎
 (2 4 6)
 ```
@@ -1062,7 +1062,7 @@ Anonymous functions:
 
 **Punk**
 ```punk
-> map!({n:_}(^!(n. 2)) (1 2 3)) ⏎
+> map!({_}(^!(_. 2)) (1 2 3)) ⏎
 (1 4 9)
 ```
 **Clojure**
@@ -1136,7 +1136,7 @@ deliberate — it lets you build reusable transformers via partial:
 
 **Punk**
 ```punk
-> incAll:map'{n:_}(+!(n. 1)) ⏎
+> incAll:map'{_}(+!(_. 1)) ⏎
 > incAll!(1 2 3) ⏎
 (2 3 4)
 > sum:reduce'(+. 0) ⏎
@@ -1283,7 +1283,7 @@ so it acts like a regex case statement.
 
 **Punk**
 ```punk
-classify:{x:_}(x.?(
+classify:{_}(_.?(
   {n:"^\d+$"}(number)
   {w:"^[a-z]+$"}(word)
   {_}(other)
@@ -1545,10 +1545,10 @@ Non-tail recursion {uses the stack in both}:
 
 **Punk**
 ```punk
-fact:{n:_}(
-  n.?(
+fact:{_}(
+  _.?(
     {0}(1)
-    {_}(*!(n. fact!-!(n. 1)))
+    {_}(*!(_. fact!-!(_. 1)))
   )
 )
 > fact!10 ⏎
@@ -1568,10 +1568,10 @@ Tail-call optimised loop:
 
 **Punk**
 ```punk
-countdown:{n:_}(
-  n.?(
+countdown:{_}(
+  _.?(
     {0}(done)
-    {_}(countdown!-!(n. 1))    # implicit tail call
+    {_}(countdown!-!(_. 1))    # implicit tail call
   )
 )
 > countdown!100000 ⏎
@@ -1601,7 +1601,7 @@ done
 | By name           | `xs.name.`                              | `(:name xs)`                         |
 | Call              | `f!arg`                                 | `(f arg)`                            |
 | Function value    | `f.`                                    | `f`                                  |
-| Anonymous fn      | `{n:_}(…)`                              | `(fn [n] …)` / `#(…)`                |
+| Anonymous fn      | `{_}(…)` {single arg} / `{n:_}(…)` {named} | `#(…)` / `(fn [n] …)`             |
 | Last-expression body | yes                                  | yes                                  |
 | Variadic param    | `{___}` / `_.`                          | `& xs`                               |
 | Dispatch (1 branch) | `value?fn.` / `value?{p}(body)`        | `(when (pred? v) then)`              |
