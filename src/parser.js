@@ -42,6 +42,7 @@ class Parser {
     }
 
     expression() {
+        const startTok = this.peek();
         let expr = this.primary();
         expr = this.postfix(expr);
         
@@ -62,13 +63,19 @@ class Parser {
             // `.` — reject at parse time with a clear message rather than
             // let the runtime say "Target is not a function Thing".
             if (stage.type === 'Thing') {
-                throw new Error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
+                throw this.error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
             }
             // `a | f.` desugars to `f!a` — the LHS value goes in as the arg
             // (no wrapping), so the pipeline mirrors a direct `!` call exactly.
             expr = { type: 'FunctionCall', callee: stage, arg: expr };
         }
         
+        // Tag the outermost node with the start position so runtime
+        // errors can pinpoint where in the source the value came from.
+        if (expr && typeof expr === 'object' && expr.line == null && startTok && startTok.line != null) {
+            expr.line = startTok.line;
+            expr.column = startTok.column;
+        }
         return expr;
     }
 
@@ -101,7 +108,7 @@ class Parser {
             const pattern = this.pattern();
             if (this.check('LEFT_BRACKET')) {
                 if (this.peek().leadingWhitespace) {
-                    throw new Error("Function literal must be tight: no whitespace between pattern '}' and body '(' in '{pattern}(body)'");
+                    throw this.error("Function literal must be tight: no whitespace between pattern '}' and body '(' in '{pattern}(body)'");
                 }
                 this.advance();
                 const body = this.list();
@@ -155,17 +162,17 @@ class Parser {
             return { type: 'StarWildcard' };
         }
         if (this.check('DOT')) {
-            throw new Error("Bare '.' as a parameter reference is no longer supported; name your parameters with '{name:_}' and dereference with 'name.'");
+            throw this.error("Bare '.' as a parameter reference is no longer supported; name your parameters with '{name:_}' and dereference with 'name.'");
         }
         if (this.match('THING')) {
             const name = this.previous().literal;
             if (this.check('COLON')) {
                 if (this.peek().leadingWhitespace) {
-                    throw new Error("Binding ':' must be tight: no whitespace before ':' in 'name:value'");
+                    throw this.error("Binding ':' must be tight: no whitespace before ':' in 'name:value'");
                 }
                 this.advance();
                 if (this.peek().leadingWhitespace) {
-                    throw new Error("Binding ':' must be tight: no whitespace after ':' in 'name:value'");
+                    throw this.error("Binding ':' must be tight: no whitespace after ':' in 'name:value'");
                 }
                 // `name:|stage. | stage.` — headless-pipe function binding.
                 // The `:` and first `|` must be adjacent (the leadingWhitespace
@@ -175,17 +182,17 @@ class Parser {
                     const stages = [];
                     while (this.match('PIPE')) {
                         if (this.isAtEnd() || this.check('PIPE')) {
-                            throw new Error("`name:|` needs a pipe stage after each `|`");
+                            throw this.error("`name:|` needs a pipe stage after each `|`");
                         }
                         let stage = this.primary();
                         stage = this.postfix(stage);
                         if (stage.type === 'Thing') {
-                            throw new Error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
+                            throw this.error("Pipeline stage must yield a function value; did you mean `" + stage.value + ".`?");
                         }
                         stages.push(stage);
                     }
                     if (stages.length === 0) {
-                        throw new Error("`name:|` needs at least one pipe stage");
+                        throw this.error("`name:|` needs at least one pipe stage");
                     }
                     let acc = { type: 'Dereference', name: '_' };
                     for (const stage of stages) {
@@ -198,7 +205,7 @@ class Parser {
                 const value = this.expression();
                 if (value && value.type === 'Pattern' && this.check('LEFT_BRACKET')) {
                     if (this.peek().leadingWhitespace) {
-                        throw new Error("Function literal must be tight: no whitespace between pattern '}' and body '(' in '{pattern}(body)'");
+                        throw this.error("Function literal must be tight: no whitespace between pattern '}' and body '(' in '{pattern}(body)'");
                     }
                     this.advance();
                     const body = this.list();
@@ -219,7 +226,7 @@ class Parser {
             }
             return { type: 'Thing', value: name };
         }
-        throw new Error(`Unexpected Thing: ${this.peek().type}`);
+        throw this.error(`Unexpected Thing: ${this.peek().type}`);
     }
 
     // After reading a dereference step name (`name`, `0`, `~`), the next token
@@ -227,11 +234,11 @@ class Parser {
     // that `lst.0` (missing terminator) is rejected with a clear message.
     expectStepCloser(name) {
         if (this.isAtEnd() || this.peek().leadingWhitespace) {
-            throw new Error(`Dereference step '${name}' must be terminated with '.', '!', '<-' or '->'`);
+            throw this.error(`Dereference step '${name}' must be terminated with '.', '!', '<-' or '->'`);
         }
         const t = this.peek().type;
         if (t !== 'DOT' && t !== 'BANG' && t !== 'APOSTROPHE' && t !== 'LEFT_ARROW' && t !== 'RIGHT_ARROW') {
-            throw new Error(`Dereference step '${name}' must be terminated with '.', '!', '<-' or '->'`);
+            throw this.error(`Dereference step '${name}' must be terminated with '.', '!', '<-' or '->'`);
         }
     }
 
@@ -390,7 +397,13 @@ class Parser {
 
     consume(type, message) {
         if (this.check(type)) return this.advance();
-        throw new Error(`${message} (got ${this.peek().type})`);
+        throw this.error(message + ` (got ${this.peek().type})`);
+    }
+
+    error(message, token = null) {
+        const t = token || this.peek();
+        const pos = (t && t.line != null) ? `[${t.line}:${t.column}] ` : '';
+        return new Error(pos + message);
     }
 
     isAtEnd() {
@@ -398,7 +411,21 @@ class Parser {
     }
 
     peek() {
-        if (this.isAtEnd()) return { type: 'EOF', text: '' };
+        if (this.isAtEnd()) {
+            // Synthesize an EOF marker carrying the position right after
+            // the last real token, so end-of-input errors still pinpoint
+            // a useful location.
+            const last = this.tokens[this.tokens.length - 1];
+            if (last) {
+                return {
+                    type: 'EOF',
+                    text: '',
+                    line: last.line,
+                    column: last.column + (last.text ? last.text.length : 0)
+                };
+            }
+            return { type: 'EOF', text: '', line: 1, column: 1 };
+        }
         return this.tokens[this.current];
     }
 

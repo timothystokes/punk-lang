@@ -4,6 +4,10 @@ class Tokenizer {
         this.tokens = [];
         this.start = 0;
         this.current = 0;
+        this.line = 1;
+        this.column = 1;
+        this.tokenLine = 1;
+        this.tokenColumn = 1;
         this.seenWhitespace = true;
     }
 
@@ -12,10 +16,14 @@ class Tokenizer {
         this.tokens = [];
         this.start = 0;
         this.current = 0;
+        this.line = 1;
+        this.column = 1;
         this.seenWhitespace = true;
 
         while (!this.isAtEnd()) {
             this.start = this.current;
+            this.tokenLine = this.line;
+            this.tokenColumn = this.column;
             this.scanToken();
         }
 
@@ -182,12 +190,19 @@ class Tokenizer {
     match(expected) {
         if (this.isAtEnd()) return false;
         if (this.source.charAt(this.current) !== expected) return false;
-        this.current++;
+        this.advance();
         return true;
     }
 
     advance() {
-        return this.source.charAt(this.current++);
+        const c = this.source.charAt(this.current++);
+        if (c === '\n') {
+            this.line++;
+            this.column = 1;
+        } else {
+            this.column++;
+        }
+        return c;
     }
 
     peek() {
@@ -205,7 +220,9 @@ class Tokenizer {
             type,
             text,
             literal: literal !== null ? literal : text,
-            leadingWhitespace: this.seenWhitespace
+            leadingWhitespace: this.seenWhitespace,
+            line: this.tokenLine,
+            column: this.tokenColumn
         });
         this.seenWhitespace = false;
     }

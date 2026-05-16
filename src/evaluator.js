@@ -356,11 +356,12 @@ class Evaluator {
             };
         }
         if (typeof v === 'number') {
+            const text = this.formatValue(v);
             return {
-                items: Array.from(String(v)),
+                items: Array.from(text),
                 rewrap: (xs) => {
                     const s = xs.map(x => typeof x === 'string' ? x : this.formatValue(x)).join('');
-                    return /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : s;
+                    return /^-?\d+(,\d+)?$/.test(s) ? Number(s.replace(',', '.')) : s;
                 }
             };
         }
@@ -406,14 +407,17 @@ class Evaluator {
     // Throw an error in the same shape Punk uses for runtime issues. Kept in
     // one place so any future error-channel changes (line info, types, etc.)
     // happen uniformly across native and built-in code paths.
-    punkError(message) {
+    punkError(message, node = null) {
+        if (node && node.line != null) {
+            return new Error(`[${node.line}:${node.column}] ${message}`);
+        }
         return new Error(message);
     }
 
-    setName(name, value) {
+    setName(name, value, node = null) {
         const top = this.scopes[this.scopes.length - 1];
         if (top.has(name)) {
-            throw new Error(`Cannot rebind '${name}': named Things are immutable. Use a cell '[...]' with '<-' for mutable state.`);
+            throw this.punkError(`Cannot rebind '${name}': named Things are immutable. Use a cell '[...]' with '<-' for mutable state.`, node);
         }
         top.set(name, value);
     }
@@ -439,6 +443,22 @@ class Evaluator {
     }
 
     evaluate(node) {
+        try {
+            return this.evaluateNode(node);
+        } catch (e) {
+            // Stamp the outermost node's source position onto any runtime
+            // error that doesn't already carry one. This propagates the
+            // closest known location out of the evaluator without having
+            // to thread `node` into every helper.
+            if (e && e.message && !/^\[\d+:\d+\]/.test(e.message)
+                && node && node.line != null) {
+                e.message = `[${node.line}:${node.column}] ${e.message}`;
+            }
+            throw e;
+        }
+    }
+
+    evaluateNode(node) {
         switch (node.type) {
             case 'Program':
                 return this.evaluateProgram(node);
@@ -511,7 +531,7 @@ class Evaluator {
 
     evaluateNamedThing(node) {
         const value = this.evaluate(node.value);
-        this.setName(node.name, value);
+        this.setName(node.name, value, node);
         return value;
     }
 
@@ -522,7 +542,7 @@ class Evaluator {
             body: node.body,
             closure: this.captureClosure()
         };
-        this.setName(node.name, fn);
+        this.setName(node.name, fn, node);
         return fn;
     }
 

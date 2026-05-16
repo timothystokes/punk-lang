@@ -52,6 +52,11 @@ assert!(word.~2. Ste)
 n:12345
 assert!(len!n. 5)
 assert!(n.1~3. 234)
+#decimals: comma is the separator under indexing/slicing too#
+pi:3,14
+assert!(pi.1. ,)
+assert!(pi.0~1. 3,)
+assert!(pi.2~3. 14)
 #chain: list -> text -> char#
 names:(Tim Bob)
 assert!(names.0.0. T)
