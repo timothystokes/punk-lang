@@ -1,0 +1,31 @@
+#Text literals: `"..."` is a raw text value. Content between the quotes
+ is taken verbatim — no escape processing. `\"` embeds a literal `"`.#
+
+#1. Basic text literal evaluates to its content#
+g:"hello world"
+assert!(g. "hello world")
+
+#2. Spaces, punctuation, and angle brackets are preserved verbatim —
+ no need for `\s` / `\<` escapes inside a text literal#
+doc:"<!DOCTYPE html>"
+assert!(doc. "<!DOCTYPE html>")
+
+#3. Backslashes are literal (no escape processing)#
+path:"a\b\c"
+assert!(=!(len!path. 5) TRUE)
+
+#4. Embed a literal `"` with `\"` — the only recognised escape#
+q:"say \"hi\""
+assert!(=!(len!q. 8) TRUE)
+
+#5. Text literals work as pattern-position constants (equality match)#
+classify:{x:_}(
+  x.?(
+    {"yes"}(affirmative)
+    {"no"}(negative)
+    {_}(unknown)
+  )
+)
+assert!(classify!"yes" affirmative)
+assert!(classify!"no" negative)
+assert!(classify!"maybe" unknown)

@@ -1,0 +1,66 @@
+http:import!punk.http.
+html:import!punk.html.
+keystore:import!punk.keystore.
+
+db:[keystore.open!todo\.kv]
+
+#nextId is a cell — id sequence for new todos. On boot we seed it
+ from the number of distinct keys currently in the store.#
+nextId:[+!(len!keystore.keys!db->. 1)]
+
+#---- Domain ----#
+listTodos:{___}(map!({_}(keystore.get!(db-> _.)) keystore.keys!db->.))
+
+createTodo:{note:_ desc:_}(
+  db<-keystore.put!(db-> +!(t nextId->) list!(note. desc.))
+  nextId<-+!(nextId-> 1)
+)
+
+#---- Page template ----#
+indexPage:{todos:_}(
+  html:{lang:en}(
+    head:{}(
+      meta:{charset:UTF-8}()
+      title:{}(punk-todo)
+    )
+    body:{}(
+      h1:{}(Todo)
+      form:{method:POST action:/todo enctype:text/plain}(
+        input:{name:note type:text}()
+        input:{name:description type:text}()
+        button:{type:submit}(Add Item)
+      )
+      ul:{}(map!({___}(t:_.0. li:{}(join!list!(join!(t.0. \s) \s-\s join!(t.1. \s)))) todos.))
+    )
+  )
+)
+
+#---- Handlers ----#
+index:{___}(list!(
+  status:200
+  headers:(Content-Type:text/html)
+  body:+!(\<\!DOCTYPE\shtml\> html.render!indexPage!(todos:listTodos!).)
+))
+
+#Handler turns the raw POST body into a NamedThing form via
+ `html.parsePost!` then reads fields by name.#
+createTodoHandler:{_ _ body:_}(
+  form:html.parsePost!body.
+  createTodo!(form.note. form.description.)
+  list!(status:303 headers:(Location:/) body:\s)
+)
+
+notFound:{___}(
+  list!(status:404 headers:(Content-Type:text/plain) body:Not\sFound)
+)
+
+#---- Routing ----#
+dispatch:{___}(_.?(
+  {method:GET  path:/      ___}(index!_.)
+  {method:POST path:/todo  ___}(createTodoHandler!_.)
+  {___}(notFound!_.)
+))
+
+#---- Server ----#
+http.serve!(8080 dispatch)
+log!(listening on port 8080)

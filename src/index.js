@@ -35,8 +35,9 @@ function isComplete(source) {
 
 function runFile(sourceFile) {
     try {
-        const source = fs.readFileSync(sourceFile, 'utf-8');
-        const evaluator = new Evaluator();
+        const absPath = require('path').resolve(sourceFile);
+        const source = fs.readFileSync(absPath, 'utf-8');
+        const evaluator = new Evaluator({ entryFile: absPath });
         const result = run(source, evaluator);
         if (result !== undefined) console.log(evaluator.formatValue(result));
     } catch (error) {

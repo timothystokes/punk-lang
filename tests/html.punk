@@ -1,0 +1,61 @@
+#html.render! renders function-as-data trees. Each `tag:{attrs}(children)` node
+ becomes <tag attrs>children</tag>. Functions are read as AST, never
+ called. The outer root's tag is *not* emitted — only its children are.
+
+ We compare results via `split!` so list literals can be written with
+ single-char escapes (no need for literal-space Things).#
+
+html:import!punk.html.
+
+#---- basic element ----#
+assert!(split!html.render!{}(p:{}(hi)). (\< p \> h i \< \/ p \>))
+
+#---- text content is escaped ----#
+#`<oops>` → `&lt;oops&gt;`#
+assert!(split!html.render!{}(p:{}(\<oops\>)). (\< p \> \& l t \; o o p s \& g t \; \< \/ p \>))
+
+#`&` in text → `&amp;`#
+assert!(split!html.render!{}(p:{}(\&)). (\< p \> \& a m p \; \< \/ p \>))
+
+#---- void elements self-close, no body ----#
+assert!(split!html.render!{}(br:{}()). (\< b r \/ \>))
+assert!(split!html.render!{}(img:{src:logo}()). (\< i m g \s  s r c \= \" l o g o \" \/ \>))
+assert!(split!html.render!{}(hr:{}()). (\< h r \/ \>))
+
+#---- non-void with no children renders open+close ----#
+assert!(split!html.render!{}(div:{}()). (\< d i v \> \< \/ d i v \>))
+
+#---- attributes render as key="value" ----#
+assert!(split!html.render!{}(a:{href:home}(go)). (\< a \s  h r e f \= \" h o m e \" \> g o \< \/ a \>))
+
+#---- multiple attributes ----#
+assert!(
+  split!html.render!{}(input:{type:text name:q}()).
+  (\< i n p u t \s  t y p e \= \" t e x t \" \s  n a m e \= \" q \" \/ \>)
+)
+
+#---- attribute values are escaped (", <, >, &) ----#
+assert!(split!html.render!{}(p:{title:\&}(x)). (\< p \s  t i t l e \= \" \& a m p \; \" \> x \< \/ p \>))
+
+#---- boolean attrs: TRUE → bare name, FALSE/NULL → omitted ----#
+assert!(split!html.render!{}(button:{disabled:TRUE}(go)). (\< b u t t o n \s  d i s a b l e d \> g o \< \/ b u t t o n \>))
+assert!(split!html.render!{}(button:{disabled:FALSE}(go)). (\< b u t t o n \> g o \< \/ b u t t o n \>))
+assert!(split!html.render!{}(button:{disabled:NULL}(go)). (\< b u t t o n \> g o \< \/ b u t t o n \>))
+
+#---- nested elements concatenate children ----#
+assert!(
+  split!html.render!{}(div:{}(span:{}(a) span:{}(b))).
+  (\< d i v \> \< s p a n \> a \< \/ s p a n \> \< s p a n \> b \< \/ s p a n \> \< \/ d i v \>)
+)
+
+#---- root pattern + multiple children: root tag NOT emitted ----#
+assert!(
+  split!html.render!{lang:en}(head:{}() body:{}(h1:{}(Hi))).
+  (\< h e a d \> \< \/ h e a d \> \< b o d y \> \< h \1 \> H i \< \/ h \1 \> \< \/ b o d y \>)
+)
+
+#---- deeply nested ----#
+assert!(
+  split!html.render!{}(html:{lang:en}(body:{}(p:{}(ok)))).
+  (\< h t m l \s  l a n g \= \" e n \" \> \< b o d y \> \< p \> o k \< \/ p \> \< \/ b o d y \> \< \/ h t m l \>)
+)

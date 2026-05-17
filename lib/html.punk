@@ -1,0 +1,94 @@
+#Parse a `text/plain` form-encoded POST body into a list of
+ NamedThings. Each `key=value` line becomes `key:(words...)` — the
+ value is split into a word-list so spaces survive intact. Caller
+ reaches fields via `form.fieldname.`.#
+parsePost:{body:_}(
+  lines:filter!({line:_}(>!(len!trim!line. 0)) split!(body. \n))
+  map!({line:_}(
+    parts:split!(trim!line. =)
+    named!(parts.0. split!(parts.1. \s))
+  ) lines.)
+)
+
+#html.punk — HTML renderer in pure Punk.
+
+ Walks a function-as-data tree via `pattern!` and `body!` reflection.
+ Each `tag:{attrs}(children)` node becomes <tag attrs>children</tag>.
+ Element functions are never called — they're read as data.
+
+ Usage:
+   html:import!html.punk
+   page:{lang:en}(h1:{}(Hello) p:{class:lead}(welcome))
+   html.render!page.
+ →  <h1>Hello</h1><p class="lead">welcome</p>
+
+ The root function's own tag is NOT emitted — only its children. Wrap
+ in an outer `html:{lang:en}(...)` to get a full <html> wrapper.
+
+ Also exposes `parsePost!` for turning text/plain form bodies into a
+ NamedThing list (see top of file).#
+
+voidTags:(area base br col embed hr img input link meta source track wbr)
+
+escText:{s:_}(
+  replace!(replace!(replace!(s. \& \&amp\;) \< \&lt\;) \> \&gt\;)
+)
+
+escAttr:{s:_}(
+  replace!(escText!s. \" \&quot\;)
+)
+
+#One attribute entry. NamedThing form: k=name, v=value. Bare form: k=NULL.#
+renderAttr:{v:_ i:_ k:_}(
+  k.?(
+    {NULL}(join!())
+    {_}(
+      v.?(
+        {TRUE}(join!(\s k.))
+        {FALSE}(join!())
+        {NULL}(join!())
+        {_}(join!(\s k. \=\" escAttr!v. \"))
+      )
+    )
+  )
+)
+
+renderAttrs:{el:_}(join!(map!(renderAttr. pattern!el.)))
+
+#One body child. For NamedThing-wrapped functions: k=name, v=fn. For
+ plain text leaves: k=NULL, v=value. A list value (e.g. from `map!`)
+ is spliced — each item rendered in turn.#
+renderChild:{v:_ i:_ k:_}(
+  islist!v. ?(
+    {TRUE}(join!(map!(renderChild. v.)))
+    {FALSE}(isfn!v.?(
+      {TRUE}(renderElem!(k. v.))
+      {FALSE}(escText!v.)
+    ))
+  )
+)
+
+renderInner:{el:_}(join!(map!(renderChild. body!el.)))
+
+#name + element-function → <name attrs>inner</name> or self-closed if void.#
+renderElem:{name:_ el:_}(
+  attrs:renderAttrs!el.
+  contains!(voidTags. name.) ?(
+    {TRUE}(join!(\< name. attrs. \/\>))
+    {FALSE}(join!(\< name. attrs. \> renderInner!el. \<\/ name. \>))
+  )
+)
+
+#Render an element tree to HTML text.
+ - If `root` is a bare function (e.g. an outer `wrap:{}(...)`), only its
+   children are emitted (no wrapping tag).
+ - If `root` is a NamedThing (e.g. a top-level `html:{lang:en}(...)`),
+   it IS rendered as a tag — useful when the template's last expression
+   names the outer element directly.#
+render:{___}(
+  root:_.
+  isfn!root. ?(
+    {TRUE}(renderInner!root.)
+    {FALSE}(renderElem!(root.name. root.value.))
+  )
+)

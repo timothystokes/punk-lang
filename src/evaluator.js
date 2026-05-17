@@ -1,7 +1,91 @@
+const path = require('path');
+const fs = require('fs');
+const { Module } = require('module');
+const { jsObjectGet } = require('./js-interop');
+const { fromJS } = require('./js-interop');
+
 class Evaluator {
-    constructor() {
+    constructor(opts = {}) {
         this.scopes = [new Map()];
+        // Stack of file paths used to resolve relative `load!`, `read!`,
+        // `write!`, and `js.require!`. Bottom of stack is the entry
+        // file (or cwd-pseudo-file when running stdin/REPL).
+        this.fileStack = [opts.entryFile || path.join(process.cwd(), '<repl>')];
+        // Cache of loaded module namespaces, keyed by absolute path.
+        this.moduleCache = new Map();
         this.setupBuiltins();
+    }
+
+    currentFile() {
+        return this.fileStack[this.fileStack.length - 1];
+    }
+
+    resolveRelative(rel) {
+        if (path.isAbsolute(rel)) return rel;
+        const baseDir = path.dirname(this.currentFile());
+        return path.resolve(baseDir, rel);
+    }
+
+    // Resolve a punk package name to its lib root directory.
+    // - If `name` matches the nearest package.json's own name, return
+    //   that package's `lib/` dir.
+    // - Otherwise resolve `<name>/package.json` via Node's require chain
+    //   relative to the currently-executing file (so npm-installed punk
+    //   packages work), and return that package's `lib/` dir.
+    // Returns null if no package matches.
+    resolvePackage(name) {
+        // Local package.json walk-up.
+        let dir = path.dirname(this.currentFile());
+        const seen = new Set();
+        while (dir && !seen.has(dir)) {
+            seen.add(dir);
+            const pj = path.join(dir, 'package.json');
+            if (fs.existsSync(pj)) {
+                try {
+                    const meta = JSON.parse(fs.readFileSync(pj, 'utf8'));
+                    if (meta.name === name) return path.join(dir, 'lib');
+                } catch (_) { /* ignore */ }
+                break;
+            }
+            const parent = path.dirname(dir);
+            if (parent === dir) break;
+            dir = parent;
+        }
+        // node_modules lookup via require chain.
+        try {
+            const req = Module.createRequire(this.currentFile());
+            const pj = req.resolve(name + '/package.json');
+            return path.join(path.dirname(pj), 'lib');
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // Load a `.punk` module file and return its namespace (a list of
+    // NamedThing bindings produced by evaluating the file's top-level
+    // statements in a fresh scope). Cached by absolute path.
+    loadModule(target) {
+        if (this.moduleCache.has(target)) return this.moduleCache.get(target);
+        const source = fs.readFileSync(target, 'utf8');
+        const { Tokenizer } = require('./tokenizer');
+        const { Parser } = require('./parser');
+        const tokens = new Tokenizer().tokenize(source);
+        const ast = new Parser().parse(tokens);
+        this.fileStack.push(target);
+        const moduleScope = new Map();
+        this.scopes.push(moduleScope);
+        try {
+            this.evaluate(ast);
+            const ns = [];
+            for (const [name, value] of moduleScope) {
+                ns.push({ type: 'NamedThing', name, value });
+            }
+            this.moduleCache.set(target, ns);
+            return ns;
+        } finally {
+            this.scopes.pop();
+            this.fileStack.pop();
+        }
     }
 
     setupBuiltins() {
@@ -101,27 +185,49 @@ class Evaluator {
             // concatenates with nothing between (so `join!split!hello.` round-trips).
             join: builtin('join', P.pat(P.star()),
                 (b, arg) => {
+                    const fmt = (x) => typeof x === 'string' ? x : this.formatValue(x);
                     if (Array.isArray(arg) && arg.length === 2 && Array.isArray(arg[0])) {
-                        return arg[0].map(x => String(x)).join(String(arg[1]));
+                        return arg[0].map(fmt).join(fmt(arg[1]));
                     }
                     const list = Array.isArray(arg) && arg.length === 1 ? arg[0] : arg;
                     if (!Array.isArray(list)) throw this.punkError('join expects a List');
-                    return list.map(x => String(x)).join('');
+                    return list.map(fmt).join('');
                 }),
             replace: builtin('replace', P.pat(P.named('text', P.wild()), P.named('search', P.wild()), P.named('with', P.wild())),
                 (b) => String(b.get('text')).split(String(b.get('search'))).join(String(b.get('with')))),
+        };
+
+        // Higher-order list callbacks are passed (value, index, key) per item,
+        // where the caller's pattern arity picks how many slots they bind:
+        //   {v:_}            → value only (NamedThings are unwrapped)
+        //   {v:_ i:_}        → value, index
+        //   {v:_ i:_ k:_}    → value, index, key   (key is NULL for plain items)
+        // Index is always defined; key is sparse, so it sits in the rarely-used
+        // third slot. Builtins and string-named callbacks still get a single
+        // value — they don't carry a Punk-pattern to introspect.
+        const callItemFn = (fn, item, index) => {
+            const value = (item && typeof item === 'object' && item.type === 'NamedThing')
+                ? item.value : item;
+            const key = (item && typeof item === 'object' && item.type === 'NamedThing')
+                ? item.name : null;
+            const arity = this.callbackArity(fn);
+            let arg;
+            if (arity === 'variadic' || arity >= 3) arg = [value, index, key];
+            else if (arity === 2) arg = [value, index];
+            else arg = value;
+            return this.callFunction(fn, arg);
         };
 
         const listOps = {
             map: builtin('map', P.pat(P.named('fn', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items, rewrap } = this.decompose(b.get('list'));
-                    return rewrap(items.map(item => this.callFunction(b.get('fn'), item)));
+                    return rewrap(items.map((item, i) => callItemFn(b.get('fn'), item, i)));
                 }),
             filter: builtin('filter', P.pat(P.named('fn', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items, rewrap } = this.decompose(b.get('list'));
-                    return rewrap(items.filter(item => this.callFunction(b.get('fn'), item)));
+                    return rewrap(items.filter((item, i) => callItemFn(b.get('fn'), item, i)));
                 }),
             reduce: builtin('reduce', P.pat(P.named('fn', P.wild()), P.named('init', P.wild()), P.named('list', P.wild())),
                 (b) => {
@@ -131,8 +237,8 @@ class Evaluator {
             flatMap: builtin('flatMap', P.pat(P.named('fn', P.wild()), P.named('list', P.wild())),
                 (b) => {
                     const { items } = this.decompose(b.get('list'));
-                    return items.flatMap(item => {
-                        const r = this.callFunction(b.get('fn'), item);
+                    return items.flatMap((item, i) => {
+                        const r = callItemFn(b.get('fn'), item, i);
                         return Array.isArray(r) ? r : [r];
                     });
                 }),
@@ -154,6 +260,13 @@ class Evaluator {
                     const all = args.flatMap(v => this.decompose(v).items);
                     return first.rewrap(all);
                 }),
+            // list!*  — collect all args into a plain list, preserving each
+            // arg as a single element (no flattening). Useful when building
+            // a list of computed values: `list!(a. b. c.)` evaluates each
+            // deref because call-args are evaluated, whereas a body-position
+            // list literal `(a. b. c.)` keeps the forms quoted.
+            list: builtin('list', P.pat(P.star()),
+                (b, arg) => Array.isArray(arg) ? arg.slice() : [arg]),
             // slice! supports two forms:
             //   slice!(list range)         — inclusive both ends, matches `xs.1~3.`
             //   slice!(list start endExcl) — exclusive end, useful when bounds
@@ -201,12 +314,15 @@ class Evaluator {
         };
 
         const fs = require('fs');
+        const path = require('path');
+        const { Module } = require('module');
+        const { fromJS, wrapJSObject } = require('./js-interop');
 
         const fileOps = {
             read: builtin('read', P.pat(P.wild()),
                 (b) => {
                     try {
-                        return fs.readFileSync(String(b.get('0')), 'utf8').split('\n');
+                        return fs.readFileSync(this.resolveRelative(String(b.get('0'))), 'utf8').split('\n');
                     } catch (err) {
                         throw this.punkError(`Cannot read file: ${err.message}`);
                     }
@@ -216,13 +332,179 @@ class Evaluator {
                     try {
                         const content = b.get('content');
                         const text = Array.isArray(content) ? content.join('\n') : String(content);
-                        fs.writeFileSync(String(b.get('path')), text, 'utf8');
+                        fs.writeFileSync(this.resolveRelative(String(b.get('path'))), text, 'utf8');
                         return undefined;
                     } catch (err) {
                         throw this.punkError(`Cannot write file: ${err.message}`);
                     }
                 }),
+            // `append!(path line)` adds a single text line to a file
+            // (creating it if missing). Used by append-only stores like
+            // `keystore` where each transaction is one line of log.
+            append: builtin('append', P.pat(P.named('path', P.wild()), P.named('line', P.wild())),
+                (b) => {
+                    try {
+                        const line = b.get('line');
+                        const text = Array.isArray(line) ? line.join('\n') : String(line);
+                        fs.appendFileSync(this.resolveRelative(String(b.get('path'))), text + '\n', 'utf8');
+                        return undefined;
+                    } catch (err) {
+                        throw this.punkError(`Cannot append to file: ${err.message}`);
+                    }
+                }),
+            exists: builtin('exists', P.pat(P.wild()),
+                (b) => {
+                    return fs.existsSync(this.resolveRelative(String(b.get('0'))));
+                }),
         };
+
+        // `load!"./file.punk"` evaluates a Punk file relative to the
+        // currently-executing file. The evaluator pushes the loaded
+        // file onto its file stack so that nested `load!`s and `read!`s
+        // resolve relative to *their* caller. The file is parsed and
+        // evaluated in a fresh inner scope so its top-level bindings
+        // don't leak into the importer — the returned value is the
+        // value of its last expression, typically a namespace list.
+        // `import!X` is the unified loader. The single arg dictates the
+        // behaviour:
+        //   - `import!math`        load `./math.punk` (sibling of the
+        //                          current file). Subdir paths use
+        //                          slashes: `import!utils/helpers`.
+        //                          The `.punk` extension is implicit.
+        //   - `import!js.JSON`     anything resolved via the `js.*`
+        //                          dereference chain has already been
+        //                          marshalled into Punk shape, so
+        //                          `import!` just returns it.
+        //
+        // Boxing of stateful handles is the caller's choice: wrap the
+        // expression in `[...]` to make impurity visible at use sites.
+        const importFn = builtin('import', P.pat(P.star()), (b, arg) => {
+            if (typeof arg === 'string') {
+                // Relative file path (always relative to importing file).
+                // Stdlib lookup goes through the `punk.<name>` namespace
+                // instead, so this branch only handles user-authored
+                // files like `import!./helpers` or `import!lib/foo`.
+                const rel = /\.punk$/.test(arg) ? arg : arg + '.punk';
+                const target = this.resolveRelative(rel);
+                try {
+                    return this.loadModule(target);
+                } catch (err) {
+                    throw this.punkError(`Cannot import Punk file '${arg}': ${err.message}`);
+                }
+            }
+            // Already-resolved value (from a package dereference like
+            // `pkg.mod.`). `import!` is a no-op marker on these — the
+            // dereference chain did the real work.
+            return arg;
+        });
+
+        // `importJS!name` resolves a Node module via the standard
+        // require chain relative to the importing file, then converts
+        // it through `fromJS` so it can be dereferenced/called from
+        // Punk. Replaces the old `import!js.X.` dance.
+        const importJSFn = builtin('importJS', P.pat(P.wild()), (b) => {
+            const name = String(b.get('0'));
+            // Built-in JS globals (JSON, Math, etc.) take precedence
+            // over a same-named npm package, matching Node's own
+            // behaviour for `globalThis` vs `require`.
+            if (Object.prototype.hasOwnProperty.call(globalThis, name)) {
+                return fromJS(globalThis[name], this);
+            }
+            try {
+                const req = Module.createRequire(this.currentFile());
+                return fromJS(req(name), this);
+            } catch (err) {
+                throw this.punkError(`Cannot importJS '${name}': ${err.message}`);
+            }
+        });
+
+        // `pattern!fn.` reflects a function's pattern as a Punk list of
+        // entries — NamedThing(name, value) for `key:value` slots (value
+        // evaluated in the function's closure scope so attrs can reference
+        // outer bindings), or the raw value for bare slots. Wildcards/stars
+        // come back as quoted AST.
+        const patternFn = builtin('pattern', P.pat(P.wild()), (b) => {
+            const fn = b.get('0');
+            if (!fn || typeof fn !== 'object' || fn.type !== 'UserFunction') {
+                throw this.punkError('pattern! expects a function value');
+            }
+            const elements = (fn.pattern && fn.pattern.elements) || [];
+            const savedScopes = this.scopes;
+            this.scopes = (fn.closure || []).slice();
+            try {
+                return elements.map(el => {
+                    if (el && el.type === 'NamedThing') {
+                        return { type: 'NamedThing', name: el.name, value: this.elementAsData(el.value) };
+                    }
+                    return this.elementAsData(el);
+                });
+            } finally {
+                this.scopes = savedScopes;
+            }
+        });
+
+        // `body!fn.` reflects a function's body as a Punk list, evaluated
+        // in the function's closure scope. Function-LITERAL nodes are
+        // returned as live UserFunctions (so element trees walk as data),
+        // but FunctionCall / Dereference / Conditional forms are EVALUATED
+        // — this is what lets a template like
+        //   page:{todos:_}(html:{}(... ul:{}(map!(item todos.))))
+        // splice the result of `map!` into the rendered structure.
+        const bodyFn = builtin('body', P.pat(P.wild()), (b) => {
+            const fn = b.get('0');
+            if (!fn || typeof fn !== 'object' || fn.type !== 'UserFunction') {
+                throw this.punkError('body! expects a function value');
+            }
+            const body = fn.body;
+            if (!body) return [];
+            const elements = body.type === 'List' && Array.isArray(body.elements)
+                ? body.elements
+                : [body];
+            const savedScopes = this.scopes;
+            this.scopes = (fn.closure || []).slice();
+            // Push a fresh frame so any incidental NamedThing evaluation
+            // doesn't try to rebind into the closure's outer scope.
+            this.scopes.push(new Map());
+            try {
+                return elements.map(el => this.bodyElementValue(el));
+            } finally {
+                this.scopes = savedScopes;
+            }
+        });
+
+        const isfnFn = builtin('isfn', P.pat(P.wild()), (b) => {
+            const v = b.get('0');
+            return !!(v && typeof v === 'object'
+                && (v.type === 'UserFunction' || v.type === 'BuiltinFunction' || v.type === 'Partial'));
+        });
+
+        const islistFn = builtin('islist', P.pat(P.star()), (b, arg) => {
+            return Array.isArray(arg);
+        });
+
+        const deserializeFn = builtin('deserialize', P.pat(P.star()), (b, arg) => {
+            const src = typeof arg === 'string' ? arg : this.formatValue(arg);
+            const { Tokenizer } = require('./tokenizer');
+            const { Parser } = require('./parser');
+            const tokens = new Tokenizer().tokenize(src);
+            const ast = new Parser().parse(tokens);
+            const scope = new Map();
+            this.scopes.push(scope);
+            try {
+                // Use Body semantics so a trailing `name:value` literal
+                // returns the NamedThing wrapper, not the unwrapped value.
+                return this.evaluateBody({ elements: ast.statements });
+            } finally {
+                this.scopes.pop();
+            }
+        });
+
+        const serializeFn = builtin('serialize', P.pat(P.star()), (b, arg) => {
+            return this.formatValue(arg);
+        });
+
+        const namedFn = builtin('named', P.pat(P.named('name', P.wild()), P.named('value', P.wild())),
+            (b) => ({ type: 'NamedThing', name: String(b.get('name')), value: b.get('value') }));
 
         const log = builtin('log', P.pat(P.star()), (b, arg) => {
             const v = this.asList(arg);
@@ -276,14 +558,26 @@ class Evaluator {
         this.setName('len', listOps.len);
         this.setName('prep', listOps.prep);
         this.setName('concat', listOps.concat);
+        this.setName('list', listOps.list);
         this.setName('slice', listOps.slice);
         this.setName('find', listOps.find);
         this.setName('contains', listOps.contains);
         this.setName('sort', listOps.sort);
         this.setName('read', fileOps.read);
         this.setName('write', fileOps.write);
+        this.setName('append', fileOps.append);
+        this.setName('exists', fileOps.exists);
         this.setName('log', log);
         this.setName('assert', assertFn);
+        this.setName('import', importFn);
+        this.setName('importJS', importJSFn);
+        this.setName('pattern', patternFn);
+        this.setName('body', bodyFn);
+        this.setName('isfn', isfnFn);
+        this.setName('islist', islistFn);
+        this.setName('deserialize', deserializeFn);
+        this.setName('serialize', serializeFn);
+        this.setName('named', namedFn);
     }
 
     // Render a Punk value back into Punk-ish source for error messages so
@@ -300,11 +594,13 @@ class Evaluator {
             return v.replace(/\\/g, '\\\\');
         }
         if (v && typeof v === 'object') {
+            if (v.type === 'NamedThing') return v.name + ':' + this.formatValue(v.value);
             if (v.type === 'Cell') return '[' + this.formatValue(v.contents) + ']';
             if (v.type === 'UserFunction' || v.type === 'FunctionLiteral') return '<function>';
             if (v.type === 'BuiltinFunction') return '<builtin>';
             if (v.type === 'Partial') return '<partial>';
             if (v.type === 'Pattern') return '<pattern>';
+            if (v.type === 'JSObject') return '<js-object>';
             if (v.type === 'Range') {
                 if (v.start != null && v.end != null) {
                     return this.formatValue(this.materialiseRange(v));
@@ -367,6 +663,25 @@ class Evaluator {
         }
         return { items: [v], rewrap: (xs) => xs };
     }
+
+    // Reports how many positional slots a higher-order callback's pattern binds.
+    // Returns an integer arity, or 'variadic' if the pattern contains a star /
+    // `___` slot. Non-UserFunction callees (BuiltinFunction, Partial, name-as-
+    // string) get a default arity of 1: builtins like `upper.` are typically
+    // single-arg, and Partials swallow extra args as a list anyway.
+    callbackArity(fn) {
+        if (!fn || typeof fn !== 'object') return 1;
+        if (fn.type !== 'UserFunction') return 1;
+        const pat = fn.pattern;
+        if (!pat || pat.type !== 'Pattern' || !Array.isArray(pat.elements)) return 1;
+        const els = pat.elements;
+        const isStar = e => e && (e.type === 'StarWildcard'
+            || (e.type === 'NamedThing' && e.value && e.value.type === 'StarWildcard'));
+        if (els.some(isStar)) return 'variadic';
+        return els.length;
+    }
+
+    // HTML rendering moved to lib/html.punk — import via `html:import!lib/html.punk`.
 
     smartLen(v) {
         if (v === null || v === undefined) return 0;
@@ -470,6 +785,8 @@ class Evaluator {
                 return this.evaluatePattern(node);
             case 'RegexLiteral':
                 return this.compileRegex(node);
+            case 'TextLiteral':
+                return node.value;
             case 'Dispatch':
                 return this.evaluateDispatch(node);
             case 'FunctionCall':
@@ -568,6 +885,27 @@ class Evaluator {
         return node.elements.map(element => this.elementAsData(element));
     }
 
+    // Used by `body!fn.` to reflect a body element. Like elementAsData,
+    // but actively evaluates FunctionCall / Dereference / Conditional /
+    // MultiplePatternMatch forms so templates can splice computed values
+    // (e.g. `map!(item todos.)`) into a static structure via closure.
+    bodyElementValue(element) {
+        switch (element.type) {
+            case 'Number':
+            case 'Range':
+            case 'Thing':
+            case 'List':
+            case 'Pattern':
+            case 'FunctionLiteral':
+            case 'CellLiteral':
+                return this.elementAsData(element);
+            case 'NamedThing':
+                return { type: 'NamedThing', name: element.name, value: this.bodyElementValue(element.value) };
+            default:
+                return this.evaluate(element);
+        }
+    }
+
     elementAsData(element) {
         switch (element.type) {
             case 'Number':
@@ -582,7 +920,7 @@ class Evaluator {
             case 'List':
                 return this.evaluateList(element);
             case 'NamedThing':
-                return { name: element.name, value: this.elementAsData(element.value) };
+                return { type: 'NamedThing', name: element.name, value: this.elementAsData(element.value) };
             case 'Pattern':
                 return this.evaluatePattern(element);
             case 'FunctionLiteral':
@@ -596,17 +934,17 @@ class Evaluator {
         }
     }
 
-    // A list evaluated AS CODE: triggered by `!` (function body, function arg list,
-    // conditional/multi-pattern branch). Each element is evaluated through the normal
-    // dispatcher. NamedThing elements additionally bind their name into the current
-    // scope, matching top-level program statement semantics.
+    // A list evaluated AS CALL ARGS: triggered by `!` on a list literal.
+    // Each element is evaluated through the normal dispatcher. NamedThing
+    // elements keep their name as part of the resulting value (so callees
+    // can pattern-match on `name:_` slots) but do NOT bind into the caller's
+    // scope — call args are values, not body statements.
     evaluateListAsCode(node) {
         const results = [];
         for (const element of node.elements) {
             if (element.type === 'NamedThing') {
                 const value = this.evaluate(element.value);
-                this.setName(element.name, value);
-                results.push({ name: element.name, value });
+                results.push({ type: 'NamedThing', name: element.name, value });
             } else {
                 results.push(this.evaluate(element));
             }
@@ -632,12 +970,16 @@ class Evaluator {
             }
         }
         // Last element runs in tail position so direct self-calls trampoline
-        // instead of growing the JS stack.
+        // instead of growing the JS stack. A NamedThing at the last position
+        // still binds the name into scope, but its VALUE is the NamedThing
+        // wrapper (`{name, value}`) — so a lambda body like `li:{}(note.)`
+        // produces a NamedThing result that downstream reflection (e.g. the
+        // html lib) can use to know the element's tag.
         const last = elements[elements.length - 1];
         if (last.type === 'NamedThing') {
             const value = this.evaluate(last.value);
             this.setName(last.name, value);
-            return value;
+            return { type: 'NamedThing', name: last.name, value };
         }
         return this.evaluateTail(last);
     }
@@ -983,8 +1325,17 @@ class Evaluator {
 
             if (typeof obj === 'string') {
                 const namedValue = this.getName(obj);
-                if (namedValue !== undefined) {
-                    obj = namedValue;
+                if (namedValue !== undefined) obj = namedValue;
+            }
+            // Package namespace head: load `<libRoot>/<name>.punk`.
+            if (obj && typeof obj === 'object' && obj.type === 'PunkPackage') {
+                const target = path.resolve(obj.libRoot, node.name + '.punk');
+                try {
+                    return this.loadModule(target);
+                } catch (err) {
+                    throw this.punkError(
+                        `Cannot resolve '${obj.name}.${node.name}': ${err.message}`
+                    );
                 }
             }
             // Range values act like lists for indexing/last/length access.
@@ -994,6 +1345,9 @@ class Evaluator {
             
             if (obj && typeof obj === 'object' && obj.type === 'Pattern') {
                 return obj;
+            }
+            if (obj && typeof obj === 'object' && obj.type === 'JSObject') {
+                return jsObjectGet(obj, node.name, this);
             }
             if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
                 if (obj instanceof Map) {
@@ -1046,6 +1400,11 @@ class Evaluator {
 
         const value = this.getName(node.name);
         if (value === undefined) {
+            // Bare unbound name: if it resolves as a punk package
+            // (local or via node_modules), return a sentinel that the
+            // outer dereference step will use to load `<pkg>/lib/X.punk`.
+            const libRoot = this.resolvePackage(node.name);
+            if (libRoot) return { type: 'PunkPackage', libRoot, name: node.name };
             throw new Error(`Undefined Named Thing: ${node.name}`);
         }
         return value;

@@ -37,8 +37,8 @@ Numbers use European-style decimals — the comma is the separator, because
 the `.` character is reserved for dereferencing {introduced in §2}:
 
 ```punk
-> 3,14 ⏎
-3,14
+> 3.14 ⏎
+3.14
 ```
 
 ## 2. Binding and dereferencing
@@ -77,8 +77,8 @@ When a function needs more than one Thing, pass them as a list — the `(…)`
 on the right of `!` is just a list literal serving as the single argument:
 
 ```punk
-> log!(hello world) ⏎
-hello world
+> log!"Hello world" ⏎
+Hello world
 ```
 
 From here on we'll usually omit `log!` and just write the expression — the

@@ -82,7 +82,8 @@ class Tokenizer {
             case '~': this.addToken('TILDE'); break;
             case '|': this.addToken('PIPE'); break;
             case '#': this.blockComment(); break;
-            case '"': this.regexLiteral(); break;
+            case '"': this.textLiteral(); break;
+            case '`': this.regexLiteral(); break;
             case ' ':
             case '\r':
             case '\t':
@@ -105,13 +106,16 @@ class Tokenizer {
                     // act as callable names when they stand alone at a token boundary
                     // (e.g. `+!a b`); embedded between other chars they're just text.
                     let value;
+                    let hadEscape = false;
                     if (c === '\\') {
                         if (this.isAtEnd()) throw new Error('Unexpected backslash at end of input');
                         const nxt = this.peek();
                         if (' \n\r\t'.includes(nxt)) {
-                            throw new Error('Backslash cannot escape whitespace; use a list like (a b) for multi-word text');
+                            throw new Error('Backslash cannot escape whitespace; use \\s for a space, or a list like (a b) for multi-word text');
                         }
-                        value = this.advance();
+                        const esc = this.advance();
+                        value = esc === 's' ? ' ' : esc === 'n' ? '\n' : esc === 't' ? '\t' : esc;
+                        hadEscape = true;
                     } else {
                         value = c;
                     }
@@ -122,9 +126,11 @@ class Tokenizer {
                             if (this.isAtEnd()) throw new Error('Unexpected backslash at end of input');
                             const nxt = this.peek();
                             if (' \n\r\t'.includes(nxt)) {
-                                throw new Error('Backslash cannot escape whitespace; use a list like (a b) for multi-word text');
+                                throw new Error('Backslash cannot escape whitespace; use \\s for a space, or a list like (a b) for multi-word text');
                             }
-                            value += this.advance();
+                            const esc = this.advance();
+                            value += esc === 's' ? ' ' : esc === 'n' ? '\n' : esc === 't' ? '\t' : esc;
+                            hadEscape = true;
                         } else if (p === '-' && this.source.charAt(this.current + 1) === '>') {
                             // Stop the Thing here so the trailing `->`
                             // tokenises as a cell-read arrow on its own.
@@ -135,7 +141,7 @@ class Tokenizer {
                             value += this.advance();
                         }
                     }
-                    if (/^-?\d+(?:,\d+)?$/.test(value)) {
+                    if (!hadEscape && /^-?\d+(?:,\d+)?$/.test(value)) {
                         this.addToken('NUMBER', value.replace(',', '.'));
                     } else {
                         this.addToken('THING', value);
@@ -147,21 +153,22 @@ class Tokenizer {
     }
 
     isSpecialChar(c) {
-        return '.:!?[](){}<>_~| \n\r\t#\\"\''.includes(c);
+        return '.:!?[](){}<>_~| \n\r\t#\\"`\''.includes(c);
     }
 
-    // Regex literal: `"pattern"`. Inside the quotes, `\"` escapes a literal `"`
-    // and `\\` is preserved as two characters (the regex engine interprets it
-    // as a literal backslash). All other backslash sequences pass through
-    // verbatim so the embedded text is exactly what the JS RegExp engine sees.
+    // Regex literal: `` `pattern` ``. Inside the backticks, `` \` `` escapes a
+    // literal backtick and `\\` is preserved as two characters (the regex
+    // engine interprets it as a literal backslash). All other backslash
+    // sequences pass through verbatim so the embedded text is exactly what the
+    // JS RegExp engine sees.
     regexLiteral() {
         let src = '';
-        while (!this.isAtEnd() && this.peek() !== '"') {
+        while (!this.isAtEnd() && this.peek() !== '`') {
             const c = this.advance();
             if (c === '\\' && !this.isAtEnd()) {
                 const n = this.peek();
-                if (n === '"') {
-                    src += '"';
+                if (n === '`') {
+                    src += '`';
                     this.advance();
                 } else {
                     src += '\\' + this.advance();
@@ -173,6 +180,25 @@ class Tokenizer {
         if (this.isAtEnd()) throw new Error('Unterminated regex literal');
         this.advance();
         this.addToken('REGEX', src);
+    }
+
+    // Text literal: `"..."`. Content between the quotes is taken verbatim —
+    // no escape processing, no special characters. To embed a literal `"`,
+    // use `\"` (the only recognised escape).
+    textLiteral() {
+        let src = '';
+        while (!this.isAtEnd() && this.peek() !== '"') {
+            const c = this.advance();
+            if (c === '\\' && this.peek() === '"') {
+                src += '"';
+                this.advance();
+            } else {
+                src += c;
+            }
+        }
+        if (this.isAtEnd()) throw new Error('Unterminated text literal');
+        this.advance();
+        this.addToken('TEXT', src);
     }
 
     blockComment() {

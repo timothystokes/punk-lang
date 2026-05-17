@@ -1,0 +1,13 @@
+{
+  "name": "punk-server-example",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Port of server.clj to Punk.",
+  "dependencies": {
+    "punk": "file:.."
+  },
+  "scripts": {
+    "start": "punk server.punk",
+    "schema": "punk schema.punk"
+  }
+}
