@@ -741,7 +741,7 @@ Punk source is interpreted by the Node.js implementation in `src/`.
 
 ```bash
 # Run a Punk file
-node src/index.js path/to/file.punk
+node src/cli.js path/to/file.punk
 
 # Or via npm
 npm start path/to/file.punk
@@ -749,14 +749,8 @@ npm start path/to/file.punk
 
 ## Tests
 
-The test suite lives in `tests/`. Each `.punk` file has a paired `.expected` file
-holding its captured stdout. The runner diffs actual output against expected:
+The test suite lives in `tests/` as `node:test` files (`*.test.mjs`).
 
 ```bash
 npm test
-# or
-bash tests/run.sh
 ```
-
-The suite covers basics, lists, functions, patterns, cells, math/logic libraries,
-escaping, the postfix-dot deref rules, and the `assert` built-in.
