@@ -785,8 +785,6 @@ class Evaluator {
                 return this.evaluatePattern(node);
             case 'RegexLiteral':
                 return this.compileRegex(node);
-            case 'TextLiteral':
-                return node.value;
             case 'Dispatch':
                 return this.evaluateDispatch(node);
             case 'FunctionCall':

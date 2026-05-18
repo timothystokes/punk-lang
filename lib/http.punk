@@ -1,57 +1,39 @@
-#http.punk — small functional HTTP wrapper over Node's `http` module.
-
- Imports give you `serve!` which takes a port and a pure handler
- `{method:_ path:_ body:_}(response)`. The lib does the I/O glue:
-   - buffers the request body off the underlying Node stream
-   - calls the handler with the three request slots positionally
-   - writes the user's response value `(status:_ headers:_ body:_)`
-     back through Node's ServerResponse
-
- Handlers stay pure functions of the request slots — no streams, no
- stateful response objects.#
-
 node:importJS!http
 
-#Read the Node request stream into a single Punk text Thing, then
- call `cont!` with the buffered body. Uses a Cell because chunk
- events arrive over time and we need to accumulate.#
-readBody:{req:_ cont:_}(
-  buf:[\s]
-  req.on!(data {chunk:_}(
-    buf<-join!(buf-> chunk.toString!utf8)
-  ))
-  req.on!(end {_}(cont!buf->))
-)
+makeRequest:(req:_ body:_){
+  {req.method? req.url? body?}
+}
 
-#Build a positional `(method path body)` request value from a Node
- IncomingMessage + buffered body.#
-makeRequest:{req:_ body:_}(
-  list!(req.method. req.url. body.)
-)
+respond:(res:_ result:_){
+  res.writeHead!{result.status? result.headers?}
+  res.end!result.body?
+}
 
-#Write a Punk response value back through Node's ServerResponse.#
-respond:{res:_ result:_}(
-  res.writeHead!(result.status. result.headers.)
-  res.end!result.body.
-)
+methodNeedsBody:(m:_){
+  m??{
+    (POST){TRUE}
+    (PUT){TRUE}
+    (PATCH){TRUE}
+    (___){FALSE}
+  }
+}
 
-#Internal: wrap a pure `{req:_}(response)` handler as a Node
- `(req res)` callback. Buffers the body for methods that may carry
- one; GET/HEAD/DELETE skip the wait.#
-adapt:{handler:_}({req:_ res:_}(
-  hasBody:or!(=!(req.method. POST) =!(req.method. PUT) =!(req.method. PATCH))
-  hasBody.?(
-    {TRUE}(readBody!(req. {body:_}(
-      respond!(res. handler!makeRequest!(req. body.))
-    )))
-    {FALSE}(respond!(res. handler!makeRequest!(req. NULL)))
-  )
-))
+adapt:(handler:_){
+  (req:_ res:_){
+    needs:methodNeedsBody!req.method?
+    needs??{
+      (TRUE){streamRead!{req? (body:_){
+        respond!{res? handler!makeRequest!{req? body?}}
+      }}}
+      (FALSE){respond!{res? handler!makeRequest!{req? NULL}}}
+    }
+  }
+}
 
-#Start a server on `port` with a pure handler. Returns the boxed
- Node Server handle so callers can call `.close!` later.#
-serve:{port:_ handler:_}(
-  srv:[node.createServer!adapt!handler.]
-  srv->.listen!port.
-  srv
-)
+serve:(port:_ handler:_){
+  srv:node.createServer!adapt!handler?
+  srv.listen!port?
+  srv?
+}
+
+{serve:serve?}

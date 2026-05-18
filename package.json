@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "bash tests/run.sh"
+    "test": "bash tests/run.sh",
+    "test:v2": "node --test tests/v2"
   },
   "keywords": [],
   "author": "",

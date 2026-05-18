@@ -156,9 +156,6 @@ class Parser {
         if (this.match('REGEX')) {
             return { type: 'RegexLiteral', source: this.previous().literal };
         }
-        if (this.match('TEXT')) {
-            return { type: 'TextLiteral', value: this.previous().literal };
-        }
         if (this.match('TRIPLE_UNDERSCORE')) {
             // `___` is the variadic wildcard for patterns. Pattern-only —
             // bodies always use `_.` (not `___.`) for the whole-arg deref.

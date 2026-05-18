@@ -82,8 +82,7 @@ class Tokenizer {
             case '~': this.addToken('TILDE'); break;
             case '|': this.addToken('PIPE'); break;
             case '#': this.blockComment(); break;
-            case '"': this.textLiteral(); break;
-            case '`': this.regexLiteral(); break;
+            case '"': this.regexLiteral(); break;
             case ' ':
             case '\r':
             case '\t':
@@ -153,22 +152,21 @@ class Tokenizer {
     }
 
     isSpecialChar(c) {
-        return '.:!?[](){}<>_~| \n\r\t#\\"`\''.includes(c);
+        return '.:!?[](){}<>_~| \n\r\t#\\"\''.includes(c);
     }
 
-    // Regex literal: `` `pattern` ``. Inside the backticks, `` \` `` escapes a
-    // literal backtick and `\\` is preserved as two characters (the regex
-    // engine interprets it as a literal backslash). All other backslash
-    // sequences pass through verbatim so the embedded text is exactly what the
-    // JS RegExp engine sees.
+    // Regex literal: `"pattern"`. Inside the quotes, `\"` escapes a literal `"`
+    // and `\\` is preserved as two characters (the regex engine interprets it
+    // as a literal backslash). All other backslash sequences pass through
+    // verbatim so the embedded text is exactly what the JS RegExp engine sees.
     regexLiteral() {
         let src = '';
-        while (!this.isAtEnd() && this.peek() !== '`') {
+        while (!this.isAtEnd() && this.peek() !== '"') {
             const c = this.advance();
             if (c === '\\' && !this.isAtEnd()) {
                 const n = this.peek();
-                if (n === '`') {
-                    src += '`';
+                if (n === '"') {
+                    src += '"';
                     this.advance();
                 } else {
                     src += '\\' + this.advance();
@@ -180,25 +178,6 @@ class Tokenizer {
         if (this.isAtEnd()) throw new Error('Unterminated regex literal');
         this.advance();
         this.addToken('REGEX', src);
-    }
-
-    // Text literal: `"..."`. Content between the quotes is taken verbatim —
-    // no escape processing, no special characters. To embed a literal `"`,
-    // use `\"` (the only recognised escape).
-    textLiteral() {
-        let src = '';
-        while (!this.isAtEnd() && this.peek() !== '"') {
-            const c = this.advance();
-            if (c === '\\' && this.peek() === '"') {
-                src += '"';
-                this.advance();
-            } else {
-                src += c;
-            }
-        }
-        if (this.isAtEnd()) throw new Error('Unterminated text literal');
-        this.advance();
-        this.addToken('TEXT', src);
     }
 
     blockComment() {
