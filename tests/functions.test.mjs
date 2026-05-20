@@ -48,7 +48,7 @@ test('whitespace between `)` and `{` is a syntax error — they are not a functi
 test('function returns the whole resulting template by default', () => {
   // `sizer` doc example without `~` returns the full template.
   const src = `sizer:(radius:_){
-      circumference:*!{*!{3.141 radius?} 2}
+      circumference:X!{X!{3.141 radius?} 2}
       <!{circumference? 30}??{
         (TRUE){Small Circle}
         (FALSE){Large Circle}
@@ -60,7 +60,7 @@ test('function returns the whole resulting template by default', () => {
 
 test('return range `~` returns only the last item of the template', () => {
   const src = `sizer:(radius:_){
-      circumference:*!{*!{3.141 radius?} 2}
+      circumference:X!{X!{3.141 radius?} 2}
       <!{circumference? 30}??{
         (TRUE){Small Circle}
         (FALSE){Large Circle}
@@ -74,7 +74,7 @@ test('simple nested function call — 1-item body returns the value directly', (
   // No `~` needed: body is a single arithmetic call, so the function
   // returns the resulting number. REPL wraps a bare number for display.
   assert.equal(
-    punk('circ:(r:_){*!{*!{3.141 r?} 2}}  circ!7'),
+    punk('circ:(r:_){X!{X!{3.141 r?} 2}}  circ!7'),
     '{43.974}'
   );
 });
@@ -84,7 +84,7 @@ test('recursion — function references itself by name', () => {
   const src = `factorial:(n:_){
       <=!{n? 1}??{
         (TRUE){1}
-        (FALSE){*!{n? factorial!{-!{n? 1}}}}
+        (FALSE){X!{n? factorial!{-!{n? 1}}}}
       }
     }
     factorial!5`;

@@ -3,10 +3,10 @@
 // From doc § "Patterns":
 //   - `(...)` is a pattern; `{...}` is a value. `()` matches only `{}`.
 //   - `(_)` matches a template with exactly one thing.
-//   - `(___)` matches any number of things (zero or more).
+//   - `(*)` matches any number of things (zero or more).
 //   - Positional matching: `(_ _)` is exactly two things; `(_ _ _)` three.
 //   - Literals match exact values: `(hello _)` etc.
-//   - Only one variadic `___` per pattern.
+//   - Only one variadic `*` per pattern.
 //   - Patterns nest: `((_ _) _)`.
 //   - Slots can be named: `(x:_ y:_)`.
 //   - Patterns can have regex slots `/.../`; capture groups bind by index;
@@ -44,10 +44,10 @@ test('`(_)` matches single-item template only', () => {
   assert.equal(punk('{x y}?(_)'), 'FALSE');
 });
 
-test('`(___)` matches templates of any length, including empty', () => {
-  assert.equal(punk('{}?(___)'), 'TRUE');
-  assert.equal(punk('{a}?(___)'), 'TRUE');
-  assert.equal(punk('{a b c}?(___)'), 'TRUE');
+test('`(*)` matches templates of any length, including empty', () => {
+  assert.equal(punk('{}?(*)'), 'TRUE');
+  assert.equal(punk('{a}?(*)'), 'TRUE');
+  assert.equal(punk('{a b c}?(*)'), 'TRUE');
 });
 
 test('exact-count patterns', () => {
@@ -74,25 +74,25 @@ test('TRUE as a literal slot', () => {
 });
 
 test('variadic mid-pattern — start ... end', () => {
-  assert.equal(punk('{start a b c end}?(start ___ end)'), 'TRUE');
-  assert.equal(punk('{start end}?(start ___ end)'),       'TRUE');
-  assert.equal(punk('{start a b}?(start ___ end)'),       'FALSE');
+  assert.equal(punk('{start a b c end}?(start * end)'), 'TRUE');
+  assert.equal(punk('{start end}?(start * end)'),       'TRUE');
+  assert.equal(punk('{start a b}?(start * end)'),       'FALSE');
 });
 
-test('variadic leading — `___ end`', () => {
-  assert.equal(punk('{a b end}?(___ end)'), 'TRUE');
-  assert.equal(punk('{end}?(___ end)'),     'TRUE');
-  assert.equal(punk('{end a}?(___ end)'),   'FALSE');
+test('variadic leading — `* end`', () => {
+  assert.equal(punk('{a b end}?(* end)'), 'TRUE');
+  assert.equal(punk('{end}?(* end)'),     'TRUE');
+  assert.equal(punk('{end a}?(* end)'),   'FALSE');
 });
 
-test('variadic trailing — `start ___`', () => {
-  assert.equal(punk('{start a b}?(start ___)'), 'TRUE');
-  assert.equal(punk('{start}?(start ___)'),     'TRUE');
-  assert.equal(punk('{a start}?(start ___)'),   'FALSE');
+test('variadic trailing — `start *`', () => {
+  assert.equal(punk('{start a b}?(start *)'), 'TRUE');
+  assert.equal(punk('{start}?(start *)'),     'TRUE');
+  assert.equal(punk('{a start}?(start *)'),   'FALSE');
 });
 
 test('two variadics in one pattern is a syntax error', () => {
-  punkThrows('{a b}?(___ ___)');
+  punkThrows('{a b}?(* *)');
 });
 
 test('nested pattern — a pair followed by a single thing', () => {

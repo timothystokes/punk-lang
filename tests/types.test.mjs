@@ -49,7 +49,7 @@ test('reserved values TRUE / FALSE / NULL print bare (no auto-wrap)', () => {
 test('a pattern prints bare', () => {
   assert.equal(punk('(a:_ b:_)'), '(a:_ b:_)');
   assert.equal(punk('(_)'),       '(_)');
-  assert.equal(punk('(___)'),     '(___)');
+  assert.equal(punk('(*)'),     '(*)');
 });
 
 test('a function literal prints bare', () => {

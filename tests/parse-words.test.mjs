@@ -36,8 +36,8 @@ test('_ → subkind wildcard', () => {
   assert.equal(w.subkind, 'wildcard');
 });
 
-test('___ → subkind variadic', () => {
-  const [w] = items('___');
+test('* → subkind variadic', () => {
+  const [w] = items('*');
   assert.equal(w.subkind, 'variadic');
 });
 

@@ -1,7 +1,7 @@
 // Arithmetic builtins.
 //
 // From doc § "Arithmetic":
-//   +! *! variadic; -! /! ^! %! binary; min! max! variadic;
+//   +! X! variadic; -! /! ^! %! binary; min! max! variadic;
 //   abs! neg! floor! ceil! round! sqrt! unary.
 
 import { test } from 'node:test';
@@ -22,10 +22,10 @@ test('+! handles negatives', () => {
   assert.equal(punk('+!{-1 -2 5}'), '{2}');
 });
 
-test('*! product', () => {
-  assert.equal(punk('*!{2 3 4}'), '{24}');
-  assert.equal(punk('*!{5}'),     '{5}');
-  assert.equal(punk('*!{}'),      '{1}');
+test('X! product', () => {
+  assert.equal(punk('X!{2 3 4}'), '{24}');
+  assert.equal(punk('X!{5}'),     '{5}');
+  assert.equal(punk('X!{}'),      '{1}');
 });
 
 test('-! difference', () => {

@@ -385,10 +385,10 @@ const decodeWord = (w) => {
   if (RESERVED_NAMES.has(text) && !w.esc) {
     return copy({ kind: 'Word', text, subkind: 'reserved', line, col });
   }
-  if (text === '_' && !w.esc) {
+  if (text === '_') {
     return copy({ kind: 'Word', text, subkind: 'wildcard', line, col });
   }
-  if (text === '___' && !w.esc) {
+  if (text === '*') {
     return copy({ kind: 'Word', text, subkind: 'variadic', line, col });
   }
   // Bare `!` — used as the pipeline-execute marker. parseOperators
@@ -1070,52 +1070,31 @@ export function parseOperators(tree) {
 // eval where the built-in environment is known.
 //
 // Checks:
-//   1. `_`     (wildcard)  outside a Pattern  →  syntax error
-//   2. `___`   (variadic)  outside a Pattern  →  syntax error
-//   3. Bare `!` (Word{subkind:'bang'}) anywhere in the tree
+//   1. Bare `!` (Word{subkind:'bang'}) anywhere in the tree
 //        — parseOperators absorbs valid ones into Pipelines, so a
 //          survivor means a stray `!` with nothing to execute.
-//   4. Range value with both bounds where `to < from`, or `from === to`
+//   2. Range value with both bounds where `to < from`, or `from === to`
 //        (degenerate; use the literal instead).
-//   5. Same check on Range path-segments inside Query/Exec/Partial.
-//   6. PendingNamed (Named{value:null}) survivor → `xs:` with no value.
-//   7. Fn with a returnRange but a body of zero items
+//   3. Same check on Range path-segments inside Query/Exec/Partial.
+//   4. PendingNamed (Named{value:null}) survivor → `xs:` with no value.
+//   5. Fn with a returnRange but a body of zero items
 //        — nothing to slice; the range can never produce a value.
-//   8. Standalone Range value (in a Tmpl, not inside a path or a Fn
+//   6. Standalone Range value (in a Tmpl, not inside a path or a Fn
 //      return-range) with an open end (`from === null` or `to === null`):
 //      `{~5}` and `{5~}` have no implicit endpoint as a value.
-
-const isInsidePattern = (stack) => {
-  // `_` and `___` are valid only when the enclosing "slot" is a direct
-  // child of a Pattern. A `Named` wrapper (e.g. `x:_`) is transparent —
-  // the slot still belongs to the Pattern. A Tmpl or any other parent
-  // means we've stepped into a value position, where wildcards are not
-  // meaningful.
-  for (let i = stack.length - 1; i >= 0; i--) {
-    const parent = stack[i];
-    if (parent.kind === 'Named') continue;
-    return parent.kind === 'Pattern';
-  }
-  return false;
-};
+//
+// Note: `_` (wildcard) and `*` (variadic) Words can appear anywhere —
+// they are only "slots" when they're direct children of a Pattern, and
+// elsewhere they're just ordinary text.
 
 const validateNode = (node, stack) => {
   if (!node || typeof node !== 'object') return;
 
   switch (node.kind) {
     case 'Word': {
-      if (node.subkind === 'wildcard' && !isInsidePattern(stack)) {
-        throw new PunkSyntaxError(
-          "wildcard '_' is only valid inside a pattern",
-          node.line, node.col,
-        );
-      }
-      if (node.subkind === 'variadic' && !isInsidePattern(stack)) {
-        throw new PunkSyntaxError(
-          "variadic '___' is only valid inside a pattern",
-          node.line, node.col,
-        );
-      }
+      // `_` (wildcard) and `*` (variadic) are only "special" when they
+      // are direct slots inside a Pattern. Anywhere else they're just
+      // ordinary Words — no error, they behave like any other text.
       if (node.subkind === 'bang') {
         throw new PunkSyntaxError(
           "stray '!' — nothing to execute (bare '!' is only valid as the trigger of a -> pipeline)",

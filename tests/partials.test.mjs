@@ -33,13 +33,13 @@ test('full pre-fill produces a zero-arg function', () => {
 });
 
 test('partial of a built-in', () => {
-  // `*'2` pre-fills the first arg of `*!` as 2; the result is a doubler.
-  assert.equal(punk('double:*\'2  double!5'),  '{10}');
+  // `X'2` pre-fills the first arg of `X!` as 2; the result is a doubler.
+  assert.equal(punk('double:X\'2  double!5'),  '{10}');
 });
 
 test('partial of a built-in — chained through a pipeline', () => {
   // 5 -> double -> log! prints 10. We assert the value coming out.
-  assert.equal(punk('double:*\'2  5->double!'), '{10}');
+  assert.equal(punk('double:X\'2  5->double!'), '{10}');
 });
 
 test('partial result is a value — can be queried back', () => {

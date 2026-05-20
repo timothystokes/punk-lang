@@ -58,21 +58,15 @@ Examples: `name`, `first-name`, `snake_name`, `x1`, `$jsThing`, `Foo` and `foo` 
 
 Names are **immutable** once bound in a scope: rebinding `x:1` in a scope where `x` is already bound is a syntax error. A dangling `name:` (with nothing to the right of the `:`, or with whitespace before the value) is also a syntax error — Punk does not implicitly bind names to `NULL`. Querying a name that was never bound returns `NULL`.
 
-#### Reserved single-character words
+#### Reserved words
 
-A handful of bare words have special meaning and so cannot be used as ordinary names or literal values:
+A few words have special meaning **in specific positions**:
 
-- `_` — wildcard slot inside a `()` pattern; also, inside a function body, `_?` queries **the whole argument template** that was passed to the function.
-- `___` — variadic wildcard slot, only valid inside a `()` pattern.
-- `TRUE`, `FALSE`, `NULL` — the three reserved values.
+- `_` — inside a `()` pattern, an unnamed single-item wildcard slot. Anywhere else (template, name binding, function body), `_` is just an ordinary word — it can be a name, appear as literal text, or be used however you'd use any other word.
+- `*` — inside a `()` pattern, an unnamed variadic wildcard slot (zero or more items). Inside a function body, `*?` queries **the whole argument template** that the function was called with. Anywhere else `*` is just an ordinary word (the same way `+`, `-`, `=` are just words outside an Exec).
+- `TRUE`, `FALSE`, `NULL` — the three reserved values. Always reserved, in every position.
 
-To use any of these as a literal Word (e.g. as an argument to a text builtin), **escape each character** with a backslash: `\_`, `\T\R\U\E`, and `\_\_\_` for the literal three-underscore word. Punk has no multi-character escape sequences — each `\` escapes exactly the next character.
-
-```punk
-> replace!{- \_ "foo-bar-baz"} ⏎ # `\_` is the literal underscore character #
-"foo_bar_baz"
-```
-
+`_` and `*` need no escaping — their special meaning is purely positional. `TRUE`/`FALSE`/`NULL` are the only words that must be escaped (`\T\R\U\E`, etc.) to be used as literal text.
 
 ### Bare-value bindings auto-wrap
 
@@ -406,7 +400,7 @@ A pattern is a way of defining a data shape that can be compared with things. Wh
 > (John) ⏎ # matches a template with the literal value {John} #
 > (45) ⏎ # matches a template with the literal value {45} #
 > (_) ⏎ # matches any template with a single thing inside it #
-> (___) ⏎ # matches any template with zero or more things inside it #
+> (*) ⏎ # matches any template with zero or more things inside it #
 ```
 
 > NOTE: An empty pattern `()` and an empty template `{}` are not the same thing. `{}` is a value — a template with no items in it. `()` is a *shape* — it matches only against an empty template. They look symmetrical but they live in different worlds.
@@ -430,16 +424,16 @@ Literals and wildcards can be mixed in the same pattern. A literal slot matches 
 > (TRUE _ _) ⏎ # three things starting with {TRUE} #
 ```
 
-The variadic wildcard `___` consumes any number of things — zero or more — and can be combined with fixed slots to match "this then anything", "anything then that", or "this surrounded by anything".
+The variadic wildcard `*` consumes any number of things — zero or more — and can be combined with fixed slots to match "this then anything", "anything then that", or "this surrounded by anything".
 
 ```punk
-> (_ ___) ⏎ # one thing followed by any number of others #
-> (___ _) ⏎ # any number of things followed by exactly one #
-> (start ___ end) ⏎ # begins with {start}, ends with {end}, anything between #
-> (___ TRUE ___) ⏎ # contains {TRUE} somewhere — anywhere #
+> (_ *) ⏎ # one thing followed by any number of others #
+> (* _) ⏎ # any number of things followed by exactly one #
+> (start * end) ⏎ # begins with {start}, ends with {end}, anything between #
+> (* TRUE *) ⏎ # contains {TRUE} somewhere — anywhere #
 ```
 
-> NOTE: Only one variadic `___` slot is allowed in a pattern, because two would make the split between them ambiguous.
+> NOTE: Only one variadic `*` slot is allowed in a pattern, because two would make the split between them ambiguous.
 
 Patterns nest. A slot in a pattern can itself be a pattern, which constrains the shape of the *thing* at that position.
 
@@ -455,8 +449,8 @@ Patterns nest. A slot in a pattern can itself be a pattern, which constrains the
 You can give the slots in a pattern names. The name is just a local binding — it doesn't affect what gets matched, but it lets the template attached to that pattern refer to the matched value.
 
 ```punk
-> (head:_ tail:___) ⏎ # first thing bound to head; rest bound to tail #
-> (first:_ middle:___ last:_) ⏎ # three names spanning a template of two or more #
+> (head:_ tail:*) ⏎ # first thing bound to head; rest bound to tail #
+> (first:_ middle:* last:_) ⏎ # three names spanning a template of two or more #
 > (name:John age:_) ⏎ # first must be {John}, second is bound to age #
 ```
 
@@ -582,7 +576,7 @@ Punk will find the first matching pattern and then query that template.
 > NOTE: Results of conditional queries:
 > - `value?(pattern)` — bare predicate. Returns `TRUE` if the pattern matches, `FALSE` if not.
 > - `value?(pattern){template}` — if-then. Returns the template result on match, `NULL` on miss.
-> - `value??{ ... }` — multi-branch. First match wins. With no matching branch it's a **runtime error**. To make a `??` total, give it a final catch-all branch — `(_){...}` for a single thing, `(___){...}` for any shape at all.
+> - `value??{ ... }` — multi-branch. First match wins. With no matching branch it's a **runtime error**. To make a `??` total, give it a final catch-all branch — `(_){...}` for a single thing, `(*){...}` for any shape at all.
 
 ### Truthiness
 
@@ -630,12 +624,12 @@ To use the function we apply it using ! which is the notation in punk for execut
 
 Any template can have nested functions just like it can have nested queries, and because functions include a template, functions can use other functions. There are many built-in functions in Punk for doing arithmetic, manipulating text, and working with collections.
 
-An example function that calculates circumference using the `*` multiply built-in (which multiplies its numeric arguments). Here we multiply PI by radius, then multiply that answer by 2.
+An example function that calculates circumference using the `X` multiply built-in (which multiplies its numeric arguments). Here we multiply PI by radius, then multiply that answer by 2.
 
 ```punk
 > circumference:(radius:_){
-    *!{
-      *!{
+    X!{
+      X!{
         3.141
         radius?
       }
@@ -652,10 +646,10 @@ A function's body is a template. What comes back when you call it follows the sa
 - If the body has **multiple top-level items**, the function returns the whole template containing them in order.
 - A return-range constraint (`}~`) on the function lets you slice the body before it goes back to the caller — useful when intermediate steps live in the body but you only want the final answer to escape.
 
-Inside a function body, `_?` queries the whole template of arguments that the function was called with — useful when you want to forward, inspect, or fall back to the raw input regardless of what your pattern bound.
+Inside a function body, `*?` queries the whole template of arguments that the function was called with — useful when you want to forward, inspect, or fall back to the raw input regardless of what your pattern bound.
 
 ```punk
-> echo:(_ ___){_?}  echo!{a b c} ⏎
+> echo:(_ *){*?}  echo!{a b c} ⏎
 {a b c}
 ```
 
@@ -665,8 +659,8 @@ For functions that work like data templates, getting the whole resulting templat
 ```punk
 > sizer:(radius:_){
 
-    circumference:*!{
-      *!{
+    circumference:X!{
+      X!{
         3.141
         radius?
       }
@@ -694,8 +688,8 @@ This is because the template is calculating a circumference and storing it in a 
 > sizer:(radius:_){
 
     # caclulate the circumference #
-    circumference:*!{
-      *!{
+    circumference:X!{
+      X!{
         3.141
         radius?
       }
@@ -732,7 +726,7 @@ Once a name is bound, it's bound — including for the body of the function bein
 > factorial:(n:_){
     <=!{n? 1}??{
       (TRUE){1}
-      (FALSE){*!{n? factorial!{-!{n? 1}}}}
+      (FALSE){X!{n? factorial!{-!{n? 1}}}}
     }
   }
 > factorial!5
@@ -819,7 +813,7 @@ Arguments are consumed **left to right** against the function's pattern. Anythin
 This is the natural way to make a multi-parameter function fit into a pipeline, where each stage receives exactly one thing (see *Pipelines* above). Pre-fill every parameter except the one that should receive the piped value.
 
 ```punk
-> times:(a:_ b:_){*!{a? b?}} ⏎
+> times:(a:_ b:_){X!{a? b?}} ⏎
 > double:times'2 ⏎ # first param locked to 2, second one open #
 > 5->double->log! ⏎ # pipes 5 in as the remaining param, then logs #
 {10}
@@ -896,7 +890,7 @@ Punk doesn't bake in a single polymorphism mechanism — no classes, no multimet
 `??` matches against any shape, so a function can fan out on the shape of its own argument list. This is how you write the equivalent of arity overloading.
 
 ```punk
-> greet:(args:___){
+> greet:(args:*){
     args??{
       (n:_    ){Hello n?   }
       (n:_ t:_){Hello t? n?}
@@ -915,9 +909,9 @@ Because pattern slots are structural, the same `??` block dispatches on tag-styl
 ```punk
 > area:(shape:_){
     shape??{
-      (circle r:_   ){*!{*!{3.141 r?} r?} }
-      (rect w:_ h:_ ){*!{w? h?}           }
-      (tri b:_ h:_  ){/!{*!{b? h?} 2}     }
+      (circle r:_   ){X!{X!{3.141 r?} r?} }
+      (rect w:_ h:_ ){X!{w? h?}           }
+      (tri b:_ h:_  ){/!{X!{b? h?} 2}     }
     }
   }
 > area!{circle r:5}
@@ -935,10 +929,10 @@ Slots can be literal values, so dispatch by exact value falls out of the same me
 ```punk
 > route:(req:_){
     req??{
-      (method:GET  path:/      ___){index!req?    }
-      (method:GET  path:/about ___){about!req?    }
-      (method:POST path:/login ___){login!req?    }
-      (___                        ){notFound!req? }
+      (method:GET  path:/      *){index!req?    }
+      (method:GET  path:/about *){about!req?    }
+      (method:POST path:/login *){login!req?    }
+      (*                        ){notFound!req? }
     }
   }
 ```
@@ -984,7 +978,7 @@ This is the shape Punk reaches for with a box. A box lets us append things to a 
   register-greeter!{fr Bonjour}
 
   greet:(lang:_ name:_){
-    [greeters]->(g:_)"{find!{(i:_ ___)=!{i.lang? lang?} g?}.msg?} {name?}"!
+    [greeters]->(g:_)"{find!{(i:_ *)=!{i.lang? lang?} g?}.msg?} {name?}"!
   }
 ```
 
@@ -1024,7 +1018,7 @@ hello
 | `if` | a single-pattern `?` |
 | `cond` / `case` | `??` dispatch on value |
 | Predicate `cond` clauses | any pattern is itself a predicate — use `??` |
-| Arity overloading | `??` over `args:___` |
+| Arity overloading | `??` over `args:*` |
 | Closed multimethod / dispatch table | `??` with literal-value or shape patterns |
 | Open multimethod / extensible dispatch | a box holding a handler template, plus a `register` function and a dispatcher |
 | Protocols / interfaces | objects-as-namespaces: a template carrying named functions, called via name-path query |
@@ -1044,7 +1038,7 @@ Anything that's already expressible through queries is **not** a built-in. There
 | Call | Result |
 | --- | --- |
 | `+!{a b ...}` | sum of all items (variadic) |
-| `*!{a b ...}` | product of all items (variadic) |
+| `X!{a b ...}` | product of all items (variadic) |
 | `-!{a b}` | `a` minus `b` |
 | `/!{a b}` | `a` divided by `b` |
 | `^!{a b}` | `a` raised to the power `b` |
@@ -1062,7 +1056,7 @@ Anything that's already expressible through queries is **not** a built-in. There
 ```punk
 > +!{1 2 3 4} ⏎
 {10}
-> *!{2 3 4} ⏎
+> X!{2 3 4} ⏎
 {24}
 > -!{10 3} ⏎
 {7}
@@ -1127,7 +1121,7 @@ The collection built-ins operate on a template as a sequence of things. They nev
 > - `index` — its 1-based position in the source
 > - `key`   — the binding name if the item was a NamedThing, otherwise `NULL`
 >
-> The callback is always called with three things, so its pattern must account for all three. When you only care about the value, swallow the rest with a variadic — `(v:_ ___)` — or name the slots you want and use `_` placeholders for the rest: `(v:_ _ _)`. A bare `(v:_)` would fail the arity check.
+> The callback is always called with three things, so its pattern must account for all three. When you only care about the value, swallow the rest with a variadic — `(v:_ *)` — or name the slots you want and use `_` placeholders for the rest: `(v:_ _ _)`. A bare `(v:_)` would fail the arity check.
 >
 > `reduce!` is the exception — its callback is a fold and receives `(acc value)`. Accumulator first so a partial like `step:reduce'fn` is meaningful with the seed and collection still open.
 
@@ -1146,9 +1140,9 @@ The collection built-ins operate on a template as a sequence of things. They nev
 | `contains!{item t}` | `TRUE` if `item` appears in `t` |
 
 ```punk
-> map!{(n:_ ___){*!{n? 10}} {1 2 3}} ⏎
+> map!{(n:_ *){X!{n? 10}} {1 2 3}} ⏎
 {10 20 30}
-> filter!{(n:_ ___){>!{n? 2}} {1 2 3 4 5}} ⏎
+> filter!{(n:_ *){>!{n? 2}} {1 2 3 4 5}} ⏎
 {3 4 5}
 > reduce!{(a:_ b:_){+!{a? b?}} 0 {1 2 3 4}} ⏎
 {10}
@@ -1348,9 +1342,9 @@ keystore.open!todo->[db]!
 
 dispatch:(req:_){
   req??{
-    (method:GET  path:/      ___){index!req?     }
-    (method:POST path:/todo  ___){createTodo!req? }
-    (___                        ){notFound!req?  }
+    (method:GET  path:/      *){index!req?     }
+    (method:POST path:/todo  *){createTodo!req? }
+    (*                        ){notFound!req?  }
   }
 }
 
@@ -1383,7 +1377,7 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | `->` | Pipeline operator | Joins two sides with no whitespace; left flows into right when the chain ends in `!`, otherwise the chain is a composed function |
 | `/` `/` | Regex literal delimiters | Used as a pattern slot to match text against a regular expression |
 | `_` | Single wildcard | Only inside patterns |
-| `___` | Variadic wildcard (zero or more) | Only inside patterns |
+| `*` | Variadic wildcard (zero or more) | Only inside patterns |
 | `\` | Escape character — makes the next character literal | Anywhere a special character needs to appear as text |
 | space | Item separator inside a template or inside a pattern | Between things inside `{ ... }` and `( ... )` |
 
@@ -1415,7 +1409,7 @@ A `\` followed by another character produces literal text. The first three rows 
 | Character | Why it's safe as text |
 | --- | --- |
 | `.` | Only special inside a path token that ends in `?` or `!`. In any other context (including standalone text and decimal-looking numbers like `3.141`) it's just a character. |
-| `_` `___` | Only special inside a pattern; in templates they're ordinary text. |
+| `_` `*` | Only special inside a pattern; in templates they're ordinary text. |
 | Letters, digits, `+ - * / ^ % = < >`, `@`, etc. | Ordinary thing characters. Symbol-named built-ins like `+!`, `<!`, `<>!` are simply names whose text happens to be punctuation, followed by `!` to execute. |
 
 ### Whitespace and adjacency

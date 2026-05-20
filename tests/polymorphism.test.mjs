@@ -1,7 +1,7 @@
 // Polymorphism — composed from patterns, `??`, queries, and boxes.
 //
 // From doc § "Polymorphism":
-//   - By arity: `??` on `args:___`.
+//   - By arity: `??` on `args:*`.
 //   - By shape: tag-style patterns in `??`.
 //   - By value: literal slots.
 //   - By regex: regex slots.
@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { punk } from './_punk.mjs';
 
 test('arity dispatch — one arg', () => {
-  const src = `greet:(args:___){
+  const src = `greet:(args:*){
       args??{
         (n:_){Hello n?}
         (n:_ t:_){Hello t? n?}
@@ -24,7 +24,7 @@ test('arity dispatch — one arg', () => {
 });
 
 test('arity dispatch — two args', () => {
-  const src = `greet:(args:___){
+  const src = `greet:(args:*){
       args??{
         (n:_){Hello n?}
         (n:_ t:_){Hello t? n?}
@@ -35,11 +35,11 @@ test('arity dispatch — two args', () => {
 });
 
 test('shape dispatch — area of a rect', () => {
-  const src = `area:(shape:___){
+  const src = `area:(shape:*){
       shape??{
-        (circle r:_){*!{*!{3.141 r?} r?}}
-        (rect w:_ h:_){*!{w? h?}}
-        (tri b:_ h:_){/!{*!{b? h?} 2}}
+        (circle r:_){X!{X!{3.141 r?} r?}}
+        (rect w:_ h:_){X!{w? h?}}
+        (tri b:_ h:_){/!{X!{b? h?} 2}}
       }
     }
     area!{rect w:4 h:3}`;
@@ -47,11 +47,11 @@ test('shape dispatch — area of a rect', () => {
 });
 
 test('shape dispatch — area of a circle', () => {
-  const src = `area:(shape:___){
+  const src = `area:(shape:*){
       shape??{
-        (circle r:_){*!{*!{3.141 r?} r?}}
-        (rect w:_ h:_){*!{w? h?}}
-        (tri b:_ h:_){/!{*!{b? h?} 2}}
+        (circle r:_){X!{X!{3.141 r?} r?}}
+        (rect w:_ h:_){X!{w? h?}}
+        (tri b:_ h:_){/!{X!{b? h?} 2}}
       }
     }
     area!{circle r:5}`;
@@ -61,9 +61,9 @@ test('shape dispatch — area of a circle', () => {
 test('value dispatch — literal slots', () => {
   const src = `route:(req:_){
       req??{
-        (method:GET path:/      ___){home}
-        (method:GET path:/about ___){about}
-        (___                       ){notFound}
+        (method:GET path:/      *){home}
+        (method:GET path:/about *){about}
+        (*                       ){notFound}
       }
     }
     route!{method:GET path:/about extra:1}`;
@@ -73,9 +73,9 @@ test('value dispatch — literal slots', () => {
 test('value dispatch — falls through to catch-all', () => {
   const src = `route:(req:_){
       req??{
-        (method:GET path:/      ___){home}
-        (method:GET path:/about ___){about}
-        (___                       ){notFound}
+        (method:GET path:/      *){home}
+        (method:GET path:/about *){about}
+        (*                       ){notFound}
       }
     }
     route!{method:POST path:/x}`;

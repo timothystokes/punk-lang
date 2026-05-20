@@ -16,20 +16,23 @@ const run = (src) =>
 // ---------------------------------------------------------------------------
 // Wildcard / variadic placement
 
-test('lone _ outside a Pattern is a syntax error', () => {
-  assert.throws(() => run('{_}'), /wildcard/);
+test('lone _ outside a Pattern is a normal Word', () => {
+  // `_` is only special inside a pattern; everywhere else it's a literal
+  // word and is allowed to appear in templates, names, etc.
+  run('{_}');
 });
 
-test('lone ___ outside a Pattern is a syntax error', () => {
-  assert.throws(() => run('{___}'), /variadic/);
+test('lone * outside a Pattern is a normal Word', () => {
+  // Same as `_`: `*` only carries its variadic meaning inside a pattern.
+  run('{*}');
 });
 
 test('_ inside a Pattern is fine', () => {
   run('(x:_)x?');
 });
 
-test('___ inside a Pattern is fine', () => {
-  run('(args:___){args?}');
+test('* inside a Pattern is fine', () => {
+  run('(args:*){args?}');
 });
 
 test('_ inside a nested Pattern is fine', () => {
@@ -119,15 +122,16 @@ test('(){body}~ (non-empty body) is fine', () => {
 // Recursion: errors inside nested structures are still caught
 
 test('error inside a Fn body is caught', () => {
-  assert.throws(() => run('(x:_){_}'), /wildcard/);
+  // The validator recurses through Fn bodies — a stray '!' here proves it.
+  assert.throws(() => run('(x:_){!}'), /stray '!'/);
 });
 
 test('error inside a Tmpl inside a Pattern slot is caught', () => {
-  assert.throws(() => run('(x:{_}){x?}'), /wildcard/);
+  assert.throws(() => run('(x:{!}){x?}'), /stray '!'/);
 });
 
 test('error inside a Pipeline stage is caught', () => {
-  assert.throws(() => run('5->{_}->log!'), /wildcard/);
+  assert.throws(() => run('5->{!}->log!'), /stray '!'/);
 });
 
 test('error inside a Text embed is caught', () => {

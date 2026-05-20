@@ -128,8 +128,9 @@ test('decimal numbers have unescaped dots', () => {
   assert.equal(punk('isnum!3.141'), 'TRUE');
 });
 
-test('`_` and `___` are ordinary text outside patterns', () => {
-  assert.equal(punk('chars!"___".#?'), '{3}');
+test('`_` and `*` are ordinary text outside patterns', () => {
+  // Both characters appear in a text literal — they need no escaping.
+  assert.equal(punk('chars!"_*_".#?'), '{3}');
 });
 
 test('symbol-named builtins do NOT need escaping', () => {

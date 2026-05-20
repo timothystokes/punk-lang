@@ -63,9 +63,9 @@ test('multi-branch with no matching branch is a runtime error', () => {
     }`);
 });
 
-test('multi-branch matches `(___)` as a catch-all for any shape', () => {
+test('multi-branch matches `(*)` as a catch-all for any shape', () => {
   assert.equal(
-    punk('xs:{a b c}  xs??{(___){any}}'),
+    punk('xs:{a b c}  xs??{(*){any}}'),
     '{any}'
   );
 });
@@ -93,7 +93,7 @@ test('truthiness — 0 is truthy', () => {
 
 test('truthiness — empty template `{}` is truthy', () => {
   assert.equal(
-    punk('x:{}  x??{(FALSE){f}(NULL){n}(_){t}(___){tt}}'),
+    punk('x:{}  x??{(FALSE){f}(NULL){n}(_){t}(*){tt}}'),
     '{tt}'
   );
 });

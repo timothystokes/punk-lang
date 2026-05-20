@@ -89,7 +89,7 @@ export const builtins = {
     const xs = argsItems(args).map((v) => toNum(v));
     return numWord(xs.reduce((a, b) => a + b, 0));
   },
-  '*': (args) => {
+  'X': (args) => {
     const xs = argsItems(args).map((v) => toNum(v));
     return numWord(xs.reduce((a, b) => a * b, 1));
   },
