@@ -38,6 +38,13 @@ export const mkFn       = (params, body, env, returnRange) =>
 export const mkBox      = (name) => ({ kind: 'Box', name });
 export const mkPipeline = (stages) => ({ kind: 'Pipeline', stages });
 
+// A partial-application value. `target` is the underlying callable
+// (Fn, Builtin, or another Partial); `prefilled` is an array of value
+// items already supplied. When called with N more items, the result
+// is `call(target, prefilled ++ newItems)`.
+export const mkPartialFn = (target, prefilled) =>
+  ({ kind: 'PartialFn', target, prefilled });
+
 // Convenience predicates.
 export const isTrue  = (v) => v && v.kind === 'Word' && v.subkind === 'reserved' && v.text === 'TRUE';
 export const isFalse = (v) => v && v.kind === 'Word' && v.subkind === 'reserved' && v.text === 'FALSE';

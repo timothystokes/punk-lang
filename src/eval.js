@@ -18,7 +18,7 @@
 // are not reached until `!` is applied to the Tmpl.
 
 import { PunkRuntimeError } from './errors.js';
-import { mkTmpl, mkText, mkWord, mkFn, NULL, TRUE, FALSE } from './values.js';
+import { mkTmpl, mkText, mkWord, mkFn, mkPartialFn, NULL, TRUE, FALSE } from './values.js';
 import { match } from './match.js';
 import { builtins } from './builtins.js';
 import { format } from './format.js';
@@ -96,10 +96,7 @@ const evalItem = (node, env) => {
       return evalMatch(node, env);
 
     case 'Partial':
-      throw new PunkRuntimeError(
-        `evaluation of '${node.kind}' is not yet implemented`,
-        node.line, node.col,
-      );
+      return evalPartial(node, env);
 
     default:
       throw new PunkRuntimeError(
@@ -290,14 +287,22 @@ function evalExec(node, env) {
     ? cascadeTmpl(node.args, env)
     : mkTmpl([]);
 
+  return applyCallable(target, argsTmpl, env, node);
+}
+
+// Apply any callable value to an args Tmpl. Used by Exec, by !-cascade
+// on Fn values, and by HOF builtins that want to invoke callbacks.
+function applyCallable(target, argsTmpl, env, node) {
   if (target && target.kind === 'Builtin') {
-    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl, callFn });
+    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl, callFn: (fn, a, n) => applyCallable(fn, a, env, n) });
   }
   if (target && target.kind === 'Fn') {
     return callFn(target, argsTmpl, node);
   }
-  // Cascade-execution of a value: `{...}!`, `"..."!`. Resolves
-  // embedded queries / runs reached functions inside the template.
+  if (target && target.kind === 'PartialFn') {
+    const combined = mkTmpl([...target.prefilled, ...argsTmpl.items]);
+    return applyCallable(target.target, combined, env, node);
+  }
   if (target && target.kind === 'Tmpl') {
     return cascadeTmpl(target, env);
   }
@@ -305,8 +310,28 @@ function evalExec(node, env) {
     return cascadeText(target, env);
   }
   throw new PunkRuntimeError(
-    `cannot call a non-function value`, node.line, node.col,
+    `cannot call a non-function value`, node && node.line, node && node.col,
   );
+}
+
+// Build a partial-application value. Mirrors Exec target resolution
+// but doesn't call — captures (target, prefilled-args).
+function evalPartial(node, env) {
+  let cur = resolveExecTarget(node, env);
+  for (const seg of node.segments || []) {
+    const next = walkSegment(cur, seg, node);
+    if (next === null) {
+      throw new PunkRuntimeError(
+        `path step off the end while resolving partial target`,
+        node.line, node.col,
+      );
+    }
+    cur = next;
+  }
+  const argsTmpl = node.args
+    ? cascadeTmpl(node.args, env)
+    : mkTmpl([]);
+  return mkPartialFn(cur.value, argsTmpl.items);
 }
 
 function callFn(fn, args, node) {
