@@ -58,6 +58,22 @@ Examples: `name`, `first-name`, `snake_name`, `x1`, `$jsThing`, `Foo` and `foo` 
 
 Names are **immutable** once bound in a scope: rebinding `x:1` in a scope where `x` is already bound is a syntax error. A dangling `name:` (with nothing to the right of the `:`, or with whitespace before the value) is also a syntax error — Punk does not implicitly bind names to `NULL`. Querying a name that was never bound returns `NULL`.
 
+#### Reserved single-character words
+
+A handful of bare words have special meaning and so cannot be used as ordinary names or literal values:
+
+- `_` — wildcard slot inside a `()` pattern; also, inside a function body, `_?` queries **the whole argument template** that was passed to the function.
+- `___` — variadic wildcard slot, only valid inside a `()` pattern.
+- `TRUE`, `FALSE`, `NULL` — the three reserved values.
+
+To use any of these as a literal Word (e.g. as an argument to a text builtin), **escape each character** with a backslash: `\_`, `\T\R\U\E`, and `\_\_\_` for the literal three-underscore word. Punk has no multi-character escape sequences — each `\` escapes exactly the next character.
+
+```punk
+> replace!{- \_ "foo-bar-baz"} ⏎ # `\_` is the literal underscore character #
+"foo_bar_baz"
+```
+
+
 ### Bare-value bindings auto-wrap
 
 Bare Words and Numbers have no inherent delimiter, so when they appear on the value side of a binding they are wrapped in a singleton structured template:
@@ -635,6 +651,14 @@ A function's body is a template. What comes back when you call it follows the sa
 - If the body has **one top-level item**, the function returns *that item directly*. A function whose body is a single function literal returns the function itself; a body that is a single arithmetic call returns the number; a body that is a single dispatch (`x??{...}`) returns whatever branch matched.
 - If the body has **multiple top-level items**, the function returns the whole template containing them in order.
 - A return-range constraint (`}~`) on the function lets you slice the body before it goes back to the caller — useful when intermediate steps live in the body but you only want the final answer to escape.
+
+Inside a function body, `_?` queries the whole template of arguments that the function was called with — useful when you want to forward, inspect, or fall back to the raw input regardless of what your pattern bound.
+
+```punk
+> echo:(_ ___){_?}  echo!{a b c} ⏎
+{a b c}
+```
+
 
 For functions that work like data templates, getting the whole resulting template back is useful. But for templates that contain a number of intermediate steps, it's often just the last item that matters. Here is an example that also uses the `<` less-than built-in function.
 

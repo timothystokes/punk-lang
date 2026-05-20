@@ -171,9 +171,10 @@ export function tokenize(src) {
 
       // Otherwise — build a WORD by accumulating non-special chars.
       let text = '';
+      let esc = false;
       while (!eof()) {
         const ch = peek();
-        if (ch === '\\') { text += readEscape(); continue; }
+        if (ch === '\\') { text += readEscape(); esc = true; continue; }
         if (ch === '#') {
           // Two cases: `.#?` length-of segment (stays in the word) or
           // a comment (vanishes; word-building continues across it).
@@ -221,7 +222,9 @@ export function tokenize(src) {
           push(TOKEN_TYPES.WORD, text.slice(0, -1), startLine, startCol);
           push(TOKEN_TYPES.WORD, '?', startLine, startCol + text.length - 1);
         } else {
-          push(TOKEN_TYPES.WORD, text, startLine, startCol);
+          const tok = { type: TOKEN_TYPES.WORD, text, line: startLine, col: startCol };
+          if (esc) tok.esc = true;
+          tokens.push(tok);
         }
       }
       continue;

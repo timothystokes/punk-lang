@@ -139,7 +139,12 @@ export function parseTree(tokens) {
       case T.LPAREN:    return parseParens();
       case T.LBRACK:    return parseBrackets();
       case T.QUOTE_OPEN: return parseText();
-      case T.WORD:      i++; return mkWord(tok.text, tok.line, tok.col);
+      case T.WORD: {
+        i++;
+        const w = mkWord(tok.text, tok.line, tok.col);
+        if (tok.esc) w.esc = true;
+        return w;
+      }
       case T.ARROW:     i++; return mkWord('->', tok.line, tok.col); // pipeline op; parseOperators handles it
       // Stray closing delimiters at this point are unmatched.
       case T.RBRACE:
@@ -377,13 +382,13 @@ const decodeWord = (w) => {
   const copy = (node) => { if (glued) node.glued = true; return node; };
 
   // Reserved literals
-  if (RESERVED_NAMES.has(text)) {
+  if (RESERVED_NAMES.has(text) && !w.esc) {
     return copy({ kind: 'Word', text, subkind: 'reserved', line, col });
   }
-  if (text === '_') {
+  if (text === '_' && !w.esc) {
     return copy({ kind: 'Word', text, subkind: 'wildcard', line, col });
   }
-  if (text === '___') {
+  if (text === '___' && !w.esc) {
     return copy({ kind: 'Word', text, subkind: 'variadic', line, col });
   }
   // Bare `!` — used as the pipeline-execute marker. parseOperators
@@ -460,9 +465,9 @@ const decodeWord = (w) => {
       // shouldn't happen — findMidBang only returns non-end indices
       throw new PunkSyntaxError(`bad word '${text}'`, line, col);
     }
-    if (!isName(rhs) && !isNumber(rhs)) {
+    if (!isName(rhs) && !isNumber(rhs) && /[!'?:.]/.test(rhs)) {
       throw new PunkSyntaxError(
-        `'${text}': the value after '${op}' must be a single name or number`,
+        `'${text}': the value after '${op}' must be a single value`,
         line, col,
       );
     }
@@ -722,6 +727,7 @@ const mergeSiblings = (items) => {
   let xs = items;
   xs = passArgsAttach(xs);
   xs = passFnFormation(xs);
+  xs = passArgsAttach(xs);
   xs = passMatch(xs);
   xs = passReturnRange(xs);
   xs = passPostfixBang(xs);
@@ -890,10 +896,19 @@ const passArgsAttach = (xs) => {
   for (let i = 0; i < xs.length; i++) {
     const cur = xs[i];
     const next = xs[i + 1];
+    const after = xs[i + 2];
     if (
       (cur.kind === 'Exec' || cur.kind === 'Partial') &&
       !cur.args && next && next.glued
     ) {
+      // Don't eat a Pattern that will form a Fn with the next sibling.
+      // (passFnFormation runs after this pass and pairs Pattern + glued
+      //  body. We want the resulting Fn to be the args here, not the
+      //  bare Pattern.)
+      if (next.kind === 'Pattern' && after && after.glued) {
+        out.push(cur);
+        continue;
+      }
       if (next.kind === 'Tmpl') {
         const node = { ...cur, args: stripGlued(next) };
         if (cur.glued) node.glued = true;

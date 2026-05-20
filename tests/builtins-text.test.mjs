@@ -78,11 +78,11 @@ test('trim! — no internal whitespace touched', () => {
 // ---- replace! ---------------------------------------------------------
 
 test('replace! — replaces all occurrences', () => {
-  assert.equal(punk('replace!{- _ "foo-bar-baz"}'), '"foo_bar_baz"');
+  assert.equal(punk('replace!{- \\_ "foo-bar-baz"}'), '"foo_bar_baz"');
 });
 
 test('replace! — no match returns input unchanged', () => {
-  assert.equal(punk('replace!{x _ "abc"}'), '"abc"');
+  assert.equal(punk('replace!{x \\_ "abc"}'), '"abc"');
 });
 
 // ---- chars! -----------------------------------------------------------
@@ -104,7 +104,7 @@ test("partial — `split'-` is a unary text splitter", () => {
 });
 
 test("partial — `replace'{old new}` is a unary text transformer", () => {
-  const src = `kebab-to-snake:replace'{- _}
+  const src = `kebab-to-snake:replace'{- \\_}
     kebab-to-snake!"foo-bar-baz"`;
   assert.equal(punk(src), '"foo_bar_baz"');
 });

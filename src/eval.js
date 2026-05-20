@@ -343,6 +343,8 @@ function callFn(fn, args, node) {
     );
   }
   const fnEnv = fn.env.child();
+  // `_?` inside a fn body resolves to the whole args Tmpl passed in.
+  fnEnv.bind('_', args, node);
   for (const [k, v] of bindings) fnEnv.bind(k, v, node);
   return cascadeBody(fn.body, fn.returnRange, fnEnv);
 }
