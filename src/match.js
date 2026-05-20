@@ -37,17 +37,20 @@ const bind = (bindings, name, value) => {
 // Match a single value-item against a single (non-variadic) pattern
 // slot. Returns true (and mutates bindings) or false.
 function matchSlot(item, slot, bindings) {
+  // Names aren't part of the contract — if the item is Named, unwrap it
+  // so its shape (and value) drives matching uniformly.
+  const unwrapped = item && item.kind === 'Named' ? item.value : item;
   if (slot.kind === 'Named') {
-    if (!matchSlot(item, slot.value, bindings)) return false;
-    return bind(bindings, slot.name, item);
+    if (!matchSlot(unwrapped, slot.value, bindings)) return false;
+    return bind(bindings, slot.name, unwrapped);
   }
   if (isWildcard(slot)) return true;
   if (slot.kind === 'Pattern') {
-    if (!item || item.kind !== 'Tmpl') return false;
-    return matchPatternItems(item.items, slot.items, bindings);
+    if (!unwrapped || unwrapped.kind !== 'Tmpl') return false;
+    return matchPatternItems(unwrapped.items, slot.items, bindings);
   }
   // Bare literal — exact value equality.
-  return equals(item, slot);
+  return equals(unwrapped, slot);
 }
 
 function matchPatternItems(items, slots, bindings) {

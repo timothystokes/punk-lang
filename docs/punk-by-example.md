@@ -306,6 +306,26 @@ Templates are inert until something asks Punk to run them. A template just sitti
 ```
 
 The `~` constraint on a function (`{…}~`, covered later) is part of the *shape* of the result, not a trigger — slicing only happens once the function is actually called with `!`.
+
+### How values splice into their surroundings
+
+When a cascade resolves a value and slots it back into the surrounding form, the splicing rule depends on what that surrounding form is:
+
+- **Into a template** the resolved value's items are *spread* into the parent. This is composition. A template that resolves to `{Tim Jones}` adds both `Tim` and `Jones` to the parent — not a nested `{Tim Jones}`.
+- **Into a string** the resolved value is *stringified*: its items are joined into the surrounding text as plain characters (multi-item templates are joined by a single space). The structure flattens away because a string is just characters.
+
+```punk
+> name:{Tim Jones}
+
+> {name is name?}!     ⏎ # composition — items spread into the parent template #
+{name is Tim Jones}
+
+> "name is {name?}"!   ⏎ # stringification — items become text inside the string #
+"name is Tim Jones"
+```
+
+The same rule applies when the bound value is a single word — `name:Bob` auto-wraps to `{Bob}`, so `{hi name?}!` is `{hi Bob}` and `"Hello {name?}"!` is `"Hello Bob"`. The auto-wrap and the splice rule together make the single-value case look the way you'd expect, but the underlying rule is the same: templates spread, strings stringify.
+
 ## Punk Data Notation (PDN)
 
 Everything you've seen so far is also a data format. A Punk program *is* its own data — there is no separate syntax for "writing down a value" vs "writing code that produces a value". The same characters that bind names, group things, and attach names to values in source are how data is serialised, sent over the wire, written to disk, or pasted into a config file.

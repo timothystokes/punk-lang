@@ -78,6 +78,7 @@ const mkQuery   = (head, segments, line, col)      => ({ kind: 'Query', head, se
 const mkExec    = (head, segments, line, col)      => ({ kind: 'Exec', head, segments, line, col });
 const mkPartial = (head, segments, line, col)      => ({ kind: 'Partial', head, segments, line, col });
 const mkRange   = (from, to, line, col)            => ({ kind: 'Range', from, to, line, col });
+const mkMatch   = (subject, branches, line, col)   => ({ kind: 'Match', subject, branches, line, col });
 
 // ---------------------------------------------------------------------------
 // parseTree — bracket structure pass
@@ -389,6 +390,15 @@ const decodeWord = (w) => {
   // attaches semantic meaning; here we just allow it through.
   if (text === '!') {
     return copy({ kind: 'Word', text, subkind: 'bang', line, col });
+  }
+
+  // Bare `?` and `??` are match operators (predicate / dispatch).
+  // The trailing `?` on a path word is consumed as a Query trigger;
+  // a standalone `?` (after a delimited value) and the second `?` of
+  // `??` (split off by the tokenizer) are match operators.
+  // parseOperators wires them into Match nodes.
+  if (text === '?' || text === '??') {
+    return copy({ kind: 'Word', text, subkind: 'match-op', line, col });
   }
 
   // Range word (contains `~` and is not a path)
@@ -712,12 +722,117 @@ const mergeSiblings = (items) => {
   let xs = items;
   xs = passArgsAttach(xs);
   xs = passFnFormation(xs);
+  xs = passMatch(xs);
   xs = passReturnRange(xs);
   xs = passPostfixBang(xs);
   xs = passPipeline(xs);
   xs = passResolveNamed(xs);
   return xs;
 };
+
+// Match form — `Match { subject, branches:[{pattern, body|null}] }`.
+//
+// Recognises three shapes (after passFnFormation has merged
+// `Pattern + Tmpl` into Fn):
+//
+//   1. Predicate, bareword subject  : Query glued Pattern
+//                                     → Match(subject=Query, [{pat, body:null}])
+//   2. If-then, bareword subject    : Query glued Fn
+//                                     → Match(subject=Query, [{fn.params, body:fn.body}])
+//   3. Explicit match op            : <value> glued Word(match-op) glued ...
+//        - followed by Pattern      → predicate
+//        - followed by Fn           → if-then
+//        - followed by Tmpl-of-Fns  → dispatch (multi-arm)
+//
+// Subject can be any value-kind: Query (the most common shape), Tmpl,
+// Text, Box, Pattern, Fn — anything an outer `!` can later cascade.
+const isMatchOp = (n) => n && n.kind === 'Word' && n.subkind === 'match-op';
+
+const tmplOfFnsBranches = (tmpl) => {
+  // Each item must be a Fn; otherwise return null (caller decides).
+  const out = [];
+  for (const it of tmpl.items) {
+    if (!it || it.kind !== 'Fn') return null;
+    out.push({ pattern: it.params, body: it.body });
+  }
+  return out;
+};
+
+const matchValueSubject = (n) => {
+  if (!n) return false;
+  switch (n.kind) {
+    case 'Query': case 'Tmpl': case 'Text': case 'Box':
+    case 'Pattern': case 'Fn': case 'Exec': case 'Partial':
+    case 'Word': case 'Range':
+      return true;
+    default: return false;
+  }
+};
+
+const passMatch = (xs) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i++) {
+    const cur = xs[i];
+    const a = xs[i + 1];
+    const b = xs[i + 2];
+
+    // Case 1 & 2 — Query glued Pattern/Fn (bareword subject; the `?`
+    // was consumed by the path word).
+    if (cur.kind === 'Query' && a && a.glued
+        && (a.kind === 'Pattern' || a.kind === 'Fn')) {
+      const branches = a.kind === 'Pattern'
+        ? [{ pattern: stripGlued(a), body: null }]
+        : [{ pattern: a.params, body: a.body }];
+      const node = mkMatch(stripGlued(cur), branches, cur.line, cur.col);
+      if (cur.glued) node.glued = true;
+      out.push(node);
+      i += 1;
+      continue;
+    }
+
+    // Case 3 — explicit match op `?` between subject and arm(s).
+    if (matchValueSubject(cur) && a && a.glued && isMatchOp(a)
+        && b && b.glued) {
+      let branches = null;
+      if (b.kind === 'Pattern') {
+        branches = [{ pattern: stripGlued(b), body: null }];
+      } else if (b.kind === 'Fn') {
+        branches = [{ pattern: b.params, body: b.body }];
+      } else if (b.kind === 'Tmpl') {
+        branches = tmplOfFnsBranches(b);
+        if (branches === null) {
+          throw new PunkSyntaxError(
+            `match-dispatch arms must all be functions (pattern + body)`,
+            b.line, b.col,
+          );
+        }
+      }
+      if (branches !== null) {
+        const node = mkMatch(stripGlued(cur), branches, cur.line, cur.col);
+        if (cur.glued) node.glued = true;
+        out.push(node);
+        i += 2;
+        continue;
+      }
+      throw new PunkSyntaxError(
+        `match operator '${a.text}' must be followed by a pattern, a function, or a template of functions`,
+        a.line, a.col,
+      );
+    }
+
+    // A standalone match-op that didn't pair up is a stray operator.
+    if (isMatchOp(cur)) {
+      throw new PunkSyntaxError(
+        `stray '${cur.text}' — match operator needs a value on the left and a pattern/function on the right`,
+        cur.line, cur.col,
+      );
+    }
+
+    out.push(cur);
+  }
+  return out;
+};
+
 
 // Pass 1 — `Pattern + glued <node>` → `Fn`.
 const passFnFormation = (xs) => {

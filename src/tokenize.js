@@ -212,7 +212,17 @@ export function tokenize(src) {
       // that consumed nothing visible after a non-word boundary). Only
       // emit a WORD when we actually have text.
       if (text.length > 0) {
-        push(TOKEN_TYPES.WORD, text, startLine, startCol);
+        // Split a trailing `??` off a path-word so the second `?`
+        // becomes a standalone match operator. `name??{...}` → emit
+        // `name?` then `?` glued; the standalone match op is wired up
+        // in parseOperators. Standalone `??` (text === '??', length 2)
+        // is left alone — handled as a match op by decodeWord.
+        if (text.length > 2 && text.endsWith('??')) {
+          push(TOKEN_TYPES.WORD, text.slice(0, -1), startLine, startCol);
+          push(TOKEN_TYPES.WORD, '?', startLine, startCol + text.length - 1);
+        } else {
+          push(TOKEN_TYPES.WORD, text, startLine, startCol);
+        }
       }
       continue;
     }

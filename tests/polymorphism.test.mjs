@@ -15,7 +15,7 @@ import { punk } from './_punk.mjs';
 test('arity dispatch — one arg', () => {
   const src = `greet:(args:___){
       args??{
-        (n:_)    {Hello n?}
+        (n:_){Hello n?}
         (n:_ t:_){Hello t? n?}
       }
     }
@@ -26,7 +26,7 @@ test('arity dispatch — one arg', () => {
 test('arity dispatch — two args', () => {
   const src = `greet:(args:___){
       args??{
-        (n:_)    {Hello n?}
+        (n:_){Hello n?}
         (n:_ t:_){Hello t? n?}
       }
     }
@@ -35,11 +35,11 @@ test('arity dispatch — two args', () => {
 });
 
 test('shape dispatch — area of a rect', () => {
-  const src = `area:(shape:_){
+  const src = `area:(shape:___){
       shape??{
-        (circle r:_  ){*!{*!{3.141 r?} r?}}
+        (circle r:_){*!{*!{3.141 r?} r?}}
         (rect w:_ h:_){*!{w? h?}}
-        (tri b:_ h:_ ){/!{*!{b? h?} 2}}
+        (tri b:_ h:_){/!{*!{b? h?} 2}}
       }
     }
     area!{rect w:4 h:3}`;
@@ -47,11 +47,11 @@ test('shape dispatch — area of a rect', () => {
 });
 
 test('shape dispatch — area of a circle', () => {
-  const src = `area:(shape:_){
+  const src = `area:(shape:___){
       shape??{
-        (circle r:_  ){*!{*!{3.141 r?} r?}}
+        (circle r:_){*!{*!{3.141 r?} r?}}
         (rect w:_ h:_){*!{w? h?}}
-        (tri b:_ h:_ ){/!{*!{b? h?} 2}}
+        (tri b:_ h:_){/!{*!{b? h?} 2}}
       }
     }
     area!{circle r:5}`;
@@ -108,7 +108,7 @@ test('regex dispatch — color text', () => {
 
 test('method-style dispatch — same call site, different object', () => {
   const src = `printer:{
-      print:(msg:_){upper!msg?}
+      print:(msg:_){upper!{msg?}}
     }
     silent-printer:{
       print:(msg:_){}

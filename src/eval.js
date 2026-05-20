@@ -18,7 +18,7 @@
 // are not reached until `!` is applied to the Tmpl.
 
 import { PunkRuntimeError } from './errors.js';
-import { mkTmpl, mkText, mkWord, mkFn, NULL } from './values.js';
+import { mkTmpl, mkText, mkWord, mkFn, NULL, TRUE, FALSE } from './values.js';
 import { match } from './match.js';
 import { builtins } from './builtins.js';
 import { format } from './format.js';
@@ -91,6 +91,9 @@ const evalItem = (node, env) => {
 
     case 'Exec':
       return evalExec(node, env);
+
+    case 'Match':
+      return evalMatch(node, env);
 
     case 'Partial':
       throw new PunkRuntimeError(
@@ -317,6 +320,42 @@ function callFn(fn, args, node) {
   const fnEnv = fn.env.child();
   for (const [k, v] of bindings) fnEnv.bind(k, v, node);
   return cascadeBody(fn.body, fn.returnRange, fnEnv);
+}
+
+// Evaluate a Match node. Branches are tried top-to-bottom; the first
+// pattern that matches wins.
+//   - Predicate (body===null): TRUE on match, FALSE on miss.
+//   - If-then (single branch with body): cascade body in matched env
+//       on match, NULL on miss.
+//   - Dispatch (multiple branches): on match, cascade matched body;
+//       if no branch matches, runtime error.
+// Subject is evaluated normally (Queries fire, Tmpls stay inert as a
+// value to match against, etc.). Patterns operate on whatever the
+// subject's value shape is; for non-Tmpl singletons the matcher
+// wraps in a 1-item Tmpl so `(_)` etc. behave consistently.
+function evalMatch(node, env) {
+  const subject = evalItem(node.subject, env);
+  const subjectAsTmpl = subject && subject.kind === 'Tmpl'
+    ? subject
+    : mkTmpl([subject]);
+
+  const branches = node.branches;
+  const isPredicate = branches.length === 1 && branches[0].body == null;
+
+  for (const br of branches) {
+    const bindings = match(subjectAsTmpl, br.pattern);
+    if (bindings === null) continue;
+    if (br.body == null) return TRUE;
+    const m = env.child();
+    for (const [k, v] of bindings) m.bind(k, v, node);
+    return cascadeBody(br.body, null, m);
+  }
+
+  if (isPredicate) return FALSE;
+  if (branches.length === 1) return NULL; // if-then miss
+  throw new PunkRuntimeError(
+    `no matching branch in dispatch`, node.line, node.col,
+  );
 }
 
 // Evaluate ("cascade") the items of a body Tmpl in scope. Top-level
