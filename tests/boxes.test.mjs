@@ -45,8 +45,10 @@ test('a box can hold any value, including a template', () => {
 
 test('boxes and ordinary names do not interact', () => {
   // n as a regular name; [n] as a box. They are different things.
+  // The outer tmpl needs a trailing `!` to execute its items; without
+  // it the tmpl is inert and would print as-is.
   assert.equal(
-    punk('n:1  2->[n]!  {n? [n]->(v:_){v?}!}'),
-    '{{1} {2}}'
+    punk('n:1  2->[n]!  {n? [n]->(v:_){v?}!}!'),
+    '{1 2}'
   );
 });
