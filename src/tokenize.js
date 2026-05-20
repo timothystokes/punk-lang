@@ -50,6 +50,9 @@ export function tokenize(src) {
   const tokens = [];
   // mode stack: 'STRUCT' (default, inside {} () []) or 'TEXT' (inside "")
   const modes = ['STRUCT'];
+  // Pattern-context depth — how many enclosing `(...)` we're inside.
+  // Regex literals (`/.../`) are only recognized inside Pattern context.
+  let patternDepth = 0;
   const mode = () => modes[modes.length - 1];
 
   let i = 0;
@@ -160,8 +163,8 @@ export function tokenize(src) {
         if (modes.length > 1) modes.pop();
         continue;
       }
-      if (c === '(') { advance(); push(TOKEN_TYPES.LPAREN, '(', startLine, startCol); continue; }
-      if (c === ')') { advance(); push(TOKEN_TYPES.RPAREN, ')', startLine, startCol); continue; }
+      if (c === '(') { advance(); push(TOKEN_TYPES.LPAREN, '(', startLine, startCol); patternDepth++; continue; }
+      if (c === ')') { advance(); push(TOKEN_TYPES.RPAREN, ')', startLine, startCol); if (patternDepth > 0) patternDepth--; continue; }
       if (c === '[') { advance(); push(TOKEN_TYPES.LBRACK, '[', startLine, startCol); continue; }
       if (c === ']') { advance(); push(TOKEN_TYPES.RBRACK, ']', startLine, startCol); continue; }
 
@@ -223,17 +226,13 @@ export function tokenize(src) {
         continue;
       }
 
-      // `/.../[flags]` — first-class regex literal. Triggered when `/`
-      // is followed by a non-whitespace, non-structural char other than
-      // `!`. (`/!{a b}` is the division builtin call — the `/` stays a
-      // plain WORD there.) Inside the body, `\X` pairs are passed
-      // through verbatim so the JS regex engine sees them as-is; that's
-      // also how we find the closing `/` (a backslash skips the next
-      // char). After the closing `/`, optional ASCII-letter flags.
-      if (c === '/') {
+      // `/.../[flags]` — first-class regex literal, recognized ONLY
+      // inside a Pattern `(...)`. Outside patterns, `/` is always a
+      // normal word char (no path/regex ambiguity).
+      if (c === '/' && patternDepth > 0) {
         const n = peek(1);
-        const isRegexStart = n !== '' && n !== '!' && n !== ' ' && n !== '\t'
-          && n !== '\n' && n !== '\r' && !STRUCT_DELIMS.has(n);
+        const isRegexStart = n !== '' && n !== '!' && n !== ' '
+          && n !== '\t' && n !== '\n' && n !== '\r' && !STRUCT_DELIMS.has(n);
         if (isRegexStart) {
           advance(); // opening /
           let body = '';
