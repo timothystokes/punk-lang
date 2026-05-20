@@ -43,10 +43,11 @@ test('executing a name with `!` cascades — every reachable query/function runs
 
 test('function inside a template is inert until the template is executed', () => {
   // `shout` is just sitting in source; without `!` on the enclosing template
-  // nothing runs.
+  // nothing runs. The embed round-trips through its canonical form: the
+  // shorthand `shout!hi` is parsed and re-displayed as `shout!{hi}`.
   assert.equal(
     punk('shout:(s:_){upper!{s?}}  "I said {shout!hi}"'),
-    '"I said {shout!hi}"'
+    '"I said {shout!{hi}}"'
   );
 });
 
@@ -58,9 +59,10 @@ test('function inside an unstructured template runs when the template is execute
 });
 
 test('escaped `?` is a literal question mark, not a query', () => {
+  // Under the new model the `\?` is preserved verbatim in text storage.
   assert.equal(
     punk('"What is your name\\?"!'),
-    '"What is your name?"'
+    '"What is your name\\?"'
   );
 });
 

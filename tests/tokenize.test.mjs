@@ -132,10 +132,12 @@ test('quoted text — multiple placeholders', () => {
   ]);
 });
 
-test('quoted text — escaped quote inside is literal', () => {
+test('quoted text — escaped quote inside is preserved verbatim', () => {
+  // New model: text storage preserves the escape verbatim (only resolves
+  // at the word→string boundary), so the TEXT token text retains `\"`.
   assert.deepEqual(shape('"say \\"hi\\""'), [
     [T.QUOTE_OPEN, '"'],
-    [T.TEXT, 'say "hi"'],
+    [T.TEXT, 'say \\"hi\\"'],
     [T.QUOTE_CLOSE, '"'],
   ]);
 });
@@ -146,10 +148,11 @@ test('arrow operator', () => {
   ]);
 });
 
-test('escaped minus does not form arrow', () => {
-  // `\-` produces a literal `-` even when followed by `>`
+test('escaped minus does not form arrow — escape preserved verbatim', () => {
+  // `\-` in storage stays as `\-`; the arrow rule never fires because
+  // tokenize sees an escape, not a bare `-`.
   assert.deepEqual(shape('a\\->b'), [
-    [T.WORD, 'a->b'],
+    [T.WORD, 'a\\->b'],
   ]);
 });
 
@@ -224,8 +227,8 @@ test('comment with another # inside makes two comments and a word in between', (
   ]);
 });
 
-test('escaped # is literal, never opens a comment', () => {
-  assert.deepEqual(shape('foo\\#bar'), [[T.WORD, 'foo#bar']]);
+test('escaped # is preserved verbatim, never opens a comment', () => {
+  assert.deepEqual(shape('foo\\#bar'), [[T.WORD, 'foo\\#bar']]);
 });
 
 test('comments vanish but unclosed # is an error', () => {
@@ -240,34 +243,32 @@ test('trailing backslash is an error', () => {
   assert.throws(() => tokenize('foo\\'), PunkSyntaxError);
 });
 
-test('\\n inside text decodes to a real newline', () => {
+test('\\n inside text is stored verbatim (resolves only at IO)', () => {
   const toks = tokenize('"a\\nb"');
   assert.equal(toks[1].type, T.TEXT);
-  assert.equal(toks[1].text, 'a\nb');
+  assert.equal(toks[1].text, 'a\\nb');
 });
 
-test('\\t inside text decodes to a real tab', () => {
+test('\\t inside text is stored verbatim (resolves only at IO)', () => {
   const toks = tokenize('"a\\tb"');
-  assert.equal(toks[1].text, 'a\tb');
+  assert.equal(toks[1].text, 'a\\tb');
 });
 
-test('escaped space inside a word becomes a literal space', () => {
-  // `foo\ bar` — the `\ ` injects a space into the word, then `bar`
-  // continues without a break.
-  assert.deepEqual(shape('foo\\ bar'), [
-    [T.WORD, 'foo bar'],
-  ]);
+test('escaped space inside a word is a tokenize error', () => {
+  // Punk has no whitespace escape — `\<space>` is illegal.
+  assert.throws(() => tokenize('foo\\ bar'), PunkSyntaxError);
 });
 
-test('escaped special chars inside a word', () => {
-  assert.deepEqual(shape('What\\?'), [[T.WORD, 'What?']]);
-  assert.deepEqual(shape('\\{'), [[T.WORD, '{']]);
-  assert.deepEqual(shape('\\}'), [[T.WORD, '}']]);
+test('escaped special chars inside a word — preserved verbatim', () => {
+  assert.deepEqual(shape('What\\?'), [[T.WORD, 'What\\?']]);
+  assert.deepEqual(shape('\\{'), [[T.WORD, '\\{']]);
+  assert.deepEqual(shape('\\}'), [[T.WORD, '\\}']]);
 });
 
-test('\\X for non-special X is just X', () => {
-  // Per the appendix: `\s` is just `s`.
-  assert.deepEqual(shape('\\s'), [[T.WORD, 's']]);
+test('\\X for non-special X is preserved verbatim too', () => {
+  // The escape is redundant for `\s` but stays in storage; only the
+  // word→string boundary (e.g. join!) strips redundant escapes.
+  assert.deepEqual(shape('\\s'), [[T.WORD, '\\s']]);
 });
 
 test('positions are 1-based and track newlines', () => {
@@ -328,10 +329,10 @@ test('# inside a string vanishes too', () => {
   ]);
 });
 
-test('a literal # inside a string via escape', () => {
+test('a literal # inside a string via escape — preserved verbatim', () => {
   assert.deepEqual(shape('"a \\# b"'), [
     [T.QUOTE_OPEN, '"'],
-    [T.TEXT, 'a # b'],
+    [T.TEXT, 'a \\# b'],
     [T.QUOTE_CLOSE, '"'],
   ]);
 });
