@@ -954,6 +954,13 @@ const passPostfixBang = (xs) => {
         out.push(cur);
         continue;
       }
+      // Also defer if cur is glued to a preceding `->` — the bang is
+      // the pipeline-trigger marker, not a postfix on `cur` itself.
+      const prev = xs[i - 1];
+      if (cur.glued && prev && prev.kind === 'Word' && prev.text === '->' && prev.glued) {
+        out.push(cur);
+        continue;
+      }
       const exec = {
         kind: 'Exec',
         head: stripGlued(cur),

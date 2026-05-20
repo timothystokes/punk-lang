@@ -357,14 +357,42 @@ function runPipeline(node, env, seed) {
     current = seed;
     i = 0;
   } else {
-    current = evalItem(stages[0], env);
+    const s0 = stages[0];
+    if (s0 && s0.kind === 'Box') {
+      // Reading a box as the initial value of a pipeline.
+      current = readBox(s0, env);
+    } else {
+      current = evalItem(s0, env);
+    }
     i = 1;
   }
   for (; i < stages.length; i++) {
-    const callable = resolveStageCallable(stages[i], env);
-    current = applyCallable(callable, mkTmpl([current]), env, stages[i]);
+    const stage = stages[i];
+    if (stage && stage.kind === 'Box') {
+      // Writing the running value into the box; the value passes
+      // through unchanged so further stages still see it.
+      writeBox(stage, current, env);
+      continue;
+    }
+    const callable = resolveStageCallable(stage, env);
+    current = applyCallable(callable, mkTmpl([current]), env, stage);
   }
   return current;
+}
+
+function readBox(boxNode, env) {
+  const store = env.rootBoxes();
+  if (!store.has(boxNode.name)) {
+    throw new PunkRuntimeError(
+      `box '[${boxNode.name}]' has not been written to`,
+      boxNode.line, boxNode.col,
+    );
+  }
+  return store.get(boxNode.name);
+}
+
+function writeBox(boxNode, value, env) {
+  env.rootBoxes().set(boxNode.name, value);
 }
 
 function resolveStageCallable(stage, env) {

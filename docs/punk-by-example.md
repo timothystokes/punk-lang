@@ -1038,8 +1038,8 @@ Anything that's already expressible through queries is **not** a built-in. There
 | Call | Result |
 | --- | --- |
 | `+!{a b ...}` | sum of all items (variadic) |
-| `X!{a b ...}` | product of all items (variadic) |
 | `-!{a b}` | `a` minus `b` |
+| `X!{a b ...}` | product of all items (variadic) |
 | `/!{a b}` | `a` divided by `b` |
 | `^!{a b}` | `a` raised to the power `b` |
 | `%!{a b}` | remainder of `a` divided by `b` |

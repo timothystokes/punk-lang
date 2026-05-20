@@ -9,6 +9,15 @@ export class Env {
   constructor(parent = null) {
     this.parent = parent;
     this.bindings = new Map();
+    // Boxes live outside the lexical namespace. The root env owns the
+    // shared store; children walk up to reach it.
+    this.boxes = parent ? null : new Map();
+  }
+
+  rootBoxes() {
+    let e = this;
+    while (e.parent) e = e.parent;
+    return e.boxes;
   }
 
   bind(name, value, node) {
