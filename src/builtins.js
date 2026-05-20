@@ -389,6 +389,17 @@ export const builtins = {
     const target = valueToText(xs[1]);
     return mkTmpl(target.split(sep).map((s) => mkWord(escapeForWord(s))));
   },
+  'replace': (args) => {
+    const xs = argsItems(args);
+    if (xs.length !== 3) {
+      throw new PunkRuntimeError(`replace! expects 3 arguments, got ${xs.length}`);
+    }
+    const old = valueToText(xs[0]);
+    const neu = valueToText(xs[1]);
+    const target = valueToText(xs[2]);
+    if (old === '') return mkTextLit(target);
+    return mkTextLit(target.split(old).join(neu));
+  },
   'join': (args) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
