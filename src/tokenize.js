@@ -1,145 +1,255 @@
-// Pure-functional tokenizer for Punk.
+// Punk tokenizer.
 //
-//   tokenize(source: string) -> Token[]
+// Pure function: `tokenize(src) -> Token[]`. Turns a Punk source
+// string into a flat list of tokens. No semantic checks beyond the
+// minimum needed to recognise structure (matched comments, matched
+// "..."). Bracket pairing and name validation are the parser's job.
 //
-// Token shapes (all carry {line, col, attached}):
-//   {type: 'OPEN_T'|'CLOSE_T'}                              for `{` `}`
-//   {type: 'OPEN_P'|'CLOSE_P'}                              for `(` `)`
-//   {type: 'OPEN_B'|'CLOSE_B'}                              for `[` `]`
-//   {type: 'WORD',  text: string, esc: boolean[]}           bareword/path/number
-//   {type: 'REGEX', pattern: string}                        `"..."`
+// A Token is `{ type, text, line, col }` where:
+//   - `type` is one of the kinds in TOKEN_TYPES below.
+//   - `text` is the *decoded* text (escapes already applied).
+//   - `line`/`col` point at the first character of the token (1-based).
 //
-// `text` has all `\X` escapes collapsed to their literal char; `esc[i]` is
-// true when `text[i]` came from an escape (so the parser can tell `foo?`
-// the query from `foo\?` the literal text).
-//
-// `attached` is true iff the previous token ended at this token's exact
-// start position (no whitespace and no comment between them). Punk leans
-// heavily on attachment: `name:value`, `pattern){template}`, `name??{...}`
-// etc. are all defined as "no space allowed between these tokens".
-//
-// Comments are `# ... #` where the opening `#` has whitespace (or start of
-// input) immediately before it, and the closing `#` is followed by
-// whitespace (or end of input). Anywhere else a `#` is ordinary text.
+// See docs/punk-by-example.md for the language spec.
 
-const DELIMS = {
-  '{': 'OPEN_T', '}': 'CLOSE_T',
-  '(': 'OPEN_P', ')': 'CLOSE_P',
-  '[': 'OPEN_B', ']': 'CLOSE_B',
-};
+import { PunkSyntaxError } from './errors.js';
 
-const isWS = (c) => c === ' ' || c === '\t' || c === '\n' || c === '\r';
-const isDelim = (c) => Object.prototype.hasOwnProperty.call(DELIMS, c);
+export const TOKEN_TYPES = Object.freeze({
+  LBRACE: 'LBRACE',         // {
+  RBRACE: 'RBRACE',         // }
+  LPAREN: 'LPAREN',         // (
+  RPAREN: 'RPAREN',         // )
+  LBRACK: 'LBRACK',         // [
+  RBRACK: 'RBRACK',         // ]
+  QUOTE_OPEN: 'QUOTE_OPEN', // opening "
+  QUOTE_CLOSE: 'QUOTE_CLOSE', // closing "
+  ARROW: 'ARROW',           // ->
+  SPACE: 'SPACE',           // run of whitespace inside structural context
+  WORD: 'WORD',             // a run of word characters (decoded)
+  TEXT: 'TEXT',             // literal text inside "..."
+  EOF: 'EOF',
+});
 
-export function tokenize(source) {
+const STRUCT_DELIMS = new Set(['{', '}', '(', ')', '[', ']', '"']);
+
+function isNameChar(ch) {
+  return (ch >= 'a' && ch <= 'z')
+    || (ch >= 'A' && ch <= 'Z')
+    || (ch >= '0' && ch <= '9')
+    || ch === '_' || ch === '-' || ch === '$';
+}
+
+export function tokenize(src) {
+  if (typeof src !== 'string') {
+    throw new TypeError('tokenize: source must be a string');
+  }
+
   const tokens = [];
-  const len = source.length;
+  // mode stack: 'STRUCT' (default, inside {} () []) or 'TEXT' (inside "")
+  const modes = ['STRUCT'];
+  const mode = () => modes[modes.length - 1];
+
   let i = 0;
   let line = 1;
   let col = 1;
-  let endOfLast = -1;
+
+  const peek = (n = 0) => src[i + n];
+  const eof = () => i >= src.length;
 
   const advance = (n = 1) => {
-    for (let k = 0; k < n; k++) {
-      if (source[i] === '\n') { line++; col = 1; } else { col++; }
+    for (let k = 0; k < n && i < src.length; k++) {
+      if (src[i] === '\n') { line++; col = 1; }
+      else { col++; }
       i++;
     }
   };
 
-  const skipTrivia = () => {
-    while (i < len) {
-      const c = source[i];
-      if (isWS(c)) { advance(); continue; }
-      if (c === '#') {
-        const prev = i > 0 ? source[i - 1] : null;
-        const prevIsBoundary = (i === 0) || isWS(prev) || isDelim(prev);
-        if (prevIsBoundary) {
-          advance(); // opening #
-          while (i < len) {
-            if (source[i] === '#') {
-              const nx = (i + 1 < len) ? source[i + 1] : null;
-              const nextIsBoundary = (i + 1 >= len) || isWS(nx) || isDelim(nx);
-              if (nextIsBoundary) { advance(); break; }
-            }
-            advance();
-          }
-          continue;
-        }
-      }
-      break;
-    }
+  const push = (type, text, startLine, startCol) => {
+    tokens.push({ type, text, line: startLine, col: startCol });
   };
 
-  while (i < len) {
-    skipTrivia();
-    if (i >= len) break;
-
-    const startLine = line;
-    const startCol = col;
-    const startIdx = i;
-    const attached = (startIdx === endOfLast);
-    const c = source[i];
-
-    if (isDelim(c)) {
-      tokens.push({ type: DELIMS[c], line: startLine, col: startCol, attached });
+  // Skip a `# ... #` comment. Caller has confirmed `src[i] === '#'`.
+  // Comments are dumb spans — no escape processing inside; first raw
+  // `#` after the opener closes. Unclosed -> syntax error.
+  const skipComment = () => {
+    const openLine = line, openCol = col;
+    advance(); // opening #
+    while (!eof() && peek() !== '#') {
       advance();
-      endOfLast = i;
-      continue;
     }
-
-    if (c === '"') {
-      advance(); // opening "
-      let pattern = '';
-      while (i < len && source[i] !== '"') {
-        if (source[i] === '\\' && i + 1 < len) {
-          pattern += source[i] + source[i + 1];
-          advance(2);
-        } else {
-          pattern += source[i];
-          advance();
-        }
-      }
-      if (i >= len) {
-        throw new Error(`Unterminated regex literal at ${startLine}:${startCol}`);
-      }
-      advance(); // closing "
-      tokens.push({ type: 'REGEX', pattern, line: startLine, col: startCol, attached });
-      endOfLast = i;
-      continue;
+    if (eof()) {
+      throw new PunkSyntaxError('unclosed comment', openLine, openCol);
     }
+    advance(); // closing #
+  };
 
-    // WORD: greedy run of non-whitespace, non-delim, non-quote characters.
-    // `\X` inside a word collapses to literal X with esc[idx]=true.
-    const chars = [];
-    const esc = [];
-    while (i < len) {
-      const ch = source[i];
-      if (isWS(ch) || isDelim(ch) || ch === '"') break;
-      if (ch === '\\' && i + 1 < len) {
-        const nx = source[i + 1];
-        const mapped = nx === 'n' ? '\n' : nx === 't' ? '\t' : nx;
-        chars.push(mapped);
-        esc.push(true);
-        advance(2);
+  // Decode a single escape starting at `\`. Returns the literal char
+  // it produces and advances past both chars. `\n` and `\t` decode to
+  // newline/tab; any other `\X` decodes to X. A trailing lone `\` at
+  // EOF is a syntax error.
+  const readEscape = () => {
+    const escLine = line, escCol = col;
+    advance(); // backslash
+    if (eof()) {
+      throw new PunkSyntaxError('trailing backslash', escLine, escCol);
+    }
+    const c = peek();
+    advance();
+    if (c === 'n') return '\n';
+    if (c === 't') return '\t';
+    return c;
+  };
+
+  while (!eof()) {
+    const startLine = line, startCol = col;
+    const c = peek();
+
+    if (mode() === 'STRUCT') {
+      // Comments first — they vanish entirely, no separator effect.
+      // We only see `#` here at the start of a token; inside a word
+      // it's handled in the WORD branch below.
+      if (c === '#') {
+        skipComment();
         continue;
       }
-      chars.push(ch);
-      esc.push(false);
+
+      // Whitespace -> SPACE token (collapsed run).
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') {
+        let text = '';
+        while (!eof()) {
+          const ch = peek();
+          if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+            text += ch; advance();
+          } else if (ch === '#') {
+            // A comment inside a whitespace run also vanishes; keep
+            // collecting whitespace on either side as one SPACE token.
+            skipComment();
+          } else {
+            break;
+          }
+        }
+        push(TOKEN_TYPES.SPACE, text, startLine, startCol);
+        continue;
+      }
+
+      // Single-char delimiters.
+      if (c === '{') {
+        advance();
+        push(TOKEN_TYPES.LBRACE, '{', startLine, startCol);
+        modes.push('STRUCT');
+        continue;
+      }
+      if (c === '}') {
+        advance();
+        push(TOKEN_TYPES.RBRACE, '}', startLine, startCol);
+        // Pop the STRUCT frame this `}` closes. We never pop the
+        // implicit bottom-of-stack STRUCT (so a stray top-level `}`
+        // still tokenizes — the parser will flag it).
+        if (modes.length > 1) modes.pop();
+        continue;
+      }
+      if (c === '(') { advance(); push(TOKEN_TYPES.LPAREN, '(', startLine, startCol); continue; }
+      if (c === ')') { advance(); push(TOKEN_TYPES.RPAREN, ')', startLine, startCol); continue; }
+      if (c === '[') { advance(); push(TOKEN_TYPES.LBRACK, '[', startLine, startCol); continue; }
+      if (c === ']') { advance(); push(TOKEN_TYPES.RBRACK, ']', startLine, startCol); continue; }
+
+      // Opening quote -> switch to TEXT mode.
+      if (c === '"') {
+        advance();
+        push(TOKEN_TYPES.QUOTE_OPEN, '"', startLine, startCol);
+        modes.push('TEXT');
+        continue;
+      }
+
+      // `->` is a token in its own right (no whitespace allowed around it
+      // per spec; that's enforced by the parser, not the tokenizer).
+      if (c === '-' && peek(1) === '>') {
+        advance(2);
+        push(TOKEN_TYPES.ARROW, '->', startLine, startCol);
+        continue;
+      }
+
+      // Otherwise — build a WORD by accumulating non-special chars.
+      let text = '';
+      while (!eof()) {
+        const ch = peek();
+        if (ch === '\\') { text += readEscape(); continue; }
+        if (ch === '#') {
+          // Two cases: `.#?` length-of segment (stays in the word) or
+          // a comment (vanishes; word-building continues across it).
+          if (text.endsWith('.') && peek(1) === '?') {
+            text += '#';
+            advance();
+            continue;
+          }
+          skipComment();
+          continue;
+        }
+        if (STRUCT_DELIMS.has(ch)) {
+          // Special case: `.()` as a path segment (returns the pattern
+          // of a function) — keep it inside the word.
+          if (ch === '(' && text.endsWith('.') && peek(1) === ')') {
+            text += '()';
+            advance(2);
+            continue;
+          }
+          break;
+        }
+        if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') break;
+        if (ch === '-' && peek(1) === '>') break;
+        text += ch;
+        advance();
+        // `:` immediately following a name char ends the word AFTER
+        // consuming the `:` itself. This keeps `name:` as a single
+        // token (so binding precedence works correctly with `->`),
+        // while leaving `.:?` (where `:` follows a `.`) intact.
+        if (ch === ':' && text.length >= 2) {
+          const prev = text[text.length - 2];
+          if (isNameChar(prev)) break;
+        }
+      }
+      // It's possible to reach here with an empty word (e.g. a comment
+      // that consumed nothing visible after a non-word boundary). Only
+      // emit a WORD when we actually have text.
+      if (text.length > 0) {
+        push(TOKEN_TYPES.WORD, text, startLine, startCol);
+      }
+      continue;
+    }
+
+    // mode === 'TEXT'
+    // We're inside "...". Collect literal chars until we hit `{`
+    // (placeholder open) or `"` (close). Escapes are decoded; comments
+    // still vanish.
+    let text = '';
+    while (!eof()) {
+      const ch = peek();
+      if (ch === '\\') { text += readEscape(); continue; }
+      if (ch === '#') { skipComment(); continue; }
+      if (ch === '"' || ch === '{') break;
+      text += ch;
       advance();
     }
-    if (chars.length === 0) {
-      throw new Error(`Unexpected character '${c}' at ${startLine}:${startCol}`);
+    if (text.length > 0) {
+      push(TOKEN_TYPES.TEXT, text, startLine, startCol);
     }
-    tokens.push({
-      type: 'WORD',
-      text: chars.join(''),
-      esc,
-      line: startLine,
-      col: startCol,
-      attached,
-    });
-    endOfLast = i;
+
+    if (eof()) {
+      throw new PunkSyntaxError('unclosed text template', startLine, startCol);
+    }
+
+    const closeLine = line, closeCol = col;
+    if (peek() === '"') {
+      advance();
+      push(TOKEN_TYPES.QUOTE_CLOSE, '"', closeLine, closeCol);
+      modes.pop();
+    } else { // '{'
+      advance();
+      push(TOKEN_TYPES.LBRACE, '{', closeLine, closeCol);
+      modes.push('STRUCT');
+    }
   }
 
+  push(TOKEN_TYPES.EOF, '', line, col);
   return tokens;
 }

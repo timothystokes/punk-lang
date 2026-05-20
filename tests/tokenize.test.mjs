@@ -1,250 +1,355 @@
+// White-box tests for the tokenizer.
+//
+// These tests import tokenize directly and assert on the shape of
+// the emitted token list. They exist to catch regressions inside the
+// tokenize phase before the rest of the pipeline is wired up.
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenize } from '../src/tokenize.js';
 
-const types = (toks) => toks.map(t => t.type);
-const summary = (toks) => toks.map(t => {
-  if (t.type === 'WORD')  return ['WORD', t.text];
-  if (t.type === 'REGEX') return ['REGEX', t.pattern];
-  return [t.type];
+import { tokenize, TOKEN_TYPES as T } from '../src/tokenize.js';
+import { PunkSyntaxError } from '../src/errors.js';
+
+// Helper: assert the (type, text) pairs of a token list, ignoring EOF.
+function shape(src) {
+  const toks = tokenize(src);
+  // Sanity: last token is always EOF.
+  assert.equal(toks.at(-1).type, T.EOF, 'last token should be EOF');
+  return toks.slice(0, -1).map(t => [t.type, t.text]);
+}
+
+test('empty source -> just EOF', () => {
+  const toks = tokenize('');
+  assert.equal(toks.length, 1);
+  assert.equal(toks[0].type, T.EOF);
 });
 
-test('empty source produces no tokens', () => {
-  assert.deepEqual(tokenize(''), []);
+test('single word', () => {
+  assert.deepEqual(shape('hello'), [[T.WORD, 'hello']]);
 });
 
-test('only whitespace produces no tokens', () => {
-  assert.deepEqual(tokenize('   \n\t  '), []);
+test('numbers tokenize as words', () => {
+  assert.deepEqual(shape('42'), [[T.WORD, '42']]);
+  assert.deepEqual(shape('3.141'), [[T.WORD, '3.141']]);
+  assert.deepEqual(shape('-5'), [[T.WORD, '-5']]);
 });
 
-test('a single bareword', () => {
-  const toks = tokenize('hello');
-  assert.deepEqual(summary(toks), [['WORD', 'hello']]);
-  assert.equal(toks[0].attached, false, 'first token after BOI is not attached');
+test('symbol-named words', () => {
+  // `+`, `<>`, `<=` are valid Punk word characters
+  assert.deepEqual(shape('+'), [[T.WORD, '+']]);
+  assert.deepEqual(shape('<>'), [[T.WORD, '<>']]);
+  assert.deepEqual(shape('+!'), [[T.WORD, '+!']]);
+});
+
+test('leading/trailing whitespace produces SPACE tokens', () => {
+  assert.deepEqual(shape('  hi  '),
+    [[T.SPACE, '  '], [T.WORD, 'hi'], [T.SPACE, '  ']]);
+});
+
+test('whitespace collapses into a single SPACE token', () => {
+  assert.deepEqual(shape('a   b'),
+    [[T.WORD, 'a'], [T.SPACE, '   '], [T.WORD, 'b']]);
+});
+
+test('newlines are whitespace', () => {
+  assert.deepEqual(shape('a\nb'),
+    [[T.WORD, 'a'], [T.SPACE, '\n'], [T.WORD, 'b']]);
+});
+
+test('mixed whitespace stays in one SPACE token', () => {
+  assert.deepEqual(shape('a \t\n b'),
+    [[T.WORD, 'a'], [T.SPACE, ' \t\n '], [T.WORD, 'b']]);
+});
+
+test('braces and items', () => {
+  assert.deepEqual(shape('{a b}'), [
+    [T.LBRACE, '{'],
+    [T.WORD, 'a'],
+    [T.SPACE, ' '],
+    [T.WORD, 'b'],
+    [T.RBRACE, '}'],
+  ]);
+});
+
+test('nested braces', () => {
+  assert.deepEqual(shape('{{a}}'), [
+    [T.LBRACE, '{'], [T.LBRACE, '{'], [T.WORD, 'a'], [T.RBRACE, '}'], [T.RBRACE, '}'],
+  ]);
+});
+
+test('parens hold patterns', () => {
+  assert.deepEqual(shape('(a:_)'), [
+    [T.LPAREN, '('], [T.WORD, 'a:'], [T.WORD, '_'], [T.RPAREN, ')'],
+  ]);
+});
+
+test('brackets are box delimiters', () => {
+  assert.deepEqual(shape('[name]'), [
+    [T.LBRACK, '['], [T.WORD, 'name'], [T.RBRACK, ']'],
+  ]);
+});
+
+test('quoted text — simple', () => {
+  assert.deepEqual(shape('"hello"'), [
+    [T.QUOTE_OPEN, '"'], [T.TEXT, 'hello'], [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('quoted text — empty', () => {
+  assert.deepEqual(shape('""'), [
+    [T.QUOTE_OPEN, '"'], [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('quoted text with placeholder', () => {
+  // `"Hi {name?}"` -> QUOTE_OPEN, TEXT("Hi "), LBRACE, WORD(name?), RBRACE, QUOTE_CLOSE
+  assert.deepEqual(shape('"Hi {name?}"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.TEXT, 'Hi '],
+    [T.LBRACE, '{'],
+    [T.WORD, 'name?'],
+    [T.RBRACE, '}'],
+    [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('quoted text — placeholder at the start', () => {
+  assert.deepEqual(shape('"{n?}!"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.LBRACE, '{'], [T.WORD, 'n?'], [T.RBRACE, '}'],
+    [T.TEXT, '!'],
+    [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('quoted text — multiple placeholders', () => {
+  assert.deepEqual(shape('"{a?} {b?}"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.LBRACE, '{'], [T.WORD, 'a?'], [T.RBRACE, '}'],
+    [T.TEXT, ' '],
+    [T.LBRACE, '{'], [T.WORD, 'b?'], [T.RBRACE, '}'],
+    [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('quoted text — escaped quote inside is literal', () => {
+  assert.deepEqual(shape('"say \\"hi\\""'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.TEXT, 'say "hi"'],
+    [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('arrow operator', () => {
+  assert.deepEqual(shape('a->b'), [
+    [T.WORD, 'a'], [T.ARROW, '->'], [T.WORD, 'b'],
+  ]);
+});
+
+test('escaped minus does not form arrow', () => {
+  // `\-` produces a literal `-` even when followed by `>`
+  assert.deepEqual(shape('a\\->b'), [
+    [T.WORD, 'a->b'],
+  ]);
+});
+
+test('path tokens stay together as one WORD', () => {
+  assert.deepEqual(shape('people.1.fullname?'), [
+    [T.WORD, 'people.1.fullname?'],
+  ]);
+});
+
+test('length-of segment .#? is part of the path word', () => {
+  assert.deepEqual(shape('people.#?'), [
+    [T.WORD, 'people.#?'],
+  ]);
+});
+
+test('exec path with !', () => {
+  assert.deepEqual(shape('add!'), [
+    [T.WORD, 'add!'],
+  ]);
+});
+
+test('partial path with apostrophe', () => {
+  assert.deepEqual(shape("add'"), [
+    [T.WORD, "add'"],
+  ]);
+});
+
+test('name binding splits at the colon — name: is one word, value is another', () => {
+  // `:` immediately after a name-char ends the word (including the `:`),
+  // so the parser sees `name:` as a "pending Named" head and `value`
+  // as a glued sibling. This makes pipeline precedence work right
+  // (e.g. `foo:a->b` binds `foo` to the pipeline `a->b`).
+  assert.deepEqual(shape('name:value'), [
+    [T.WORD, 'name:'], [T.WORD, 'value'],
+  ]);
+});
+
+test(':: name: at end of input stays as a single token', () => {
+  assert.deepEqual(shape('name:'), [[T.WORD, 'name:']]);
+});
+
+test('colon after `.` does NOT split the word (path .:? segment)', () => {
+  assert.deepEqual(shape('xs.:?'), [[T.WORD, 'xs.:?']]);
+});
+
+test('comment between words — vanishes, leaves whitespace intact', () => {
+  // `a # hi # b` — spaces on either side of the comment merge
+  assert.deepEqual(shape('a # hi # b'), [
+    [T.WORD, 'a'], [T.SPACE, '  '], [T.WORD, 'b'],
+  ]);
+});
+
+test('comment inside a word — vanishes, word stays one token', () => {
+  assert.deepEqual(shape('foo#xxx#bar'), [
+    [T.WORD, 'foobar'],
+  ]);
+});
+
+test('comment with no separator at all', () => {
+  assert.deepEqual(shape('#hi#'), []);
+});
+
+test('comment with another # inside makes two comments and a word in between', () => {
+  // Per user: there is no way to tell inner from outer, so:
+  //   `# outer # inner # end #` parses as two comments (`# outer #`
+  //   and `# end #`) with the word `inner` between them. The spaces
+  //   surrounding the comments remain as real whitespace.
+  assert.deepEqual(shape('# outer # inner # end #'), [
+    [T.SPACE, ' '],
+    [T.WORD, 'inner'],
+    [T.SPACE, ' '],
+  ]);
+});
+
+test('escaped # is literal, never opens a comment', () => {
+  assert.deepEqual(shape('foo\\#bar'), [[T.WORD, 'foo#bar']]);
+});
+
+test('comments vanish but unclosed # is an error', () => {
+  assert.throws(() => tokenize('a # never ends'), PunkSyntaxError);
+});
+
+test('unclosed string is an error', () => {
+  assert.throws(() => tokenize('"hi'), PunkSyntaxError);
+});
+
+test('trailing backslash is an error', () => {
+  assert.throws(() => tokenize('foo\\'), PunkSyntaxError);
+});
+
+test('\\n inside text decodes to a real newline', () => {
+  const toks = tokenize('"a\\nb"');
+  assert.equal(toks[1].type, T.TEXT);
+  assert.equal(toks[1].text, 'a\nb');
+});
+
+test('\\t inside text decodes to a real tab', () => {
+  const toks = tokenize('"a\\tb"');
+  assert.equal(toks[1].text, 'a\tb');
+});
+
+test('escaped space inside a word becomes a literal space', () => {
+  // `foo\ bar` — the `\ ` injects a space into the word, then `bar`
+  // continues without a break.
+  assert.deepEqual(shape('foo\\ bar'), [
+    [T.WORD, 'foo bar'],
+  ]);
+});
+
+test('escaped special chars inside a word', () => {
+  assert.deepEqual(shape('What\\?'), [[T.WORD, 'What?']]);
+  assert.deepEqual(shape('\\{'), [[T.WORD, '{']]);
+  assert.deepEqual(shape('\\}'), [[T.WORD, '}']]);
+});
+
+test('\\X for non-special X is just X', () => {
+  // Per the appendix: `\s` is just `s`.
+  assert.deepEqual(shape('\\s'), [[T.WORD, 's']]);
+});
+
+test('positions are 1-based and track newlines', () => {
+  const toks = tokenize('a\n  hello');
+  // tokens: WORD a (1,1), SPACE \n   (1,2), WORD hello (2,3), EOF
   assert.equal(toks[0].line, 1);
   assert.equal(toks[0].col, 1);
+  assert.equal(toks[1].type, T.SPACE);
+  assert.equal(toks[1].line, 1);
+  assert.equal(toks[1].col, 2);
+  assert.equal(toks[2].type, T.WORD);
+  assert.equal(toks[2].text, 'hello');
+  assert.equal(toks[2].line, 2);
+  assert.equal(toks[2].col, 3);
 });
 
-test('an empty template', () => {
-  assert.deepEqual(types(tokenize('{}')), ['OPEN_T', 'CLOSE_T']);
-});
-
-test('an empty pattern', () => {
-  assert.deepEqual(types(tokenize('()')), ['OPEN_P', 'CLOSE_P']);
-});
-
-test('an empty box', () => {
-  assert.deepEqual(types(tokenize('[]')), ['OPEN_B', 'CLOSE_B']);
-});
-
-test('template with content', () => {
-  assert.deepEqual(summary(tokenize('{Hello world}')), [
-    ['OPEN_T'], ['WORD', 'Hello'], ['WORD', 'world'], ['CLOSE_T'],
-  ]);
-});
-
-test('whitespace runs are all one separator', () => {
-  assert.deepEqual(summary(tokenize('{Hello   \n\t world}')), [
-    ['OPEN_T'], ['WORD', 'Hello'], ['WORD', 'world'], ['CLOSE_T'],
-  ]);
-});
-
-test('attached colon stays inside a single WORD', () => {
-  const toks = tokenize('name:value');
-  assert.deepEqual(summary(toks), [['WORD', 'name:value']]);
-});
-
-test('attached pattern after name colon', () => {
-  const toks = tokenize('welcome:(name:_){Hello name?}');
-  assert.deepEqual(types(toks), [
-    'WORD', 'OPEN_P', 'WORD', 'CLOSE_P', 'OPEN_T', 'WORD', 'WORD', 'CLOSE_T',
-  ]);
-  // every subsequent token in this expression is attached to the previous
-  assert.equal(toks[0].attached, false);
-  for (let k = 1; k < toks.length; k++) {
-    if (toks[k].type !== 'WORD' || toks[k].text === 'Hello') {
-      // Hello is preceded by `{` — attached
-    }
-  }
-  // Specific attachment checks
-  assert.equal(toks[1].attached, true,  '( attached to welcome:');
-  assert.equal(toks[2].attached, true,  'name:_ attached to (');
-  assert.equal(toks[3].attached, true,  ') attached to name:_');
-  assert.equal(toks[4].attached, true,  '{ attached to )');
-  assert.equal(toks[5].attached, true,  'Hello attached to {');
-  assert.equal(toks[6].attached, false, 'name? has whitespace before it');
-  assert.equal(toks[7].attached, true,  '} attached to name?');
-});
-
-test('whitespace between pattern close and template open makes them NOT attached', () => {
-  const toks = tokenize('(x:_) {hi}');
-  assert.equal(toks[3].type, 'OPEN_T');
-  assert.equal(toks[3].attached, false);
-});
-
-test('comment is stripped (with whitespace boundaries)', () => {
-  assert.deepEqual(summary(tokenize('hello # this is a comment # world')), [
-    ['WORD', 'hello'], ['WORD', 'world'],
-  ]);
-});
-
-test('multi-line comment', () => {
-  assert.deepEqual(summary(tokenize('a # line1\nline2 # b')), [
-    ['WORD', 'a'], ['WORD', 'b'],
-  ]);
-});
-
-test('# without whitespace boundary is part of a word', () => {
-  assert.deepEqual(summary(tokenize('path.#?')), [['WORD', 'path.#?']]);
-});
-
-test('comment at start of input', () => {
-  assert.deepEqual(summary(tokenize('# greeting # hi')), [['WORD', 'hi']]);
-});
-
-test('comment at end of input', () => {
-  assert.deepEqual(summary(tokenize('hi # bye #')), [['WORD', 'hi']]);
-});
-
-test('comment is allowed flush against an opening bracket', () => {
-  assert.deepEqual(summary(tokenize('{# note # body}')), [
-    ['OPEN_T'], ['WORD', 'body'], ['CLOSE_T'],
-  ]);
-});
-
-test('comment is allowed flush against a closing bracket', () => {
-  assert.deepEqual(summary(tokenize('{body # note #}')), [
-    ['OPEN_T'], ['WORD', 'body'], ['CLOSE_T'],
-  ]);
-});
-
-test('comment flush against both brackets', () => {
-  // `#a#` closes (next char is whitespace), then `x:_`, then `#b#` opens+closes.
-  assert.deepEqual(summary(tokenize('(#a# x:_ #b#){body}')), [
-    ['OPEN_P'], ['WORD', 'x:_'], ['CLOSE_P'],
-    ['OPEN_T'], ['WORD', 'body'], ['CLOSE_T'],
-  ]);
-});
-
-test('path.#? still works (length query, not a comment)', () => {
-  assert.deepEqual(summary(tokenize('xs.#?')), [['WORD', 'xs.#?']]);
-});
-
-test('escape collapses \\? to ? with esc flag set', () => {
-  const toks = tokenize('What\\?');
-  assert.equal(toks.length, 1);
-  assert.equal(toks[0].text, 'What?');
-  assert.deepEqual(toks[0].esc, [false, false, false, false, true]);
-});
-
-test('escape: \\{ inside a word is literal', () => {
-  const toks = tokenize('foo\\{bar');
-  assert.equal(toks[0].text, 'foo{bar');
-  assert.deepEqual(toks[0].esc, [false, false, false, true, false, false, false]);
-});
-
-test('escape: \\\\ is a literal backslash', () => {
-  const toks = tokenize('a\\\\b');
-  assert.equal(toks[0].text, 'a\\b');
-  assert.deepEqual(toks[0].esc, [false, true, false]);
-});
-
-test('escape: \\s is NOT special — it is a literal "s" with the esc flag set', () => {
-  // `\s` was once an escape for space; it isn't any more. A space inside a
-  // single thing is not representable — items are space-delimited, full stop.
-  // If you need text containing a space, write multiple items (`{Hello World}`)
-  // or use a regex literal (`" "`).
-  const toks = tokenize('Hello\\sworld');
-  assert.equal(toks[0].text, 'HelloSworld'.replace('S','s'));
-  assert.equal(toks[0].esc[5], true);
-});
-
-test('escape: \\X for an ordinary X yields a literal X (escape is a no-op)', () => {
-  const toks = tokenize('\\X');
-  assert.equal(toks[0].text, 'X');
-  assert.deepEqual(toks[0].esc, [true]);
-});
-
-test('regex literal: simple', () => {
-  const toks = tokenize('"^\\d+$"');
-  assert.equal(toks.length, 1);
-  assert.equal(toks[0].type, 'REGEX');
-  assert.equal(toks[0].pattern, '^\\d+$');
-});
-
-test('regex literal preserves \\" escape', () => {
-  const toks = tokenize('"a\\"b"');
-  assert.equal(toks[0].type, 'REGEX');
-  assert.equal(toks[0].pattern, 'a\\"b');
-});
-
-test('regex literal: unterminated throws', () => {
-  assert.throws(() => tokenize('"oops'), /Unterminated regex literal/);
-});
-
-test('nested templates and patterns', () => {
-  const toks = tokenize('{a (b){c} d}');
-  assert.deepEqual(types(toks), [
-    'OPEN_T', 'WORD', 'OPEN_P', 'WORD', 'CLOSE_P', 'OPEN_T', 'WORD', 'CLOSE_T', 'WORD', 'CLOSE_T',
-  ]);
-});
-
-test('positions: line and column tracking', () => {
-  const toks = tokenize('a\n  b');
-  assert.equal(toks[0].text, 'a');
-  assert.equal(toks[0].line, 1);
+test('positions of brace tokens', () => {
+  const toks = tokenize('{x}');
   assert.equal(toks[0].col, 1);
-  assert.equal(toks[1].text, 'b');
-  assert.equal(toks[1].line, 2);
-  assert.equal(toks[1].col, 3);
+  assert.equal(toks[1].col, 2);
+  assert.equal(toks[2].col, 3);
 });
 
-test('numbers tokenize as ordinary words', () => {
-  const toks = tokenize('{42 -5 0.5 3.141}');
-  assert.deepEqual(summary(toks), [
-    ['OPEN_T'], ['WORD', '42'], ['WORD', '-5'], ['WORD', '0.5'], ['WORD', '3.141'], ['CLOSE_T'],
+test('nested struct mode from placeholder works recursively', () => {
+  // `"a {b c} d"` — inside the placeholder we're back in STRUCT mode,
+  // so the space between b and c is a SPACE token.
+  assert.deepEqual(shape('"a {b c} d"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.TEXT, 'a '],
+    [T.LBRACE, '{'],
+    [T.WORD, 'b'],
+    [T.SPACE, ' '],
+    [T.WORD, 'c'],
+    [T.RBRACE, '}'],
+    [T.TEXT, ' d'],
+    [T.QUOTE_CLOSE, '"'],
   ]);
 });
 
-test('pipeline operator stays inside a word', () => {
-  const toks = tokenize('a->b->c!');
-  assert.deepEqual(summary(toks), [['WORD', 'a->b->c!']]);
-});
-
-test('partial-application apostrophe stays in word', () => {
-  const toks = tokenize("+'1");
-  assert.deepEqual(summary(toks), [['WORD', "+'1"]]);
-});
-
-test('box reference looks like [name]', () => {
-  const toks = tokenize('[counter]');
-  assert.deepEqual(types(toks), ['OPEN_B', 'WORD', 'CLOSE_B']);
-  assert.equal(toks[1].text, 'counter');
-  assert.equal(toks[0].attached, false);
-  assert.equal(toks[1].attached, true);
-  assert.equal(toks[2].attached, true);
-});
-
-test('regex inside a pattern slot', () => {
-  const toks = tokenize('(n:"^\\d+$"){integer}');
-  assert.deepEqual(types(toks), [
-    'OPEN_P', 'WORD', 'REGEX', 'CLOSE_P', 'OPEN_T', 'WORD', 'CLOSE_T',
+test('quotes can nest via placeholders', () => {
+  // `"{ "inner" }"` — string with a placeholder containing another string.
+  assert.deepEqual(shape('"{"inner"}"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.LBRACE, '{'],
+    [T.QUOTE_OPEN, '"'],
+    [T.TEXT, 'inner'],
+    [T.QUOTE_CLOSE, '"'],
+    [T.RBRACE, '}'],
+    [T.QUOTE_CLOSE, '"'],
   ]);
-  assert.equal(toks[1].text, 'n:');
-  assert.equal(toks[2].pattern, '^\\d+$');
-  // `n:` and the regex are attached
-  assert.equal(toks[2].attached, true);
 });
 
-test('the ?? conditional query sits inside the same WORD as its target', () => {
-  const toks = tokenize('tim??{(tim){yes}(bob){no}}');
-  // `tim??` is a single word; then `{`, then `(tim)` etc.
-  assert.equal(toks[0].text, 'tim??');
-  assert.equal(toks[1].type, 'OPEN_T');
-  assert.equal(toks[1].attached, true);
+test('# inside a string vanishes too', () => {
+  assert.deepEqual(shape('"a # hidden # b"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.TEXT, 'a  b'],
+    [T.QUOTE_CLOSE, '"'],
+  ]);
 });
 
-test('symbol-named function: +! is one WORD', () => {
-  const toks = tokenize('+!{1 2 3}');
-  assert.equal(toks[0].text, '+!');
+test('a literal # inside a string via escape', () => {
+  assert.deepEqual(shape('"a \\# b"'), [
+    [T.QUOTE_OPEN, '"'],
+    [T.TEXT, 'a # b'],
+    [T.QUOTE_CLOSE, '"'],
+  ]);
+});
+
+test('multi-word pipeline', () => {
+  assert.deepEqual(shape('x->upper!->print!'), [
+    [T.WORD, 'x'],
+    [T.ARROW, '->'],
+    [T.WORD, 'upper!'],
+    [T.ARROW, '->'],
+    [T.WORD, 'print!'],
+  ]);
+});
+
+test('a comment inside a path word is excised, word continues', () => {
+  assert.deepEqual(shape('foo.#bar#.1?'), [
+    // The `#bar#` is a comment (no `.#?` because the # is followed by
+    // `b`, not `?`). After excision the word reads `foo..1?`.
+    [T.WORD, 'foo..1?'],
+  ]);
 });

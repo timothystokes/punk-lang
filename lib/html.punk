@@ -18,31 +18,29 @@ isVoid:(tag:_){contains!{tag? voidTags?}}
 
 renderAttrs:(fn:_){
   attrs:pattern!fn?
-  parts:map!{(v:_ i:_ k:_){
-    concat!{\  k? \=\" escAttr!text!v? \"}
+  map!{(v:_ i:_ k:_){
+    {{k?}=\"{escAttr!text!v?}\"}
   } attrs?}
-  concat!parts?
 }
 
 walk:(tag:_ fn:_){
   attrs:renderAttrs!fn?
   void:isVoid!tag?
   void??{
-    (TRUE){concat!{\< tag? attrs? \/\>}}
+    (TRUE){{<{tag?} {attrs?}/>}}
     (FALSE){
       kids:template!fn?
       parts:map!{(v:_ i:_ k:_){
         islist:islist!v?
         islist??{
           (TRUE){
-            inner:map!{(vv:_ ii:_ kk:_){
+            map!{(vv:_ ii:_ kk:_){
               isfn:isfn!vv?
               isfn??{
                 (TRUE){walk!{kk? vv?}}
                 (FALSE){escText!text!vv?}
               }
             } v?}
-            concat!inner?
           }
           (FALSE){
             isfn:isfn!v?
@@ -53,20 +51,20 @@ walk:(tag:_ fn:_){
           }
         }
       } kids?}
-      inner:concat!parts?
-      concat!{\< tag? attrs? \> inner? \<\/ tag? \>}
+      {<{tag?} {attrs?}>{parts?}</{tag?}>}
     }
   }
 }
 
 render:(page:_){
-  walk!{html page?}
+  tree:walk!{html page?}
+  flatten!tree?
 }
 
 parseLine:(line:_){
   parts:split!{\= line?}
   parts.#??{
-    (1){name!{parts.1? \ }}
+    (1){name!{parts.1? {}}}
     (___){name!{parts.1? parts.2?}}
   }
 }

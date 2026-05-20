@@ -1,180 +1,864 @@
-// Structural parser: tokens -> AST.
+// Punk parser.
 //
-// A Punk program is a sequence of items (same shape as a template body).
-// `parse(tokens)` returns an array of nodes.
+// The parser turns a flat token list (from tokenize.js) into a tree
+// of nodes. To keep things tractable it runs in three small passes,
+// each exported and testable on its own:
 //
-// AST node shapes (all carry {line, col}):
-//   {type: 'Word',     text, esc}            atomic identifier/number/sigil-bearing thing
-//   {type: 'Regex',    pattern}              `"..."` literal
-//   {type: 'Template', items: Node[]}        `{ ... }`
-//   {type: 'Pattern',  items: Node[]}        `( ... )` not attached to a template
-//   {type: 'Function', pattern, body}        `( ... ){ ... }` with NO whitespace between `)` and `{`
-//   {type: 'Box',      items: Node[]}        `[ ... ]`  (semantic check — usually a single Word — happens later)
-//   {type: 'Conditional', subject, branches: [{pattern, body}], multi: bool}
-//                                              `value?(p)`, `value?(p){t}`, `value??{(p){t}...}`
-//                                              `body` is null for predicate-only `?(p)` form.
+//   1. parseTree(tokens)
+//        Builds the bracket structure. Produces a tree of Tmpl/Text/
+//        Pattern/Box/Word nodes. Words are still raw — their internal
+//        structure (paths, suffixes, `name:value`) is not decoded yet.
 //
-// The parser is intentionally dumb about word internals. Sigils (`?`, `!`, `'`,
-// path dots, name-binds, `->` pipelines, `~`, `#`, etc.) all live inside the
-// Word's `text` (with `esc` mask). The evaluator / pattern matcher will
-// interpret them.
+//   2. parseWords(tree)            — TODO (next pass)
+//        Walks the tree from (1) and decodes each raw Word into the
+//        right kind: Named, Query, Exec, Partial, Range, or a plain
+//        Word for true literals.
+//
+//   3. parseOperators(tree)        — TODO (next pass)
+//        Recognises adjacency-based operators: `(p){...}` → Fn,
+//        `body~` → ReturnMark, `a->b` → Pipeline.
+//
+// Each node carries `{line, col}` of its source position.
 
-const OPEN  = { OPEN_T: 'CLOSE_T', OPEN_P: 'CLOSE_P', OPEN_B: 'CLOSE_B' };
-const CLOSE = new Set(['CLOSE_T', 'CLOSE_P', 'CLOSE_B']);
+import { TOKEN_TYPES as T } from './tokenize.js';
+import { PunkSyntaxError } from './errors.js';
 
-export function parse(tokens) {
-  const state = { tokens, i: 0 };
-  const items = parseItems(state, null);
-  if (state.i < tokens.length) {
-    const t = tokens[state.i];
-    throw new Error(`Unexpected ${t.type} at ${t.line}:${t.col}`);
-  }
-  return items;
-}
+// ---------------------------------------------------------------------------
+// Node constructors
+//
+// Node kinds emitted by parseTree (later passes refine raw Words):
+//   - Tmpl     { items[],    glued?,  line, col }
+//   - Text     { parts[],    glued?,  line, col }
+//      where each part is either { lit: string } or { embed: Node }
+//   - Pattern  { items[],    glued?,  line, col }
+//      pattern slots are still raw Words / Tmpls / nested Patterns
+//   - Box      { items[],    glued?,  line, col }
+//      contents inside [...]; later passes verify it's a single name
+//   - Word     { text,       glued?,  line, col }
+//      a raw word token; later passes split this into Named/Query/etc.
+//
+// `glued` means "no SPACE token between me and the previous sibling".
+// It's the signal used in parseOperators for function bodies, call
+// arguments, ranges, ReturnMarks, etc.
 
-function parseItems(state, stopType) {
-  const items = [];
-  while (state.i < state.tokens.length) {
-    const t = state.tokens[state.i];
-    if (t.type === stopType) break;
-    if (CLOSE.has(t.type)) {
-      throw new Error(`Unexpected ${t.type} at ${t.line}:${t.col}`);
-    }
-    items.push(parseItem(state));
-  }
-  return items;
-}
+const mkTmpl    = (items, line, col)    => ({ kind: 'Tmpl',    items, line, col });
+const mkText    = (parts, line, col)    => ({ kind: 'Text',    parts, line, col });
+const mkPattern = (items, line, col)    => ({ kind: 'Pattern', items, line, col });
+const mkBox     = (items, line, col)    => ({ kind: 'Box',     items, line, col });
+const mkWord    = (text, line, col)     => ({ kind: 'Word',    text,  line, col });
 
-function parseItem(state) {
-  const t = state.tokens[state.i];
-  switch (t.type) {
-    case 'WORD': {
-      state.i++;
-      const word = { type: 'Word', text: t.text, esc: t.esc, line: t.line, col: t.col };
-      const cond = maybeConditional(state, word);
-      return cond || word;
-    }
-    case 'REGEX':
-      state.i++;
-      return { type: 'Regex', pattern: t.pattern, line: t.line, col: t.col };
-    case 'OPEN_T':
-      return parseTemplate(state);
-    case 'OPEN_P':
-      return parsePatternOrFunction(state);
-    case 'OPEN_B':
-      return parseBox(state);
-    default:
-      throw new Error(`Unexpected ${t.type} at ${t.line}:${t.col}`);
-  }
-}
+// Nodes refined by parseWords:
+//   - Word     { text, subkind, line, col }
+//        subkind ∈ 'value' | 'number' | 'reserved' | 'wildcard' | 'variadic' | 'op'
+//        ('op' is for operator-like words: `->`, `+`, etc. — really just
+//         a value name; subkind is informational only.)
+//   - Named    { name, value, line, col }
+//   - Query    { head, segments[], line, col }
+//   - Exec     { head, segments[], line, col }
+//   - Partial  { head, segments[], line, col }
+//   - Range    { from, to, line, col }       // from/to: integer or null
+//
+// `head` for Query/Exec/Partial is initially a string (the head name)
+// when the word started with a name. For paths attached to a preceding
+// sibling (`{1 2 3}.1?`) the head is set to that sibling node by the
+// surrounding parseWords walk — see attachLeadingDotPaths.
+//
+// Path segments[]:
+//   { kind: 'index',  n: <int> }                  // .1
+//   { kind: 'name',   text: <string> }            // .fullname
+//   { kind: 'length' }                            // .#  (final only)
+//   { kind: 'nameOf' }                            // .:  (final only)
+//   { kind: 'pattern' }                           // .() (final only)
+//   { kind: 'range',  from: <int|null>, to: <int|null> }
+//
+// parseWords is pure: it returns a new tree.
 
-function parseGroup(state, openType) {
-  const open = state.tokens[state.i++];
-  const closeType = OPEN[openType];
-  const items = parseItems(state, closeType);
-  if (state.i >= state.tokens.length) {
-    throw new Error(`Unclosed ${openType} at ${open.line}:${open.col}`);
-  }
-  state.i++; // consume close
-  return { open, items };
-}
+const mkNamed   = (name, value, line, col)         => ({ kind: 'Named', name, value, line, col });
+const mkQuery   = (head, segments, line, col)      => ({ kind: 'Query', head, segments, line, col });
+const mkExec    = (head, segments, line, col)      => ({ kind: 'Exec', head, segments, line, col });
+const mkPartial = (head, segments, line, col)      => ({ kind: 'Partial', head, segments, line, col });
+const mkRange   = (from, to, line, col)            => ({ kind: 'Range', from, to, line, col });
 
-function parseTemplate(state) {
-  const { open, items } = parseGroup(state, 'OPEN_T');
-  return { type: 'Template', items, line: open.line, col: open.col };
-}
+// ---------------------------------------------------------------------------
+// parseTree — bracket structure pass
+//
+// Consumes a token stream and produces a single top-level Tmpl whose
+// items are the program's top-level expressions.
+//
+// Throws PunkSyntaxError for any mismatched / unclosed delimiter.
 
-function parsePatternOrFunction(state) {
-  const { open, items } = parseGroup(state, 'OPEN_P');
-  const pattern = { type: 'Pattern', items, line: open.line, col: open.col };
-
-  // Attached `(...){...}` → Function. The attachment flag is set by the
-  // tokenizer iff no whitespace/comment sits between `)` and `{`.
-  const next = state.tokens[state.i];
-  if (next && next.type === 'OPEN_T' && next.attached) {
-    const body = parseTemplate(state);
-    return {
-      type: 'Function',
-      pattern,
-      body,
-      line: open.line,
-      col: open.col,
-    };
-  }
-  return pattern;
-}
-
-// Conditional query attachment.
-//   Word ending in one un-escaped `?`  attached to `(...)` → single conditional
-//     `(...)` alone        → predicate (returns TRUE/FALSE)
-//     `(...){...}`         → if-then (returns body or NULL)
-//   Word ending in two un-escaped `?` attached to `{...}` → multi-branch
-//     body items must all be `(p){t}` Functions
-// Subject query is the Word text minus the trailing `?`/`??` and an optional
-// trailing bare `.` — rebuilt as a synthetic query Word ending in `?` so the
-// evaluator uses its normal path-query machinery.
-function maybeConditional(state, word) {
-  const next = state.tokens[state.i];
-  if (!next || !next.attached) return null;
-  const trailQ = countTrailingBareQ(word);
-
-  if (trailQ === 1 && next.type === 'OPEN_P') {
-    const patOrFn = parsePatternOrFunction(state);
-    const subject = makeConditionalSubject(word, 1);
-    if (!subject) throw new Error(`empty subject before ? at ${word.line}:${word.col}`);
-    const branch = patOrFn.type === 'Function'
-      ? { pattern: patOrFn.pattern, body: patOrFn.body }
-      : { pattern: patOrFn, body: null };
-    return {
-      type: 'Conditional', multi: false, subject, branches: [branch],
-      line: word.line, col: word.col,
-    };
+export function parseTree(tokens) {
+  if (!Array.isArray(tokens)) {
+    throw new TypeError('parseTree: expected token array');
   }
 
-  if (trailQ === 2 && next.type === 'OPEN_T') {
-    const tmplNode = parseTemplate(state);
-    const branches = [];
-    for (const it of tmplNode.items) {
-      if (it.type !== 'Function') {
-        throw new Error(`?? branch must be (pattern){template}, got ${it.type} at ${it.line}:${it.col}`);
+  let i = 0;
+  const peek = (n = 0) => tokens[i + n];
+  const at = () => tokens[i];
+
+  // Parse a sequence of items until we hit one of `stopTypes` (a Set
+  // of token types) or EOF. Returns the items array.
+  //
+  // Tracks SPACE tokens so each emitted item carries a `glued` flag
+  // indicating whether it's adjacent to the previous item with no
+  // whitespace between them.
+  const parseItems = (stopTypes) => {
+    const items = [];
+    let pendingSpace = false;
+    let firstItem = true;
+
+    while (i < tokens.length) {
+      const tok = at();
+      if (tok.type === T.EOF) break;
+      if (stopTypes.has(tok.type)) break;
+
+      if (tok.type === T.SPACE) {
+        pendingSpace = true;
+        i++;
+        continue;
       }
-      branches.push({ pattern: it.pattern, body: it.body });
+
+      const node = parseOne();
+      // First item in a frame has no "previous sibling" — glued is
+      // meaningless there, so leave it false.
+      node.glued = !firstItem && !pendingSpace;
+      items.push(node);
+      pendingSpace = false;
+      firstItem = false;
     }
-    if (branches.length === 0) {
-      throw new Error(`?? needs at least one branch at ${word.line}:${word.col}`);
+
+    return items;
+  };
+
+  // Parse a single non-space, non-stop item starting at `i`.
+  const parseOne = () => {
+    const tok = at();
+    switch (tok.type) {
+      case T.LBRACE:    return parseBraces();
+      case T.LPAREN:    return parseParens();
+      case T.LBRACK:    return parseBrackets();
+      case T.QUOTE_OPEN: return parseText();
+      case T.WORD:      i++; return mkWord(tok.text, tok.line, tok.col);
+      case T.ARROW:     i++; return mkWord('->', tok.line, tok.col); // pipeline op; parseOperators handles it
+      // Stray closing delimiters at this point are unmatched.
+      case T.RBRACE:
+      case T.RPAREN:
+      case T.RBRACK:
+      case T.QUOTE_CLOSE:
+        throw new PunkSyntaxError(`unexpected '${tok.text}'`, tok.line, tok.col);
+      case T.TEXT:
+        // TEXT tokens should only appear while we're inside parseText;
+        // reaching one here means tokenize emitted something weird.
+        throw new PunkSyntaxError(
+          `unexpected text fragment outside of "..."`,
+          tok.line, tok.col,
+        );
+      default:
+        throw new PunkSyntaxError(
+          `unexpected token type ${tok.type}`,
+          tok.line, tok.col,
+        );
     }
-    const subject = makeConditionalSubject(word, 2);
-    if (!subject) throw new Error(`empty subject before ?? at ${word.line}:${word.col}`);
-    return {
-      type: 'Conditional', multi: true, subject, branches,
-      line: word.line, col: word.col,
-    };
+  };
+
+  const parseBraces = () => {
+    const open = at();
+    i++; // consume LBRACE
+    const items = parseItems(new Set([T.RBRACE]));
+    if (at()?.type !== T.RBRACE) {
+      throw new PunkSyntaxError("unclosed '{'", open.line, open.col);
+    }
+    i++; // consume RBRACE
+    return mkTmpl(items, open.line, open.col);
+  };
+
+  const parseParens = () => {
+    const open = at();
+    i++;
+    const items = parseItems(new Set([T.RPAREN]));
+    if (at()?.type !== T.RPAREN) {
+      throw new PunkSyntaxError("unclosed '('", open.line, open.col);
+    }
+    i++;
+    return mkPattern(items, open.line, open.col);
+  };
+
+  const parseBrackets = () => {
+    const open = at();
+    i++;
+    const items = parseItems(new Set([T.RBRACK]));
+    if (at()?.type !== T.RBRACK) {
+      throw new PunkSyntaxError("unclosed '['", open.line, open.col);
+    }
+    i++;
+    return mkBox(items, open.line, open.col);
+  };
+
+  // Parse a "..." run. The tokenizer has already split it into TEXT
+  // chunks, LBRACE-opened placeholders (which return us to STRUCT
+  // mode), and a final QUOTE_CLOSE.
+  const parseText = () => {
+    const open = at();
+    i++; // consume QUOTE_OPEN
+    const parts = [];
+
+    while (i < tokens.length) {
+      const tok = at();
+      if (tok.type === T.QUOTE_CLOSE) {
+        i++;
+        return mkText(parts, open.line, open.col);
+      }
+      if (tok.type === T.TEXT) {
+        parts.push({ lit: tok.text });
+        i++;
+        continue;
+      }
+      if (tok.type === T.LBRACE) {
+        // Embedded placeholder: parse a {...} as a Tmpl and store it
+        // as an `embed` part. parseTree's normal LBRACE handler does
+        // exactly that.
+        const tmpl = parseBraces();
+        parts.push({ embed: tmpl });
+        continue;
+      }
+      // Anything else inside "..." is the tokenizer's bug, not the user's.
+      throw new PunkSyntaxError(
+        `unexpected token ${tok.type} inside text template`,
+        tok.line, tok.col,
+      );
+    }
+
+    throw new PunkSyntaxError('unclosed text template', open.line, open.col);
+  };
+
+  const items = parseItems(new Set());
+  if (at()?.type !== T.EOF) {
+    const tok = at();
+    throw new PunkSyntaxError(
+      `unexpected '${tok.text}'`,
+      tok.line, tok.col,
+    );
+  }
+  return mkTmpl(items, 1, 1);
+}
+
+// ---------------------------------------------------------------------------
+// parseWords — decode raw Word tokens
+//
+// Walks the parseTree output and replaces each raw `Word` with the right
+// refined node (Named / Query / Exec / Partial / Range / Word-with-subkind).
+//
+// Two structural changes to sibling lists also happen here:
+//   - A Word that begins with `.` (a "leading-dot path") attaches to the
+//     previous glued sibling as its head; that sibling is consumed.
+//   - `name:value` where the value side of the colon is empty AND the
+//     Word ends with `:` AND the next sibling is glued: that sibling
+//     becomes the value of the Named node. Otherwise the value is
+//     decoded from the colon-suffix of the same word.
+
+const RESERVED_NAMES = new Set(['TRUE', 'FALSE', 'NULL']);
+
+// JS-identifier-aligned + hyphen. No leading digit.
+const NAME_HEAD = /[A-Za-z_$]/;
+const NAME_CHAR = /[A-Za-z0-9_$\-]/;
+
+const isNameHead = (ch) => NAME_HEAD.test(ch);
+const isNameChar = (ch) => NAME_CHAR.test(ch);
+
+const isName = (s) => {
+  if (!s) return false;
+  if (!isNameHead(s[0])) return false;
+  for (let i = 1; i < s.length; i++) if (!isNameChar(s[i])) return false;
+  return true;
+};
+
+// A non-negative integer literal (path segments only — no sign, no dot).
+const INT_RE = /^[0-9]+$/;
+const isInt = (s) => INT_RE.test(s);
+
+// Is this string a valid path-head name? Names (JS-ident-style) ARE
+// valid, but Punk also uses operator-style symbols as function names
+// (`+`, `*`, `>`, `=` etc.). For the parse stage we accept anything
+// non-empty that isn't a pure number literal and contains no `.`;
+// "is this name actually bound" is checked by parseValidate / eval.
+const isValidPathHead = (s) =>
+  s.length > 0 && !isNumber(s) && !s.includes('.') && !s.includes('~');
+
+// Number literal as used by Word subkind detection. Allows optional
+// leading `-`, a decimal point, and an optional exponent. Doc lines
+// for numbers may evolve; this matches the obvious cases.
+const NUMBER_RE = /^-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
+const isNumber = (s) => NUMBER_RE.test(s);
+
+// Decode a range word like `5~15`, `~15`, `5~`, `~`.
+// Returns { from, to } with integer or null; throws on bad shape.
+const decodeRangeWord = (text, line, col) => {
+  // exactly one `~`
+  const parts = text.split('~');
+  if (parts.length !== 2) {
+    throw new PunkSyntaxError(`bad range '${text}'`, line, col);
+  }
+  const [a, b] = parts;
+  const decode = (side) => {
+    if (side === '') return null;
+    if (!isInt(side)) {
+      throw new PunkSyntaxError(`range bound '${side}' must be an integer`, line, col);
+    }
+    return parseInt(side, 10);
+  };
+  return { from: decode(a), to: decode(b) };
+};
+
+// Decode the segment list of a path. `segs` is the array of non-empty
+// segment strings between dots. Throws on illegal segments.
+//
+// Recognised segment forms:
+//   N        → { kind: 'index', n }
+//   #        → { kind: 'length' }      (final only)
+//   :        → { kind: 'nameOf' }      (final only)
+//   ()       → { kind: 'pattern' }     (final only)
+//   name     → { kind: 'name', text }
+//   N~M etc. → { kind: 'range', from, to }
+const decodeSegments = (segs, line, col) => {
+  const out = [];
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    const last = i === segs.length - 1;
+    if (s === '#') {
+      if (!last) throw new PunkSyntaxError("'#' must be the final path segment", line, col);
+      out.push({ kind: 'length' });
+    } else if (s === ':') {
+      if (!last) throw new PunkSyntaxError("':' must be the final path segment", line, col);
+      out.push({ kind: 'nameOf' });
+    } else if (s === '()') {
+      if (!last) throw new PunkSyntaxError("'()' must be the final path segment", line, col);
+      out.push({ kind: 'pattern' });
+    } else if (s.includes('~')) {
+      const { from, to } = decodeRangeWord(s, line, col);
+      out.push({ kind: 'range', from, to });
+    } else if (isInt(s)) {
+      const n = parseInt(s, 10);
+      if (n === 0) throw new PunkSyntaxError("path indices are 1-based", line, col);
+      out.push({ kind: 'index', n });
+    } else if (isName(s)) {
+      out.push({ kind: 'name', text: s });
+    } else {
+      throw new PunkSyntaxError(`bad path segment '${s}'`, line, col);
+    }
+  }
+  return out;
+};
+
+// Split a path body (the part before the trailing ? / ! / ') into
+// segments at unescaped dots. The body itself never contains escapes
+// after tokenize (those are already decoded), but a `.` inside a `()`
+// segment must be respected — though `()` is the entire segment, so a
+// dot can only appear by itself. We just split on `.`.
+//
+// Returns the segments array; empty strings (from leading/trailing
+// dots or doubled dots) are an error.
+const splitPath = (body, line, col) => {
+  const segs = body.split('.');
+  for (const s of segs) {
+    if (s === '') throw new PunkSyntaxError(`empty path segment in '${body}'`, line, col);
+  }
+  return segs;
+};
+
+// Decode a single non-leading-dot raw word into its refined node.
+// May return any of: Word (with subkind), Named, Query, Exec, Partial,
+// Range. The returned node copies glued/line/col from `w`.
+//
+// Special "leading-dot" words (starting with `.`) are NOT decoded here;
+// they are handled by attachLeadingDotPaths which has access to the
+// previous sibling.
+const decodeWord = (w) => {
+  const { text, line, col, glued } = w;
+  const copy = (node) => { if (glued) node.glued = true; return node; };
+
+  // Reserved literals
+  if (RESERVED_NAMES.has(text)) {
+    return copy({ kind: 'Word', text, subkind: 'reserved', line, col });
+  }
+  if (text === '_') {
+    return copy({ kind: 'Word', text, subkind: 'wildcard', line, col });
+  }
+  if (text === '___') {
+    return copy({ kind: 'Word', text, subkind: 'variadic', line, col });
+  }
+  // Bare `!` — used as the pipeline-execute marker. parseOperators
+  // attaches semantic meaning; here we just allow it through.
+  if (text === '!') {
+    return copy({ kind: 'Word', text, subkind: 'bang', line, col });
   }
 
-  return null;
+  // Range word (contains `~` and is not a path)
+  const last = text[text.length - 1];
+  const endsPath = last === '?' || last === '!' || last === "'";
+  if (!endsPath && text.includes('~')) {
+    const { from, to } = decodeRangeWord(text, line, col);
+    return copy(mkRange(from, to, line, col));
+  }
+
+  // `name:value` (word contains `:` after a valid-name prefix).
+  // Try this BEFORE the path check so `add:foo!5` splits at `:` first,
+  // and AFTER the path check the value-part `foo!5` recursively decodes.
+  //
+  // Special exception: `xs.:?` is a path whose final segment is `:`, not
+  // a `name:value` binding. We only treat `:` as a binder if the prefix
+  // before the colon is itself a valid identifier name.
+  const colonIdx = text.indexOf(':');
+  if (colonIdx > 0) {
+    const namePart = text.slice(0, colonIdx);
+    if (isName(namePart)) {
+      if (RESERVED_NAMES.has(namePart)) {
+        throw new PunkSyntaxError(
+          `cannot bind to reserved name '${namePart}'`, line, col,
+        );
+      }
+      const valuePart = text.slice(colonIdx + 1);
+      if (valuePart === '') {
+        // Empty value — wait for parseOperators to consume the next
+        // glued sibling (which will be the value).
+        return copy(mkNamed(namePart, null, line, col));
+      }
+      const valueNode = decodeWord(mkWord(valuePart, line, col));
+      return copy(mkNamed(namePart, valueNode, line, col));
+    }
+    // Colon present but prefix isn't a name. Fall through and let the
+    // path check handle it (e.g. `xs.:?`). If nothing else matches we
+    // throw below.
+  }
+
+  // Mid-word `!` or `'` with a simple value on the right.
+  // `add!5` → Exec(add, args:{5}); `times'2` → Partial(times, args:{2}).
+  // Right side must be a single name or single non-negative integer.
+  const midBangIdx = findMidBang(text);
+  if (midBangIdx >= 0) {
+    const head = text.slice(0, midBangIdx);
+    const op = text[midBangIdx];
+    const rhs = text.slice(midBangIdx + 1);
+    if (rhs === '') {
+      // shouldn't happen — findMidBang only returns non-end indices
+      throw new PunkSyntaxError(`bad word '${text}'`, line, col);
+    }
+    if (!isName(rhs) && !isInt(rhs)) {
+      throw new PunkSyntaxError(
+        `'${text}': the value after '${op}' must be a single name or integer`,
+        line, col,
+      );
+    }
+    // Head must itself be a valid path head.
+    const segs = splitPath(head, line, col);
+    const headRaw = segs[0];
+    if (isInt(headRaw)) {
+      throw new PunkSyntaxError(
+        `a number cannot head a path ('${text}')`, line, col,
+      );
+    }
+    if (!isValidPathHead(headRaw)) {
+      throw new PunkSyntaxError(
+        `'${headRaw}' is not a valid path head`, line, col,
+      );
+    }
+    const tail = decodeSegments(segs.slice(1), line, col);
+    const make = op === '!' ? mkExec : mkPartial;
+    const argWord = decodeWord(mkWord(rhs, line, col));
+    const argTmpl = mkTmpl([argWord], line, col);
+    const node = make(headRaw, tail, line, col);
+    node.args = argTmpl;
+    return copy(node);
+  }
+
+  // Path-end (Query / Exec / Partial with no embedded args)
+  if (endsPath) {
+    const body = text.slice(0, -1);
+    if (body === '') {
+      throw new PunkSyntaxError(`'${last}' with no path`, line, col);
+    }
+    const segs = splitPath(body, line, col);
+    const headRaw = segs[0];
+    if (isInt(headRaw)) {
+      throw new PunkSyntaxError(
+        `a number cannot head a path ('${text}')`, line, col,
+      );
+    }
+    if (!isValidPathHead(headRaw)) {
+      throw new PunkSyntaxError(
+        `'${headRaw}' is not a valid path head`, line, col,
+      );
+    }
+    const tail = decodeSegments(segs.slice(1), line, col);
+    const make =
+      last === '?' ? mkQuery :
+      last === '!' ? mkExec  : mkPartial;
+    return copy(make(headRaw, tail, line, col));
+  }
+
+  // Bare number literal
+  if (isNumber(text)) {
+    return copy({ kind: 'Word', text, subkind: 'number', line, col });
+  }
+
+  // Plain value word (operator-like punctuation also lands here).
+  if (isName(text)) {
+    return copy({ kind: 'Word', text, subkind: 'value', line, col });
+  }
+  return copy({ kind: 'Word', text, subkind: 'op', line, col });
+};
+
+// Find the index of the first mid-word `!` or `'` (i.e., not the
+// terminating char). Returns -1 if there isn't one. This is used to
+// detect the `name!arg` / `name'arg` short forms.
+const findMidBang = (text) => {
+  for (let i = 0; i < text.length - 1; i++) {
+    const c = text[i];
+    if (c === '!' || c === "'") return i;
+  }
+  return -1;
+};
+
+// Walk a sibling list, decoding each Word. Handles two sibling-aware
+// rules:
+//   (a) A raw Word starting with `.` attaches to the previous sibling
+//       (which must be glued? No — the dot-word must itself be glued).
+//   (b) A `Named` with value=null absorbs the next glued sibling.
+const walkSiblings = (items) => {
+  // First pass: decode each non-leading-dot word in place. Leading-dot
+  // words stay as raw Word for the second pass.
+  const decoded = items.map((it) => {
+    if (it.kind !== 'Word') return walkNode(it);
+    if (it.text.startsWith('.')) return it; // defer
+    return decodeWord(it);
+  });
+
+  // Second pass (left-to-right): attach leading-dot paths to prev sibling.
+  const attached = [];
+  for (const it of decoded) {
+    if (it.kind === 'Word' && it.text.startsWith('.')) {
+      const prev = attached[attached.length - 1];
+      if (!prev || !it.glued) {
+        throw new PunkSyntaxError(
+          `'${it.text}' has no path head`, it.line, it.col,
+        );
+      }
+      // Build a Query/Exec/Partial whose head is `prev`.
+      const { text, line, col } = it;
+      const last = text[text.length - 1];
+      if (last !== '?' && last !== '!' && last !== "'") {
+        throw new PunkSyntaxError(
+          `'${text}' is not a valid path`, line, col,
+        );
+      }
+      const body = text.slice(1, -1); // strip leading `.` and suffix
+      if (body === '') {
+        throw new PunkSyntaxError(`'${text}' has no segments`, line, col);
+      }
+      const segs = splitPath(body, line, col);
+      const decodedSegs = decodeSegments(segs, line, col);
+      const make =
+        last === '?' ? mkQuery :
+        last === '!' ? mkExec  : mkPartial;
+      // The new node inherits prev's `glued` flag (it sits where prev sat).
+      const node = make(prev, decodedSegs, prev.line, prev.col);
+      if (prev.glued) node.glued = true;
+      attached[attached.length - 1] = node;
+      continue;
+    }
+    attached.push(it);
+  }
+
+  // Note: dangling `Named` (value === null) is intentionally NOT
+  // resolved here. parseOperators handles it last, AFTER Fn formation,
+  // arg attachment, and pipeline collapse — so the value it absorbs is
+  // already in its final form.
+
+  return attached;
+};
+
+// Recurse into a single node, returning a new node with its children
+// processed by walkSiblings.
+const walkNode = (node) => {
+  switch (node.kind) {
+    case 'Tmpl': {
+      const items = walkSiblings(node.items);
+      const out = mkTmpl(items, node.line, node.col);
+      if (node.glued) out.glued = true;
+      return out;
+    }
+    case 'Pattern': {
+      const items = walkSiblings(node.items);
+      const out = mkPattern(items, node.line, node.col);
+      if (node.glued) out.glued = true;
+      return out;
+    }
+    case 'Box': {
+      const items = walkSiblings(node.items);
+      const out = mkBox(items, node.line, node.col);
+      if (node.glued) out.glued = true;
+      return out;
+    }
+    case 'Text': {
+      const parts = node.parts.map((p) =>
+        'embed' in p ? { embed: walkNode(p.embed) } : p,
+      );
+      const out = mkText(parts, node.line, node.col);
+      if (node.glued) out.glued = true;
+      return out;
+    }
+    case 'Word':
+      // A bare Word at this point (not inside a sibling walk) — should
+      // not normally happen because walkSiblings catches them. Decode
+      // defensively.
+      if (node.text.startsWith('.')) {
+        throw new PunkSyntaxError(
+          `'${node.text}' has no path head`, node.line, node.col,
+        );
+      }
+      return decodeWord(node);
+    default:
+      return node;
+  }
+};
+
+export function parseWords(tree) {
+  if (!tree || tree.kind !== 'Tmpl') {
+    throw new TypeError('parseWords: expected a Tmpl root');
+  }
+  return walkNode(tree);
 }
 
-function countTrailingBareQ(word) {
-  let n = 0;
-  const { text, esc } = word;
-  for (let k = text.length - 1; k >= 0 && text[k] === '?' && !esc[k]; k--) n++;
-  return n;
-}
+// ---------------------------------------------------------------------------
+// parseOperators — sibling-level adjacency merges
+//
+// Runs after parseWords. Performs five passes on every sibling list in
+// the tree, in this exact order:
+//
+//   1. Fn formation:
+//        Pattern  +  glued <node>   →  Fn { params, body }
+//        body is wrapped in a 1-item Tmpl if the glued node isn't itself
+//        a Tmpl.
+//   2. Return-range:
+//        Fn  +  glued Range          →  Fn (returnRange set)
+//   3. Args attachment:
+//        Exec/Partial (no .args)  +  glued Tmpl   →  Exec/Partial (args set)
+//   4. Pipeline collapse:
+//        a -> b -> c [!]              →  Pipeline { stages, execute }
+//        execute is true iff the chain ends with an Exec OR a bare `!`
+//        Word glued after the last stage.
+//   5. Resolve PendingNamed:
+//        Named (value=null)  +  glued <node>   →  Named (value set)
+//
+// All passes are pure: each returns a new sibling list. The tree is
+// recursed first so inner siblings are already merged before their
+// container is considered.
 
-function makeConditionalSubject(word, qs) {
-  let n = word.text.length - qs;
-  if (n > 0 && word.text[n - 1] === '.' && !word.esc[n - 1]) n--;
-  if (n <= 0) return null;
-  return {
-    type: 'Word',
-    text: word.text.slice(0, n) + '?',
-    esc: [...word.esc.slice(0, n), false],
-    line: word.line,
-    col: word.col,
-  };
-}
+const mkFn       = (params, body, line, col)  => ({ kind: 'Fn', params, body, line, col });
+const mkPipeline = (stages, execute, line, col) =>
+  ({ kind: 'Pipeline', stages, execute, line, col });
 
-function parseBox(state) {
-  const { open, items } = parseGroup(state, 'OPEN_B');
-  return { type: 'Box', items, line: open.line, col: open.col };
+// Walk node tree depth-first; recurse into children first, then run
+// the five-pass sibling merge on this node's items (if it has any).
+const opsWalk = (node) => {
+  switch (node.kind) {
+    case 'Tmpl':
+    case 'Pattern':
+    case 'Box': {
+      const items = node.items.map(opsWalk);
+      const merged = mergeSiblings(items);
+      const out = { ...node, items: merged };
+      return out;
+    }
+    case 'Text': {
+      const parts = node.parts.map((p) =>
+        'embed' in p ? { embed: opsWalk(p.embed) } : p,
+      );
+      return { ...node, parts };
+    }
+    case 'Named':
+      if (node.value !== null) {
+        return { ...node, value: opsWalk(node.value) };
+      }
+      return node;
+    case 'Query':
+    case 'Exec':
+    case 'Partial': {
+      // The head may be a node (when attached from a leading-dot path)
+      // — recurse into it. Also recurse into embedded args (rare;
+      // arg tmpls from mid-`!` short forms contain only a single
+      // primitive value, but be safe).
+      const out = { ...node };
+      if (node.head && typeof node.head === 'object') {
+        out.head = opsWalk(node.head);
+      }
+      if (node.args) out.args = opsWalk(node.args);
+      return out;
+    }
+    default:
+      return node;
+  }
+};
+
+// The five-pass merge on one sibling list.
+const mergeSiblings = (items) => {
+  let xs = items;
+  xs = passFnFormation(xs);
+  xs = passReturnRange(xs);
+  xs = passArgsAttach(xs);
+  xs = passPipeline(xs);
+  xs = passResolveNamed(xs);
+  return xs;
+};
+
+// Pass 1 — `Pattern + glued <node>` → `Fn`.
+const passFnFormation = (xs) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i++) {
+    const cur = xs[i];
+    const next = xs[i + 1];
+    if (cur.kind === 'Pattern' && next && next.glued) {
+      // Body is `next` — wrap if not a Tmpl.
+      const bodyTmpl = next.kind === 'Tmpl'
+        ? next
+        : mkTmpl([stripGlued(next)], next.line, next.col);
+      const fn = mkFn(cur, bodyTmpl, cur.line, cur.col);
+      if (cur.glued) fn.glued = true;
+      out.push(fn);
+      i++; // consume next
+      continue;
+    }
+    out.push(cur);
+  }
+  return out;
+};
+
+// Pass 2 — `Fn + glued Range` → set returnRange.
+const passReturnRange = (xs) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i++) {
+    const cur = xs[i];
+    const next = xs[i + 1];
+    if (cur.kind === 'Fn' && next && next.kind === 'Range' && next.glued) {
+      const fn = { ...cur, returnRange: { from: next.from, to: next.to } };
+      out.push(fn);
+      i++;
+      continue;
+    }
+    out.push(cur);
+  }
+  return out;
+};
+
+// Pass 3 — `Exec/Partial (no args) + glued Tmpl` → attach args.
+const passArgsAttach = (xs) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i++) {
+    const cur = xs[i];
+    const next = xs[i + 1];
+    if (
+      (cur.kind === 'Exec' || cur.kind === 'Partial') &&
+      !cur.args &&
+      next && next.kind === 'Tmpl' && next.glued
+    ) {
+      const node = { ...cur, args: stripGlued(next) };
+      if (cur.glued) node.glued = true;
+      out.push(node);
+      i++;
+      continue;
+    }
+    out.push(cur);
+  }
+  return out;
+};
+
+// Pass 4 — collapse `->` chains into Pipeline.
+// A pipeline is a sequence of stages separated by `Word('->')` items.
+// Every `->` must be glued on BOTH sides (the tokenizer already ensures
+// no-whitespace via the ARROW token; here glue is enforced via the
+// `glued` flag on each Word adjacent to it).
+const passPipeline = (xs) => {
+  const out = [];
+  let i = 0;
+  while (i < xs.length) {
+    // Try to start a pipeline at index i.
+    const start = xs[i];
+    // Heuristic: a pipeline starts if the next non-current sibling is
+    // `Word('->')` and that arrow is glued to its neighbours.
+    const arrowAt = (k) => {
+      const w = xs[k];
+      return w && w.kind === 'Word' && w.text === '->';
+    };
+    if (i + 1 < xs.length && arrowAt(i + 1) && xs[i + 1].glued) {
+      const stages = [start];
+      let j = i + 1;
+      while (arrowAt(j) && xs[j].glued) {
+        const stage = xs[j + 1];
+        if (!stage || !stage.glued || stage.kind === 'Word' && stage.text === '->') {
+          throw new PunkSyntaxError(
+            `'->' must be followed by a glued value`,
+            xs[j].line, xs[j].col,
+          );
+        }
+        stages.push(stage);
+        j += 2;
+      }
+      // Detect trailing bare `!` glued after the last stage.
+      let execute = false;
+      const tail = xs[j];
+      const lastStage = stages[stages.length - 1];
+      if (tail && tail.kind === 'Word' && tail.text === '!' && tail.glued) {
+        execute = true;
+        j++;
+      } else if (lastStage.kind === 'Exec') {
+        // `...->log!` — the Exec at the tail acts as the executor.
+        execute = true;
+      }
+      const pipe = mkPipeline(stages.map(stripGlued), execute, start.line, start.col);
+      if (start.glued) pipe.glued = true;
+      out.push(pipe);
+      i = j;
+      continue;
+    }
+    out.push(start);
+    i++;
+  }
+  return out;
+};
+
+// Pass 5 — resolve `Named { value: null }` by absorbing the next glued sibling.
+const passResolveNamed = (xs) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i++) {
+    const cur = xs[i];
+    if (cur.kind === 'Named' && cur.value === null) {
+      const next = xs[i + 1];
+      if (!next || !next.glued) {
+        throw new PunkSyntaxError(
+          `'${cur.name}:' has no value`, cur.line, cur.col,
+        );
+      }
+      const resolved = { ...cur, value: stripGlued(next) };
+      out.push(resolved);
+      i++;
+      continue;
+    }
+    out.push(cur);
+  }
+  return out;
+};
+
+// Return a shallow copy of `node` with its `glued` flag removed.
+// Used when absorbing a sibling into a parent (glue no longer applies).
+const stripGlued = (node) => {
+  if (!node || !('glued' in node)) return node;
+  const copy = { ...node };
+  delete copy.glued;
+  return copy;
+};
+
+export function parseOperators(tree) {
+  if (!tree || tree.kind !== 'Tmpl') {
+    throw new TypeError('parseOperators: expected a Tmpl root');
+  }
+  return opsWalk(tree);
 }

@@ -1,38 +1,25 @@
-http:import!punk.http.
-html:import!punk.html.
-keystore:import!punk.keystore.
+http:import!punk.http
+html:import!punk.html
+keystore:import!punk.keystore
 
-db:keystore.open!todo\.kv
-
-initialKeys:keystore.keys!db?
-initialKeys.#?->[nextId]!
-
-id:(x:_){x?}
-
-listTodos:(_:_){
-  keys:keystore.keys!db?
-  map!{(k:_){
-    raw:keystore.get!{db? k?}
-    name!{k? raw?}
-  } keys?}
-}
+handle:keystore.open!todo
+handle?->[db]!
 
 createTodo:(note:_ desc:_){
-  cur:[nextId]->id!
-  key:concat!{t cur?}
-  val:concat!{note? \  desc?}
-  keystore.put!{db? key? val?}
-  next:+!{cur? 1}
-  next?->[nextId]!
+  [db]->keystore.put'{
+    keystore.newKey!
+    {note:note? desc:desc?}
+  }->[db]!
 }
 
 renderTodoItem:(v:_ i:_ k:_){
-  li:(){concat!{k? \:\  v?}}
+  li:(){k?\:v.note? (v.desc?)}
   name!{li li?}
 }
 
 indexPage:(todos:___){
-  (lang:en){
+  <\!DOCTYPE html>
+  html:(lang:en){
     head:(){
       title:(){punk-todo}
     }
@@ -41,7 +28,7 @@ indexPage:(todos:___){
       form:(method:POST action:/todo enctype:text/plain){
         input:(name:note type:text){}
         input:(name:description type:text){}
-        button:(type:submit){Add\ Item}
+        button:(type:submit){Add Item}
       }
       ul:(){
         map!{renderTodoItem? todos?}
@@ -50,34 +37,29 @@ indexPage:(todos:___){
   }
 }
 
-doctype:concat!{\<\!DOCTYPE\  html\>}
-
-index:(_:___){
-  todos:listTodos!NULL
-  body:concat!{doctype? html.render!indexPage!todos?}
+index:(___){
+  todos:[db]->keystore.list!
+  body:html.render!indexPage!todos?
   {status:200 headers:{Content-Type:text/html} body:body?}
 }
 
 createTodoHandler:(method:_ path:_ body:_){
   form:html.parsePost!body?
   createTodo!{form.note? form.description?}
-  {status:303 headers:{Location:/} body:\ }
+  {status:303 headers:{Location:/} body:{}}
 }
 
-notFound:(_:___){
-  {status:404 headers:{Content-Type:text/plain} body:Not\ Found}
+notFound:(___){
+  {status:404 headers:{Content-Type:text/plain} body:{Not Found}}
 }
-
-routeKey:(req:___){concat!{req.1? \  req.2?}}
 
 dispatch:(req:___){
-  key:routeKey!req?
-  key??{
-    (GET\ /){index!req?}
-    (POST\ /todo){createTodoHandler!{req.1? req.2? req.3?}}
+  req??{
+    (GET / ___){index!req?}
+    (POST /todo body:_){createTodoHandler!{POST /todo body?}}
     (___){notFound!req?}
   }
 }
 
 http.serve!{8080 dispatch?}
-log!listening\ on\ port\ 8080
+log!{listening on port 8080}
