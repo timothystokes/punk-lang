@@ -135,6 +135,15 @@ export const builtins = {
   'ceil':  (args) => numWord(Math.ceil(toNum(argsItems(args)[0]))),
   'round': (args) => numWord(Math.round(toNum(argsItems(args)[0]))),
   'sqrt':  (args) => numWord(Math.sqrt(toNum(argsItems(args)[0]))),
+  'rand':  () => {
+    // Float in [0, 1] inclusive. 21+32 = 53 bits of randomness divided
+    // by (2^53 - 1) so both endpoints are reachable.
+    const MAX = 2 ** 53 - 1;
+    const hi = Math.floor(Math.random() * 0x200000);   // 2^21
+    const lo = Math.floor(Math.random() * 0x100000000); // 2^32
+    const n = hi * 0x100000000 + lo;
+    return numWord(n / MAX);
+  },
 
   // ----- Comparison ---------------------------------------------------
   '=': (args) => {
@@ -273,14 +282,11 @@ export const builtins = {
         `assertion failed: expected ${describe(xs[0])}, got ${describe(xs[1])}`,
       );
     }
-    if (xs.length === 1) {
-      const v = xs[0];
-      // Only FALSE and NULL are falsy.
-      if (isFalse(v)) throw new PunkRuntimeError('assertion failed: FALSE');
-      if (v && v.kind === 'Null') throw new PunkRuntimeError('assertion failed: NULL');
-      return NULL;
-    }
-    throw new PunkRuntimeError(`assert! expects 1 or 2 arguments, got ${xs.length}`);
+    // 1-arg form: truthy check. Only FALSE and NULL are falsy.
+    const v = singleArg(args);
+    if (isFalse(v)) throw new PunkRuntimeError('assertion failed: FALSE');
+    if (v && v.kind === 'Null') throw new PunkRuntimeError('assertion failed: NULL');
+    return NULL;
   },
 
   // ----- IO -----------------------------------------------------------

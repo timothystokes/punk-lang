@@ -1033,6 +1033,7 @@ Anything that's already expressible through queries is **not** a built-in. There
 | `ceil!n` | round `n` up to the nearest integer |
 | `round!n` | round `n` to the nearest integer |
 | `sqrt!n` | square root of `n` |
+| `rand!` | random float in `[0, 1]` inclusive (no args) |
 
 ```punk
 > +!{1 2 3 4} ⏎
@@ -1045,6 +1046,8 @@ Anything that's already expressible through queries is **not** a built-in. There
 {2}
 > round!3.7 ⏎
 {4}
+> rand! ⏎
+{0.5372819461923847}
 ```
 
 ### Comparison
