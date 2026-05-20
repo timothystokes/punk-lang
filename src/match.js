@@ -70,19 +70,15 @@ function itemAsString(v) {
 // become Named items in the same position.
 function regexMatchTmpl(execResult, regex) {
   const items = [];
-  items.push({ kind: 'Word', subkind: 'value', text: execResult[0] });
-  // Discover named groups via the regex source.
+  const mkText = (s) => ({ kind: 'Text', parts: [{ lit: s }] });
+  items.push(mkText(execResult[0]));
   const names = [];
   const nameRe = /\(\?<([A-Za-z_][A-Za-z0-9_]*)>/g;
   let m;
   while ((m = nameRe.exec(regex.source)) !== null) names.push(m[1]);
-  let nameIdx = 0;
   for (let g = 1; g < execResult.length; g++) {
     const text = execResult[g] === undefined ? '' : execResult[g];
-    const value = { kind: 'Word', subkind: 'value', text };
-    // groups in the named-group order appear in named order across the
-    // overall result alongside positional; use execResult.groups if
-    // available to determine the name for THIS positional group.
+    const value = mkText(text);
     let groupName = null;
     if (execResult.groups) {
       for (const k of Object.keys(execResult.groups)) {
