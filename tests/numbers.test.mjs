@@ -45,15 +45,33 @@ test('querying a Number literal directly is a syntax error', () => {
   punkThrows('42.1?');
 });
 
-test('querying a Number via a name is fine — implicit template wrap', () => {
-  assert.equal(punk('n:3.141   n.3?'), '{.}');
-  assert.equal(punk('n:45.7    n.1?'), '{4}');
-  assert.equal(punk('n:42      n.2?'), '{2}');
+test('querying a Number via a name — the value auto-wraps as a singleton tmpl', () => {
+  // `n:3.141` ≡ `n:{3.141}`; the number is the *one* item in n.
+  // `.N?` indexes the tmpl, so anything past position 1 is out of bounds.
+  assert.equal(punk('n:3.141   n.1?'), '{3.141}');
+  assert.equal(punk('n:3.141   n.2?'), 'NULL');
+  assert.equal(punk('n:3.141   n.3?'), 'NULL');
+  assert.equal(punk('n:42      n.1?'), '{42}');
+  assert.equal(punk('n:42      n.2?'), 'NULL');
 });
 
-test('querying a Number wrapped in a template is fine', () => {
-  assert.equal(punk('{3.141}.3?'), '{.}');
-  assert.equal(punk('{45.7}.4?'),  '{7}');
+test('querying a Number wrapped in a template — same rules', () => {
+  assert.equal(punk('{3.141}.1?'), '{3.141}');
+  assert.equal(punk('{3.141}.3?'), 'NULL');
+  assert.equal(punk('{45.7}.4?'),  'NULL');
+});
+
+test('chained path on a Number indexes its characters', () => {
+  // `.1?` first picks the number out of the wrapping tmpl, then `.M?`
+  // indexes the number's character form (numbers convert to chars when
+  // path-indexed directly).
+  assert.equal(punk('n:42      n.1.1?'), '{4}');
+  assert.equal(punk('n:42      n.1.2?'), '{2}');
+  assert.equal(punk('n:42      n.1.3?'), 'NULL');
+  assert.equal(punk('n:3.141   n.1.1?'), '{3}');
+  assert.equal(punk('n:3.141   n.1.2?'), '{.}');
+  assert.equal(punk('n:45.7    n.1.4?'), '{7}');
+  assert.equal(punk('n:42      n.1.#?'), '{2}');
 });
 
 test('zero forms', () => {

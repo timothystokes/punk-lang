@@ -501,12 +501,22 @@ const decodeWord = (w) => {
     }
     const segs = splitPath(body, line, col);
     const headRaw = segs[0];
+    let headNode = null;
     if (isInt(headRaw)) {
-      throw new PunkSyntaxError(
-        `a number cannot head a path ('${text}')`, line, col,
-      );
-    }
-    if (!isValidPathHead(headRaw)) {
+      // A number can head a path only when every tail segment is a
+      // "meta" segment that's defined on any value: `.()` (pattern) or
+      // `.:` (name). Anything else (`.1`, `.#`, `.1~3`) implies the
+      // head is a container, which a number is not.
+      const tailSegs = segs.slice(1);
+      const allMeta = tailSegs.length > 0
+        && tailSegs.every((s) => s === '()' || s === ':');
+      if (!allMeta) {
+        throw new PunkSyntaxError(
+          `a number cannot head a path ('${text}')`, line, col,
+        );
+      }
+      headNode = { kind: 'Word', text: headRaw, subkind: 'number', line, col };
+    } else if (!isValidPathHead(headRaw)) {
       throw new PunkSyntaxError(
         `'${headRaw}' is not a valid path head`, line, col,
       );
@@ -515,7 +525,7 @@ const decodeWord = (w) => {
     const make =
       last === '?' ? mkQuery :
       last === '!' ? mkExec  : mkPartial;
-    return copy(make(headRaw, tail, line, col));
+    return copy(make(headNode || headRaw, tail, line, col));
   }
 
   // Bare number literal
@@ -595,6 +605,22 @@ const walkSiblings = (items) => {
   // resolved here. parseOperators handles it last, AFTER Fn formation,
   // arg attachment, and pipeline collapse — so the value it absorbs is
   // already in its final form.
+
+  // Stray match-op detection: a `?` or `??` must have a value sibling
+  // immediately to its left. parseOperators also catches this, but the
+  // parseWords-only path needs to fail too (e.g. a bare `?` program).
+  for (let i = 0; i < attached.length; i++) {
+    const n = attached[i];
+    if (n && n.kind === 'Word' && n.subkind === 'match-op') {
+      const prev = attached[i - 1];
+      if (!prev || prev.kind === 'Word') {
+        throw new PunkSyntaxError(
+          `stray '${n.text}' — match operator needs a value on the left and a pattern/function on the right`,
+          n.line, n.col,
+        );
+      }
+    }
+  }
 
   return attached;
 };
@@ -1170,6 +1196,25 @@ const validateNode = (node, stack) => {
     case 'Tmpl':
     case 'Pattern':
     case 'Box': {
+      if (node.kind === 'Pattern') {
+        let varCount = 0;
+        for (const item of node.items) {
+          const v =
+            (item.kind === 'Word' && item.subkind === 'variadic') ? item :
+            (item.kind === 'Named' && item.value
+              && item.value.kind === 'Word' && item.value.subkind === 'variadic') ? item :
+            null;
+          if (v) {
+            varCount++;
+            if (varCount > 1) {
+              throw new PunkSyntaxError(
+                'a pattern can have at most one variadic slot',
+                v.line, v.col,
+              );
+            }
+          }
+        }
+      }
       const childStack = [...stack, node];
       for (const item of node.items) validateNode(item, childStack);
       return;
@@ -1181,6 +1226,16 @@ const validateNode = (node, stack) => {
         if (part && typeof part === 'object' && 'embed' in part) {
           validateNode(part.embed, childStack);
         }
+      }
+      return;
+    }
+
+    case 'Match': {
+      const childStack = [...stack, node];
+      validateNode(node.subject, childStack);
+      for (const br of (node.branches || [])) {
+        if (br.pattern) validateNode(br.pattern, childStack);
+        if (br.body) validateNode(br.body, childStack);
       }
       return;
     }

@@ -87,7 +87,7 @@ export function tokenize(src) {
   // it produces and advances past both chars. `\n` and `\t` decode to
   // newline/tab; any other `\X` decodes to X. A trailing lone `\` at
   // EOF is a syntax error.
-  const readEscape = () => {
+  const readEscape = (inText = false) => {
     const escLine = line, escCol = col;
     advance(); // backslash
     if (eof()) {
@@ -97,6 +97,12 @@ export function tokenize(src) {
     advance();
     if (c === 'n') return '\n';
     if (c === 't') return '\t';
+    if (inText && (c === ' ' || c === '\t' || c === '\n' || c === '\r')) {
+      throw new PunkSyntaxError(
+        'whitespace cannot be escaped — Punk has no whitespace escape',
+        escLine, escCol,
+      );
+    }
     return c;
   };
 
@@ -237,7 +243,7 @@ export function tokenize(src) {
     let text = '';
     while (!eof()) {
       const ch = peek();
-      if (ch === '\\') { text += readEscape(); continue; }
+      if (ch === '\\') { text += readEscape(true); continue; }
       if (ch === '#') { skipComment(); continue; }
       if (ch === '"' || ch === '{') break;
       text += ch;

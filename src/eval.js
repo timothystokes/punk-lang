@@ -190,6 +190,11 @@ function walkSegment(cur, seg, node) {
         if (n < 1 || n > s.length) return null;
         return { value: mkText([{ lit: s[n - 1] }]), name: null };
       }
+      if (v.kind === 'Word' && v.subkind === 'number') {
+        const s = v.text;
+        if (n < 1 || n > s.length) return null;
+        return { value: mkWord(s[n - 1]), name: null };
+      }
       return null;
     }
     case 'name': {
@@ -205,6 +210,7 @@ function walkSegment(cur, seg, node) {
       let n;
       if      (v.kind === 'Tmpl') n = v.items.length;
       else if (v.kind === 'Text') n = textLength(v.parts);
+      else if (v.kind === 'Word' && v.subkind === 'number') n = v.text.length;
       else return null;
       return { value: mkWord(String(n), 'number'), name: null };
     }
@@ -217,9 +223,11 @@ function walkSegment(cur, seg, node) {
       return { value: v.params, name: null };
     }
     case 'range': {
+      const isNum = v.kind === 'Word' && v.subkind === 'number';
       const len =
         v.kind === 'Tmpl' ? v.items.length :
-        v.kind === 'Text' ? textLength(v.parts) : null;
+        v.kind === 'Text' ? textLength(v.parts) :
+        isNum             ? v.text.length    : null;
       if (len == null) return null;
       if (seg.from === null && seg.to === null) {
         if (len === 0) return null;
@@ -228,6 +236,11 @@ function walkSegment(cur, seg, node) {
       const from = seg.from === null ? 1   : seg.from;
       const to   = seg.to   === null ? len : seg.to;
       if (v.kind === 'Tmpl') return { value: sliceTmpl(v.items, from, to), name: null };
+      if (isNum) {
+        const lo = Math.max(1, from), hi = Math.min(len, to);
+        if (lo > hi) return null;
+        return { value: mkWord(v.text.slice(lo - 1, hi)), name: null };
+      }
       return { value: sliceText(v.parts, from, to), name: null };
     }
     default:
