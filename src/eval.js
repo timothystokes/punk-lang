@@ -234,6 +234,17 @@ function walkSegment(cur, seg, node) {
         }
         return { value: item, name: null };
       }
+      if (v.kind === 'Fn') {
+        // Element-tree path: index walks into the Fn body Tmpl.
+        const body = v.body;
+        if (!body || body.kind !== 'Tmpl') return null;
+        if (n < 1 || n > body.items.length) return null;
+        const item = body.items[n - 1];
+        if (item && item.kind === 'Named') {
+          return { value: item.value, name: item.name };
+        }
+        return { value: item, name: null };
+      }
       if (v.kind === 'Text') {
         const chars = textLogicalChars(v.parts);
         if (n < 1 || n > chars.length) return null;
@@ -247,11 +258,26 @@ function walkSegment(cur, seg, node) {
       return null;
     }
     case 'name': {
-      if (v.kind !== 'Tmpl') return null;
-      for (const item of v.items) {
-        if (item && item.kind === 'Named' && item.name === seg.text) {
-          return { value: item.value, name: item.name };
+      if (v.kind === 'Tmpl') {
+        for (const item of v.items) {
+          if (item && item.kind === 'Named' && item.name === seg.text) {
+            return { value: item.value, name: item.name };
+          }
         }
+        return null;
+      }
+      if (v.kind === 'Fn') {
+        // Element-tree path: name reads an attribute (named slot in
+        // the Fn's pattern).
+        const params = v.params;
+        if (params && params.kind === 'Pattern') {
+          for (const item of params.items || []) {
+            if (item && item.kind === 'Named' && item.name === seg.text) {
+              return { value: item.value, name: item.name };
+            }
+          }
+        }
+        return null;
       }
       return null;
     }
@@ -337,20 +363,47 @@ function evalQuery(node, env) {
 // (cascaded) args Tmpl. A user fn matches the args against its
 // params; a builtin reads the args as a Tmpl directly.
 
+// Auto-dereference a chain head ending in `?`: after the initial lookup,
+// if the resulting value is a Word that names another binding in scope,
+// follow that binding too. Lets `p?.print!` resolve when `p` is bound to
+// the Word `printer` and `printer` itself names a tmpl.
+function derefHeadWord(cur, env) {
+  let v = cur.value;
+  let name = cur.name;
+  while (v && v.kind === 'Word' && v.subkind !== 'number' && env.has(v.text)) {
+    name = v.text;
+    v = env.lookup(v.text);
+  }
+  return { value: v, name };
+}
+
+function resolveHeadName(head, node, env) {
+  let derefWord = false;
+  let name = head;
+  if (name.endsWith('?')) {
+    derefWord = true;
+    name = name.slice(0, -1);
+  }
+  let cur;
+  if (env.has(name)) {
+    cur = { value: env.lookup(name), name };
+  } else if (Object.prototype.hasOwnProperty.call(builtins, name)) {
+    cur = {
+      value: { kind: 'Builtin', name, fn: builtins[name] },
+      name,
+    };
+  } else {
+    throw new PunkRuntimeError(
+      `name '${name}' is not bound`, node.line, node.col,
+    );
+  }
+  if (derefWord) cur = derefHeadWord(cur, env);
+  return cur;
+}
+
 function resolveExecTarget(node, env) {
   if (typeof node.head === 'string') {
-    if (env.has(node.head)) {
-      return { value: env.lookup(node.head), name: node.head };
-    }
-    if (Object.prototype.hasOwnProperty.call(builtins, node.head)) {
-      return {
-        value: { kind: 'Builtin', name: node.head, fn: builtins[node.head] },
-        name: node.head,
-      };
-    }
-    throw new PunkRuntimeError(
-      `name '${node.head}' is not bound`, node.line, node.col,
-    );
+    return resolveHeadName(node.head, node, env);
   }
   return { value: evalItem(node.head, env), name: null };
 }
@@ -382,7 +435,12 @@ function applyCallable(target, argsTmpl, env, node) {
     return target.fn(argsTmpl, env, { evalItem, cascadeTmpl, callFn: (fn, a, n) => applyCallable(fn, a, env, n) });
   }
   if (target && target.kind === 'Fn') {
-    return callFn(target, argsTmpl, node);
+    // A Fn extracted from an inert Tmpl (literal binding like
+    // `printer:{print:(...){...}}`) carries no captured env — its body
+    // was never evalItem'd. Bind it lazily to the caller's env so the
+    // call site at least sees outer scope and builtins.
+    const fn = target.env ? target : { ...target, env };
+    return callFn(fn, argsTmpl, node);
   }
   if (target && target.kind === 'PartialFn') {
     const arity = getArity(target.target);
