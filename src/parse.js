@@ -874,22 +874,43 @@ const passReturnRange = (xs) => {
   return out;
 };
 
-// Pass 3 — `Exec/Partial (no args) + glued Tmpl` → attach args.
+// Pass 3 — `Exec/Partial (no args) + glued value` → attach args.
+// A glued Tmpl attaches as-is; any other glued value-kind attaches as
+// a singleton-Tmpl (`f!"hi"` ≡ `f!{"hi"}`, `f![b]` ≡ `f!{[b]}`).
 const passArgsAttach = (xs) => {
   const out = [];
+  const isSingleArg = (n) => n && (
+    n.kind === 'Text' || n.kind === 'Box' || n.kind === 'Fn' ||
+    n.kind === 'Pattern' || n.kind === 'Query' || n.kind === 'Exec' ||
+    n.kind === 'Partial' || n.kind === 'Range'
+    // Bare Word is handled by mid-word `!` in decodeWord; if a Word
+    // ends up as a separate token here, it's not glued to the bang
+    // anyway.
+  );
   for (let i = 0; i < xs.length; i++) {
     const cur = xs[i];
     const next = xs[i + 1];
     if (
       (cur.kind === 'Exec' || cur.kind === 'Partial') &&
-      !cur.args &&
-      next && next.kind === 'Tmpl' && next.glued
+      !cur.args && next && next.glued
     ) {
-      const node = { ...cur, args: stripGlued(next) };
-      if (cur.glued) node.glued = true;
-      out.push(node);
-      i++;
-      continue;
+      if (next.kind === 'Tmpl') {
+        const node = { ...cur, args: stripGlued(next) };
+        if (cur.glued) node.glued = true;
+        out.push(node);
+        i++;
+        continue;
+      }
+      if (isSingleArg(next)) {
+        const node = {
+          ...cur,
+          args: mkTmpl([stripGlued(next)], next.line, next.col),
+        };
+        if (cur.glued) node.glued = true;
+        out.push(node);
+        i++;
+        continue;
+      }
     }
     out.push(cur);
   }
