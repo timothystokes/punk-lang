@@ -38,7 +38,7 @@ test('symbol-named words', () => {
   // `+`, `<>`, `<=` are valid Punk word characters
   assert.deepEqual(shape('+'), [[T.WORD, '+']]);
   assert.deepEqual(shape('<>'), [[T.WORD, '<>']]);
-  assert.deepEqual(shape('+!'), [[T.WORD, '+!']]);
+  assert.deepEqual(shape('+!'), [[T.WORD, '+'], [T.WORD, '!']]);
 });
 
 test('leading/trailing whitespace produces SPACE tokens', () => {
@@ -102,12 +102,12 @@ test('quoted text — empty', () => {
 });
 
 test('quoted text with placeholder', () => {
-  // `"Hi {name?}"` -> QUOTE_OPEN, TEXT("Hi "), LBRACE, WORD(name?), RBRACE, QUOTE_CLOSE
+  // `"Hi {name?}"` -> QUOTE_OPEN, TEXT("Hi "), LBRACE, WORD(name), WORD(?), RBRACE, QUOTE_CLOSE
   assert.deepEqual(shape('"Hi {name?}"'), [
     [T.QUOTE_OPEN, '"'],
     [T.TEXT, 'Hi '],
     [T.LBRACE, '{'],
-    [T.WORD, 'name?'],
+    [T.WORD, 'name'], [T.WORD, '?'],
     [T.RBRACE, '}'],
     [T.QUOTE_CLOSE, '"'],
   ]);
@@ -116,7 +116,7 @@ test('quoted text with placeholder', () => {
 test('quoted text — placeholder at the start', () => {
   assert.deepEqual(shape('"{n?}!"'), [
     [T.QUOTE_OPEN, '"'],
-    [T.LBRACE, '{'], [T.WORD, 'n?'], [T.RBRACE, '}'],
+    [T.LBRACE, '{'], [T.WORD, 'n'], [T.WORD, '?'], [T.RBRACE, '}'],
     [T.TEXT, '!'],
     [T.QUOTE_CLOSE, '"'],
   ]);
@@ -125,9 +125,9 @@ test('quoted text — placeholder at the start', () => {
 test('quoted text — multiple placeholders', () => {
   assert.deepEqual(shape('"{a?} {b?}"'), [
     [T.QUOTE_OPEN, '"'],
-    [T.LBRACE, '{'], [T.WORD, 'a?'], [T.RBRACE, '}'],
+    [T.LBRACE, '{'], [T.WORD, 'a'], [T.WORD, '?'], [T.RBRACE, '}'],
     [T.TEXT, ' '],
-    [T.LBRACE, '{'], [T.WORD, 'b?'], [T.RBRACE, '}'],
+    [T.LBRACE, '{'], [T.WORD, 'b'], [T.WORD, '?'], [T.RBRACE, '}'],
     [T.QUOTE_CLOSE, '"'],
   ]);
 });
@@ -156,27 +156,29 @@ test('escaped minus does not form arrow — escape preserved verbatim', () => {
   ]);
 });
 
-test('path tokens stay together as one WORD', () => {
+test('path word splits at the trailing `?`', () => {
+  // Unescaped `?` terminates a word and is emitted as its own WORD token.
+  // Parsing later re-glues these into one path word.
   assert.deepEqual(shape('people.1.fullname?'), [
-    [T.WORD, 'people.1.fullname?'],
+    [T.WORD, 'people.1.fullname'], [T.WORD, '?'],
   ]);
 });
 
-test('length-of segment .#? is part of the path word', () => {
+test('length-of segment .#? — `?` is its own token', () => {
   assert.deepEqual(shape('people.#?'), [
-    [T.WORD, 'people.#?'],
+    [T.WORD, 'people.#'], [T.WORD, '?'],
   ]);
 });
 
 test('exec path with !', () => {
   assert.deepEqual(shape('add!'), [
-    [T.WORD, 'add!'],
+    [T.WORD, 'add'], [T.WORD, '!'],
   ]);
 });
 
 test('partial path with apostrophe', () => {
   assert.deepEqual(shape("add'"), [
-    [T.WORD, "add'"],
+    [T.WORD, 'add'], [T.WORD, "'"],
   ]);
 });
 
@@ -195,7 +197,11 @@ test(':: name: at end of input stays as a single token', () => {
 });
 
 test('colon after `.` does NOT split the word (path .:? segment)', () => {
-  assert.deepEqual(shape('xs.:?'), [[T.WORD, 'xs.:?']]);
+  // `:` stays embedded after `.`. The trailing `?` still emits as its
+  // own token (then parse re-glues).
+  assert.deepEqual(shape('xs.:?'), [
+    [T.WORD, 'xs.:'], [T.WORD, '?'],
+  ]);
 });
 
 test('comment between words — vanishes, leaves whitespace intact', () => {
@@ -341,16 +347,17 @@ test('multi-word pipeline', () => {
   assert.deepEqual(shape('x->upper!->print!'), [
     [T.WORD, 'x'],
     [T.ARROW, '->'],
-    [T.WORD, 'upper!'],
+    [T.WORD, 'upper'], [T.WORD, '!'],
     [T.ARROW, '->'],
-    [T.WORD, 'print!'],
+    [T.WORD, 'print'], [T.WORD, '!'],
   ]);
 });
 
 test('a comment inside a path word is excised, word continues', () => {
   assert.deepEqual(shape('foo.#bar#.1?'), [
     // The `#bar#` is a comment (no `.#?` because the # is followed by
-    // `b`, not `?`). After excision the word reads `foo..1?`.
-    [T.WORD, 'foo..1?'],
+    // `b`, not `?`). After excision the word reads `foo..1`, and the
+    // trailing `?` is its own token.
+    [T.WORD, 'foo..1'], [T.WORD, '?'],
   ]);
 });

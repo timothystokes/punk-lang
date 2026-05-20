@@ -180,6 +180,17 @@ export function tokenize(src) {
         continue;
       }
 
+      // `!`, `?`, `'` are path-trigger / partial-trigger markers. They
+      // always emit as their own single-char WORD tokens. Whether such
+      // a marker attaches to a preceding/following sibling (as a path
+      // suffix, mid-bang short-form, or standalone match-op) is the
+      // parser's job — it uses the SPACE-gap info to decide.
+      if (c === '!' || c === '?' || c === "'") {
+        advance();
+        push(TOKEN_TYPES.WORD, c, startLine, startCol);
+        continue;
+      }
+
       // Otherwise — build a WORD by accumulating non-special chars.
       let text = '';
       let esc = false;
@@ -209,6 +220,9 @@ export function tokenize(src) {
         }
         if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') break;
         if (ch === '-' && peek(1) === '>') break;
+        // Path-trigger / partial-trigger markers terminate the word;
+        // they're emitted by the outer loop as their own WORD tokens.
+        if (ch === '!' || ch === '?' || ch === "'") break;
         text += ch;
         advance();
         // `:` immediately following a name char ends the word AFTER
@@ -224,19 +238,9 @@ export function tokenize(src) {
       // that consumed nothing visible after a non-word boundary). Only
       // emit a WORD when we actually have text.
       if (text.length > 0) {
-        // Split a trailing `??` off a path-word so the second `?`
-        // becomes a standalone match operator. `name??{...}` → emit
-        // `name?` then `?` glued; the standalone match op is wired up
-        // in parseOperators. Standalone `??` (text === '??', length 2)
-        // is left alone — handled as a match op by decodeWord.
-        if (text.length > 2 && text.endsWith('??')) {
-          push(TOKEN_TYPES.WORD, text.slice(0, -1), startLine, startCol);
-          push(TOKEN_TYPES.WORD, '?', startLine, startCol + text.length - 1);
-        } else {
-          const tok = { type: TOKEN_TYPES.WORD, text, line: startLine, col: startCol };
-          if (esc) tok.esc = true;
-          tokens.push(tok);
-        }
+        const tok = { type: TOKEN_TYPES.WORD, text, line: startLine, col: startCol };
+        if (esc) tok.esc = true;
+        tokens.push(tok);
       }
       continue;
     }

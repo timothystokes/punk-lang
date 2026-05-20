@@ -103,6 +103,61 @@ export function parseTree(tokens) {
   // Tracks SPACE tokens so each emitted item carries a `glued` flag
   // indicating whether it's adjacent to the previous item with no
   // whitespace between them.
+  // Re-glue adjacent WORD nodes that the tokenizer split.
+  //
+  // Tokenize now terminates a word at every unescaped `!`, `?`, `'`
+  // and emits the marker as its own single-char WORD token. The rest
+  // of the parser still operates on "fat" words like `add!5` or
+  // `foo.bar?` — so this pass rebuilds them by concatenating any run
+  // of glued WORD nodes into one Word.
+  //
+  // After the merge, mirror the historic `??`-split: a path-word that
+  // ends with `??` (length > 2) gets its trailing `?` peeled off as a
+  // glued standalone WORD, so the second `?` can be wired up as a
+  // match operator by parseOperators.
+  const reglueWords = (items) => {
+    const isMarker = (t) => t === '!' || t === '?' || t === "'";
+    const endsWithMarker = (t) => {
+      if (!t) return false;
+      const last = t[t.length - 1];
+      if (!isMarker(last)) return false;
+      let bs = 0;
+      for (let k = t.length - 2; k >= 0 && t[k] === '\\'; k--) bs++;
+      return bs % 2 === 0;
+    };
+    const merged = [];
+    for (const it of items) {
+      const prev = merged[merged.length - 1];
+      if (
+        prev && prev.kind === 'Word' && it.kind === 'Word'
+        && it.glued && prev._fromWordTok && it._fromWordTok
+        && (isMarker(it.text) || endsWithMarker(prev.text))
+      ) {
+        prev.text += it.text;
+        if (it.esc) prev.esc = true;
+        continue;
+      }
+      merged.push(it);
+    }
+    const out = [];
+    for (const it of merged) {
+      if (
+        it.kind === 'Word' && it._fromWordTok
+        && it.text.length > 2 && it.text.endsWith('??')
+      ) {
+        const head = { ...it, text: it.text.slice(0, -1) };
+        const tail = mkWord('?', it.line, it.col + it.text.length - 1);
+        tail.glued = true;
+        tail._fromWordTok = true;
+        out.push(head, tail);
+      } else {
+        out.push(it);
+      }
+    }
+    for (const it of out) if (it._fromWordTok) delete it._fromWordTok;
+    return out;
+  };
+
   const parseItems = (stopTypes) => {
     const items = [];
     let pendingSpace = false;
@@ -128,7 +183,7 @@ export function parseTree(tokens) {
       firstItem = false;
     }
 
-    return items;
+    return reglueWords(items);
   };
 
   // Parse a single non-space, non-stop item starting at `i`.
@@ -143,6 +198,7 @@ export function parseTree(tokens) {
         i++;
         const w = mkWord(tok.text, tok.line, tok.col);
         if (tok.esc) w.esc = true;
+        w._fromWordTok = true;
         return w;
       }
       case T.ARROW:     i++; return mkWord('->', tok.line, tok.col); // pipeline op; parseOperators handles it
