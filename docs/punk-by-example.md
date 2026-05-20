@@ -252,6 +252,8 @@ Here are some other ways of querying:
 | `people.1.fullname.:?` | `{fullname}` | `:` | Name: the name of the referenced thing as a Word, or `NULL` if it has no name. |
 | `add.()?` | `(a:_ b:_)` | `()` | Pattern: the pattern of a function, or `NULL` if the referenced thing is not a function. |
 
+> NOTE: Querying a built-in function name with `?` gives you the function itself (e.g. `+?` is the `+!` function as a value). This is how you alias a built-in under a new name: `add:+?` — bare `+` on its own would be the literal Word `+`, but `+?` looks it up and returns the function.
+
 > NOTE: Querying templates is safe. Punk does not evaluate anything when querying. It simply resolves the information as it is currently contained within the structure of a template.
 
 > NOTE: The terminal segments `.#`, `.:` and `.()` only make sense at the **end** of a path — they each return a value that isn't further structured by the same path. So `xs.#.1?` (length, then first item of it) is not a valid path; if you need to use a length or name in further work, get it out with one query and use it in the next.
@@ -772,6 +774,8 @@ Without `!`, a chain is a **value** — a new function formed from the compositi
 > upperLogger!hello ⏎ # now it runs: {hello} → {HELLO} → log prints HELLO #
 ```
 
+> NOTE: A composed pipeline is always a **one-argument** function. Calling it with `!arg` feeds `arg` in as the seed of the chain, so `clean!Hello` and `Hello->clean!` mean the same thing.
+
 This is the same distinction that `?` and `!` already make: writing a pipeline without `!` leaves it as a thing that can be named, passed around, or executed later. Adding `!` is what causes it to run.
 
 > PRECEDENCE: A `:` binding always extends over the **whole** pipeline that follows it, not just the first stage. `upperLogger:upper->log` binds `upperLogger` to the composed pipeline `upper->log`, not `(upperLogger:upper)->log`. The same is true when executing: `result:5->double->log!` binds `result` to the value the executed pipeline produces.
@@ -847,6 +851,8 @@ Put `[name]` on the **left** of `->`. The pipeline starts with the value current
 > [currentAge]->log! ⏎ # reads the value out of the box, pipes it to log #
 0
 ```
+
+> NOTE: A box only exists once something has been written into it. Reading from a box that has never been written to is a runtime error.
 
 ### Writing to a box
 
