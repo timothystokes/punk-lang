@@ -89,6 +89,7 @@ const evalItem = (node, env) => {
     case 'Text':
     case 'Pattern':
     case 'Box':
+    case 'Regex':
       return stripMeta(node);
 
     case 'Word':

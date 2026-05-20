@@ -102,7 +102,7 @@ test('regex dispatch — color text', () => {
         (_                 ){other}
       }
     }
-    classify!#aabbcc`;
+    classify!"#aabbcc"`;
   assert.equal(punk(src), '{color}');
 });
 

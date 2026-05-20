@@ -334,10 +334,10 @@ test('quotes can nest via placeholders', () => {
   ]);
 });
 
-test('# inside a string vanishes too', () => {
+test('# inside a string is literal', () => {
   assert.deepEqual(shape('"a # hidden # b"'), [
     [T.QUOTE_OPEN, '"'],
-    [T.TEXT, 'a  b'],
+    [T.TEXT, 'a # hidden # b'],
     [T.QUOTE_CLOSE, '"'],
   ]);
 });

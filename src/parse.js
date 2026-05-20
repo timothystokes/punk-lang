@@ -193,6 +193,13 @@ export function parseTree(tokens) {
         w._fromWordTok = true;
         return w;
       }
+      case T.REGEX: {
+        i++;
+        return {
+          kind: 'Regex', body: tok.body, flags: tok.flags,
+          text: tok.text, line: tok.line, col: tok.col,
+        };
+      }
       case T.ARROW:     i++; return mkWord('->', tok.line, tok.col); // pipeline op; parseOperators handles it
       // Stray closing delimiters at this point are unmatched.
       case T.RBRACE:

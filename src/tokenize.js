@@ -29,6 +29,7 @@ export const TOKEN_TYPES = Object.freeze({
   SPACE: 'SPACE',           // run of whitespace inside structural context
   WORD: 'WORD',             // a run of word characters (decoded)
   TEXT: 'TEXT',             // literal text inside "..."
+  REGEX: 'REGEX',           // /.../flags  (regex literal)
   EOF: 'EOF',
 });
 
@@ -222,6 +223,64 @@ export function tokenize(src) {
         continue;
       }
 
+      // `/.../[flags]` — first-class regex literal. Triggered when `/`
+      // is followed by a non-whitespace, non-structural char other than
+      // `!`. (`/!{a b}` is the division builtin call — the `/` stays a
+      // plain WORD there.) Inside the body, `\X` pairs are passed
+      // through verbatim so the JS regex engine sees them as-is; that's
+      // also how we find the closing `/` (a backslash skips the next
+      // char). After the closing `/`, optional ASCII-letter flags.
+      if (c === '/') {
+        const n = peek(1);
+        const isRegexStart = n !== '' && n !== '!' && n !== ' ' && n !== '\t'
+          && n !== '\n' && n !== '\r' && !STRUCT_DELIMS.has(n);
+        if (isRegexStart) {
+          advance(); // opening /
+          let body = '';
+          let closed = false;
+          while (!eof()) {
+            const ch = peek();
+            if (ch === '\\') {
+              body += ch;
+              advance();
+              if (eof()) {
+                throw new PunkSyntaxError(
+                  'unterminated regex literal', startLine, startCol,
+                );
+              }
+              body += peek();
+              advance();
+              continue;
+            }
+            if (ch === '/') { advance(); closed = true; break; }
+            if (ch === '\n') {
+              throw new PunkSyntaxError(
+                'unterminated regex literal (newline inside)',
+                startLine, startCol,
+              );
+            }
+            body += ch;
+            advance();
+          }
+          if (!closed) {
+            throw new PunkSyntaxError(
+              'unterminated regex literal', startLine, startCol,
+            );
+          }
+          let flags = '';
+          while (!eof()) {
+            const ch = peek();
+            if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+              flags += ch; advance();
+            } else break;
+          }
+          push(TOKEN_TYPES.REGEX, '/' + body + '/' + flags, startLine, startCol);
+          tokens[tokens.length - 1].body = body;
+          tokens[tokens.length - 1].flags = flags;
+          continue;
+        }
+      }
+
       // Otherwise — build a WORD by accumulating non-special chars.
       let text = '';
       let esc = false;
@@ -271,7 +330,6 @@ export function tokenize(src) {
     while (!eof()) {
       const ch = peek();
       if (ch === '\\') { text += readEscape(true); continue; }
-      if (ch === '#') { skipComment(); continue; }
       if (ch === '"' || ch === '{') break;
       text += ch;
       advance();

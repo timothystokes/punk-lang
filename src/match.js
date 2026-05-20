@@ -34,6 +34,73 @@ const bind = (bindings, name, value) => {
   return true;
 };
 
+// Render a value to the string used for regex matching: Text → its
+// rendered chars; Word → its text; everything else → null (no match).
+function itemAsString(v) {
+  if (!v) return null;
+  if (v.kind === 'Word') return v.text;
+  if (v.kind === 'Text') {
+    // Text parts are either lit strings or embedded sub-tmpls. For
+    // pattern matching we only support a pure-literal Text. Anything
+    // with an embed is not a single concrete string.
+    let s = '';
+    for (const p of v.parts) {
+      if ('lit' in p) s += p.lit;
+      else return null;
+    }
+    // Resolve `\X` escapes in the lit chars (\n → newline, etc.).
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '\\' && i + 1 < s.length) {
+        const n = s[i + 1];
+        if (n === 'n') out += '\n';
+        else if (n === 't') out += '\t';
+        else out += n;
+        i++;
+      } else out += c;
+    }
+    return out;
+  }
+  return null;
+}
+
+// Build the Tmpl that a named regex slot binds to: first item is the
+// full match, followed by one item per capture group. Named groups
+// become Named items in the same position.
+function regexMatchTmpl(execResult, regex) {
+  const items = [];
+  items.push({ kind: 'Word', subkind: 'value', text: execResult[0] });
+  // Discover named groups via the regex source.
+  const names = [];
+  const nameRe = /\(\?<([A-Za-z_][A-Za-z0-9_]*)>/g;
+  let m;
+  while ((m = nameRe.exec(regex.source)) !== null) names.push(m[1]);
+  let nameIdx = 0;
+  for (let g = 1; g < execResult.length; g++) {
+    const text = execResult[g] === undefined ? '' : execResult[g];
+    const value = { kind: 'Word', subkind: 'value', text };
+    // groups in the named-group order appear in named order across the
+    // overall result alongside positional; use execResult.groups if
+    // available to determine the name for THIS positional group.
+    let groupName = null;
+    if (execResult.groups) {
+      for (const k of Object.keys(execResult.groups)) {
+        if (execResult.groups[k] === execResult[g] && names.includes(k)) {
+          groupName = k;
+          break;
+        }
+      }
+    }
+    if (groupName) {
+      items.push({ kind: 'Named', name: groupName, value });
+    } else {
+      items.push(value);
+    }
+  }
+  return { kind: 'Tmpl', items };
+}
+
 // Match a single value-item against a single (non-variadic) pattern
 // slot. Returns true (and mutates bindings) or false.
 function matchSlot(item, slot, bindings) {
@@ -41,10 +108,29 @@ function matchSlot(item, slot, bindings) {
   // so its shape (and value) drives matching uniformly.
   const unwrapped = item && item.kind === 'Named' ? item.value : item;
   if (slot.kind === 'Named') {
+    // Regex inner: bind name to a structured-tmpl of [full, ...groups].
+    if (slot.value && slot.value.kind === 'Regex') {
+      const s = itemAsString(unwrapped);
+      if (s === null) return false;
+      let re;
+      try { re = new RegExp(slot.value.body, slot.value.flags || ''); }
+      catch { return false; }
+      const r = re.exec(s);
+      if (!r) return false;
+      return bind(bindings, slot.name, regexMatchTmpl(r, re));
+    }
     if (!matchSlot(unwrapped, slot.value, bindings)) return false;
     return bind(bindings, slot.name, unwrapped);
   }
   if (isWildcard(slot)) return true;
+  if (slot.kind === 'Regex') {
+    const s = itemAsString(unwrapped);
+    if (s === null) return false;
+    try {
+      const re = new RegExp(slot.body, slot.flags || '');
+      return re.test(s);
+    } catch { return false; }
+  }
   if (slot.kind === 'Pattern') {
     if (!unwrapped || unwrapped.kind !== 'Tmpl') return false;
     return matchPatternItems(unwrapped.items, slot.items, bindings);

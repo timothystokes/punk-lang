@@ -31,6 +31,8 @@ export function format(value) {
     }
     case 'Box':
       return '[' + value.name + ']';
+    case 'Regex':
+      return '/' + value.body + '/' + (value.flags || '');
     case 'Named':
       return value.name + ':' + format(value.value);
     case 'Query':

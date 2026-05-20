@@ -101,7 +101,7 @@ test('truthiness — empty template `{}` is truthy', () => {
 test('match template references pattern-bound name', () => {
   // `tagger` example: a regex slot named `n` bound inside the template.
   assert.equal(
-    punk('tagger:(n:/^\\d+$/){Number:n?}  tagger!42'),
-    '{Number:42}'
+    punk('tagger:(n:/^\\d+$/){Number:n.1?}  tagger!42'),
+    'Number:{42}'
   );
 });
