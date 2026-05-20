@@ -114,7 +114,48 @@ function escapeForWord(s) {
 // input is implicitly joined with a single space" rule for text
 // builtins). Text concatenates its parts. Words/numbers/reserved use
 // their text directly. Null → "NULL".
-// Render a value to a JS string of "chars-of-the-string".
+// Walk a stored string by *logical char*: an escape `\X` counts as
+// one logical char (returned as the 2-char string `\X`); any other
+// char is returned on its own. Used by `chars!`, `length!`, and
+// anywhere a Punk "char-of-the-string" is needed (which differs from
+// a JS code unit/point because escapes are 2-char sequences but one
+// logical thing in Punk's view).
+function logicalChars(s) {
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && i + 1 < s.length) {
+      out.push('\\' + s[i + 1]);
+      i++;
+    } else {
+      out.push(ch);
+    }
+  }
+  return out;
+}
+
+// Render a logical char (as returned by `logicalChars`) into a Word's
+// text-storage form. If the logical char is already an escape `\X`,
+// it's preserved verbatim. Otherwise the bare char gets escaped if
+// it's struct-special in word context, so the resulting Word is
+// inert when slotted back into struct context.
+function logicalCharToWordText(lc) {
+  if (lc.length === 2 && lc[0] === '\\') return lc;
+  return WORD_ESCAPE_CHARS.has(lc) ? '\\' + lc : lc;
+}
+
+// `chars!` and `length!` need the raw stored form of a value, not the
+// resolved-to-JS-chars form (which would split `\n` into `\` + `n`).
+function storageString(v) {
+  if (!v) return '';
+  if (v.kind === 'Word') return v.text;
+  if (v.kind === 'Text') {
+    return v.parts.map((p) => 'lit' in p ? p.lit : storageString(p.embed)).join('');
+  }
+  if (v.kind === 'Tmpl') return v.items.map(storageString).join(' ');
+  if (v.kind === 'Null') return 'NULL';
+  throw new PunkRuntimeError(`cannot take chars of ${v.kind}`);
+}
 //
 // Word: stored text is in struct-source form; resolve word escapes
 //   (drop `\` for everything except `\n`/`\t`) so the result is the
@@ -336,8 +377,8 @@ export const builtins = {
   'lower': (args) => mkTextLit(valueToText(singleArg(args)).toLowerCase()),
   'trim':  (args) => mkTextLit(valueToText(singleArg(args)).trim()),
   'chars': (args) => {
-    const s = valueToText(singleArg(args));
-    return mkTmpl([...s].map((c) => mkWord(escapeForWord(c))));
+    const s = storageString(singleArg(args));
+    return mkTmpl(logicalChars(s).map((lc) => mkWord(logicalCharToWordText(lc))));
   },
   'split': (args) => {
     const xs = argsItems(args);

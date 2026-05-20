@@ -149,25 +149,40 @@ const sliceTmpl = (items, lo, hi) => {
   return mkTmpl(out);
 };
 
-// Length of a Text counts characters across its literal parts; embeds
-// are not counted (they're unresolved templates).
-const textLength = (parts) => {
-  let n = 0;
-  for (const p of parts) if ('lit' in p) n += p.lit.length;
-  return n;
+// Walk a stored string by *logical char*: an escape `\X` counts as
+// one logical char (the 2-char string `\X`). Used so path indexing
+// and length on a Text reflect what the user sees, not the raw
+// storage byte count.
+const logicalChars = (s) => {
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && i + 1 < s.length) {
+      out.push('\\' + s[i + 1]);
+      i++;
+    } else {
+      out.push(ch);
+    }
+  }
+  return out;
 };
 
-const flatTextChars = (parts) => {
-  let s = '';
-  for (const p of parts) if ('lit' in p) s += p.lit;
-  return s;
+const textLogicalChars = (parts) => {
+  const out = [];
+  for (const p of parts) if ('lit' in p) out.push(...logicalChars(p.lit));
+  return out;
 };
+
+// Length of a Text counts characters across its literal parts; embeds
+// are not counted (they're unresolved templates). A `\X` escape
+// counts as one character (the logical char model — see logicalChars).
+const textLength = (parts) => textLogicalChars(parts).length;
 
 const sliceText = (parts, lo, hi) => {
-  const s = flatTextChars(parts);
+  const chars = textLogicalChars(parts);
   const start = Math.max(1, lo) - 1;
-  const end   = Math.min(s.length, hi);
-  return mkText([{ lit: s.slice(start, end) }]);
+  const end   = Math.min(chars.length, hi);
+  return mkText([{ lit: chars.slice(start, end).join('') }]);
 };
 
 // Apply one path segment. Returns { value, name } or null (meaning
@@ -186,9 +201,9 @@ function walkSegment(cur, seg, node) {
         return { value: item, name: null };
       }
       if (v.kind === 'Text') {
-        const s = flatTextChars(v.parts);
-        if (n < 1 || n > s.length) return null;
-        return { value: mkText([{ lit: s[n - 1] }]), name: null };
+        const chars = textLogicalChars(v.parts);
+        if (n < 1 || n > chars.length) return null;
+        return { value: mkText([{ lit: chars[n - 1] }]), name: null };
       }
       if (v.kind === 'Word' && v.subkind === 'number') {
         const s = v.text;
