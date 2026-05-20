@@ -1408,13 +1408,12 @@ A `\` followed by another character produces literal text. The first three rows 
 | `\[` `\]` | a literal `[` or `]` |
 | `\~` | a literal `~` |
 | `\#` | a literal `#` |
-| `\-` | a literal `-` — only needed if it would otherwise pair with `>` to form `->`. A bare `-`, or one inside a word (`hello-world`, `X-ray`), needs no escape. |
 | `\"` | a literal `"` |
 | `\\` | a literal `\` |
 | `\/` | a literal `/` |
 | `\n` | a newline character (only way to get one inside a single thing) |
 | `\t` | a tab character (only way to get one inside a single thing) |
-| `\X` | a literal `X` for any other character (escape is a no-op on non-special characters — including `\s`, which is just an `s`) |
+| `\c` | for any other character `c`, a literal `c` (escape is a no-op on non-special characters — `\s` is just an `s`, `\-` is just a `-`, `\+` is just a `+`) |
 
 ### What does **not** need escaping
 
