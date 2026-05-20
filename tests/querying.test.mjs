@@ -53,8 +53,10 @@ test('index out of range returns NULL', () => {
   assert.equal(punk('xs:{a b c}  xs.99?'), 'NULL');
 });
 
-test('index into a non-list returns NULL', () => {
-  assert.equal(punk('x:42  x.1?'), 'NULL');
+test('indexing a bare-value binding returns the (wrapped) value', () => {
+  // `x:42` is shorthand for `x:{42}`, so `x.1?` is the only item.
+  assert.equal(punk('x:42  x.1?'), '{42}');
+  assert.equal(punk('x:42  x.2?'), 'NULL');
 });
 
 // ---------- Last item shorthand ----------
@@ -172,11 +174,12 @@ test('querying a bare Word literal is a syntax error', () => {
   punkThrows('hello.1?');
 });
 
-test('querying a Word via a name is fine — implicit template wrap', () => {
-  assert.equal(punk('n:hello   n.1?'), '{h}');
-  assert.equal(punk('n:hello   n.5?'), '{o}');
+test('querying a Word via a name returns the (wrapped) Word', () => {
+  // `n:hello` is shorthand for `n:{hello}`, so `n.1?` is the only item.
+  assert.equal(punk('n:hello   n.1?'), '{hello}');
+  assert.equal(punk('n:hello   n.2?'), 'NULL');
 });
 
-test('querying a Word wrapped in a template is fine', () => {
-  assert.equal(punk('{hello}.1?'), '{h}');
+test('querying into a Word literally wrapped in a template returns the Word', () => {
+  assert.equal(punk('{hello}.1?'), '{hello}');
 });

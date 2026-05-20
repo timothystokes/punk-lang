@@ -338,7 +338,6 @@ const decodeSegments = (segs, line, col) => {
       out.push({ kind: 'range', from, to });
     } else if (isInt(s)) {
       const n = parseInt(s, 10);
-      if (n === 0) throw new PunkSyntaxError("path indices are 1-based", line, col);
       out.push({ kind: 'index', n });
     } else if (isName(s)) {
       out.push({ kind: 'name', text: s });
@@ -418,16 +417,25 @@ const decodeWord = (w) => {
       }
       const valuePart = text.slice(colonIdx + 1);
       if (valuePart === '') {
-        // Empty value — wait for parseOperators to consume the next
-        // glued sibling (which will be the value).
         return copy(mkNamed(namePart, null, line, col));
       }
       const valueNode = decodeWord(mkWord(valuePart, line, col));
       return copy(mkNamed(namePart, valueNode, line, col));
     }
-    // Colon present but prefix isn't a name. Fall through and let the
-    // path check handle it (e.g. `xs.:?`). If nothing else matches we
-    // throw below.
+    // The text has a colon but the prefix is not a valid name. The
+    // only legitimate way a non-name can carry a `:` is a path whose
+    // final segment is `.:?` (e.g. `xs.:?`) — that case is caught by
+    // the path branch below. Anything else (e.g. `1foo:5`) is a bad
+    // binding name.
+    const last2 = text[text.length - 1];
+    const looksLikePath =
+      (last2 === '?' || last2 === '!' || last2 === "'")
+      && text.includes('.');
+    if (!looksLikePath) {
+      throw new PunkSyntaxError(
+        `'${namePart}' is not a valid binding name`, line, col,
+      );
+    }
   }
 
   // Mid-word `!` or `'` with a simple value on the right.
@@ -1014,7 +1022,7 @@ const validateRangeBounds = (node, standalone, stack, owner) => {
     }
   }
   if (from !== null && to !== null) {
-    if (to < from) {
+    if (to < from && standalone) {
       throw new PunkSyntaxError(
         `range '${from}~${to}' goes backwards (to < from)`,
         node.line, node.col,

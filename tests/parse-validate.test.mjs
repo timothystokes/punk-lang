@@ -57,8 +57,10 @@ test("'5~3' as a value-position range is a syntax error", () => {
   assert.throws(() => run('{5~3}'), /backwards/);
 });
 
-test("'7~2' as a path-segment range is a syntax error", () => {
-  assert.throws(() => run('xs.7~2?'), /backwards/);
+test("'7~2' as a path-segment range parses fine (empty slice at runtime)", () => {
+  // Backwards ranges are only a syntax error in value position. As a
+  // path segment they're allowed and produce an empty result.
+  run('xs.7~2?');
 });
 
 test("'2~7' (forward) is fine", () => {

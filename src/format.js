@@ -117,5 +117,8 @@ export function formatRepl(value) {
   if (value.kind === 'Word' && value.subkind !== 'reserved') {
     return format(mkTmpl([value]));
   }
+  if (value.kind === 'Named') {
+    return value.name + ':' + formatRepl(value.value);
+  }
   return format(value);
 }

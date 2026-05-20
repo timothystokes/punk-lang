@@ -58,6 +58,28 @@ Examples: `name`, `first-name`, `snake_name`, `x1`, `$jsThing`, `Foo` and `foo` 
 
 Names are **immutable** once bound in a scope: rebinding `x:1` in a scope where `x` is already bound is a syntax error. A dangling `name:` (with nothing to the right of the `:`, or with whitespace before the value) is also a syntax error — Punk does not implicitly bind names to `NULL`. Querying a name that was never bound returns `NULL`.
 
+### Bare-value bindings auto-wrap
+
+Bare Words and Numbers have no inherent delimiter, so when they appear on the value side of a binding they are wrapped in a singleton structured template:
+
+```punk
+> age:42 ⏎
+age:{42}
+
+> name:Tim ⏎
+name:{Tim}
+```
+
+So `age:42` is shorthand for `age:{42}`, and `name:Tim` is shorthand for `name:{Tim}`. This means a queried single value is always reached through a 1-item template:
+
+```punk
+> age:42  age?    ⏎    {42}
+> age:42  age.1?  ⏎    {42}
+> age:42  age.2?  ⏎    NULL
+```
+
+Everything that already has its own delimiters (templates, patterns, functions, texts, boxes, reserved values like `TRUE`/`FALSE`/`NULL`) binds bare — no extra wrapping.
+
 ## Templates
 
 All structured data, unstructured data, code and text is contained within templates. Punk can use code structures to define data, and data structures to define code.

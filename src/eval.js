@@ -18,7 +18,7 @@
 // are not reached until `!` is applied to the Tmpl.
 
 import { PunkRuntimeError } from './errors.js';
-import { mkTmpl, NULL } from './values.js';
+import { mkTmpl, mkText, mkWord, NULL } from './values.js';
 
 // A Range value at the top level expands to a Tmpl of integers.
 const expandRange = (node) => {
@@ -62,12 +62,23 @@ const evalItem = (node, env) => {
       return expandRange(node);
 
     case 'Named': {
-      const value = evalItem(node.value, env);
+      let value = evalItem(node.value, env);
+      // Auto-wrap rule: a bare-value binding (`x:42`, `n:hello`) is
+      // shorthand for `x:{42}` / `n:{hello}`. Bare Words and Numbers
+      // have no inherent delimiter, so binding wraps them in a
+      // singleton Tmpl. Reserved values (TRUE/FALSE) and everything
+      // with its own delimiters bind as-is.
+      if (value && value.kind === 'Word'
+          && (value.subkind === 'value' || value.subkind === 'number')) {
+        value = mkTmpl([value]);
+      }
       env.bind(node.name, value, node);
-      return value;
+      return { kind: 'Named', name: node.name, value };
     }
 
     case 'Query':
+      return evalQuery(node, env);
+
     case 'Exec':
     case 'Partial':
       throw new PunkRuntimeError(
@@ -82,6 +93,147 @@ const evalItem = (node, env) => {
       );
   }
 };
+
+// ---------- Query path resolution ----------
+//
+// A Query (`name.seg.seg?`) walks a path from a starting value and
+// returns the value at the end of that walk — or NULL if any step
+// goes off the end of the data. A bare unbound name (no segments)
+// returns NULL; an unbound name followed by *any* segment is a
+// runtime error (locked design decision).
+//
+// The walker tracks two facts at each step: the current value and
+// the "current name" — the name picked up by the most recent
+// segment. `.:` plucks that name. Most segments produce an unnamed
+// value (current name resets to null); only `.fieldName` and
+// indexed/named lookups inside a Tmpl record set it.
+
+const sliceTmpl = (items, lo, hi) => {
+  // 1-based bounds [lo, hi] inclusive; out-of-range clipped to the
+  // available range. Names are stripped (path traversal never
+  // surfaces names except via `.:?`).
+  const out = [];
+  const start = Math.max(1, lo);
+  const end   = Math.min(items.length, hi);
+  for (let i = start; i <= end; i++) {
+    const it = items[i - 1];
+    out.push(it && it.kind === 'Named' ? it.value : it);
+  }
+  return mkTmpl(out);
+};
+
+// Length of a Text counts characters across its literal parts; embeds
+// are not counted (they're unresolved templates).
+const textLength = (parts) => {
+  let n = 0;
+  for (const p of parts) if ('lit' in p) n += p.lit.length;
+  return n;
+};
+
+const flatTextChars = (parts) => {
+  let s = '';
+  for (const p of parts) if ('lit' in p) s += p.lit;
+  return s;
+};
+
+const sliceText = (parts, lo, hi) => {
+  const s = flatTextChars(parts);
+  const start = Math.max(1, lo) - 1;
+  const end   = Math.min(s.length, hi);
+  return mkText([{ lit: s.slice(start, end) }]);
+};
+
+// Apply one path segment. Returns { value, name } or null (meaning
+// "fell off the end" — caller substitutes NULL).
+function walkSegment(cur, seg, node) {
+  const v = cur.value;
+  switch (seg.kind) {
+    case 'index': {
+      const n = seg.n;
+      if (v.kind === 'Tmpl') {
+        if (n < 1 || n > v.items.length) return null;
+        const item = v.items[n - 1];
+        if (item && item.kind === 'Named') {
+          return { value: item.value, name: item.name };
+        }
+        return { value: item, name: null };
+      }
+      if (v.kind === 'Text') {
+        const s = flatTextChars(v.parts);
+        if (n < 1 || n > s.length) return null;
+        return { value: mkText([{ lit: s[n - 1] }]), name: null };
+      }
+      return null;
+    }
+    case 'name': {
+      if (v.kind !== 'Tmpl') return null;
+      for (const item of v.items) {
+        if (item && item.kind === 'Named' && item.name === seg.text) {
+          return { value: item.value, name: item.name };
+        }
+      }
+      return null;
+    }
+    case 'length': {
+      let n;
+      if      (v.kind === 'Tmpl') n = v.items.length;
+      else if (v.kind === 'Text') n = textLength(v.parts);
+      else return null;
+      return { value: mkWord(String(n), 'number'), name: null };
+    }
+    case 'nameOf': {
+      if (cur.name == null) return null;
+      return { value: mkWord(cur.name), name: null };
+    }
+    case 'pattern': {
+      if (v.kind !== 'Fn') return null;
+      return { value: v.params, name: null };
+    }
+    case 'range': {
+      const len =
+        v.kind === 'Tmpl' ? v.items.length :
+        v.kind === 'Text' ? textLength(v.parts) : null;
+      if (len == null) return null;
+      if (seg.from === null && seg.to === null) {
+        if (len === 0) return null;
+        return walkSegment(cur, { kind: 'index', n: len }, node);
+      }
+      const from = seg.from === null ? 1   : seg.from;
+      const to   = seg.to   === null ? len : seg.to;
+      if (v.kind === 'Tmpl') return { value: sliceTmpl(v.items, from, to), name: null };
+      return { value: sliceText(v.parts, from, to), name: null };
+    }
+    default:
+      throw new PunkRuntimeError(
+        `unknown path segment '${seg.kind}'`, node.line, node.col,
+      );
+  }
+}
+
+function evalQuery(node, env) {
+  const segments = node.segments || [];
+  let cur;
+  if (typeof node.head === 'string') {
+    if (!env.has(node.head)) {
+      if (segments.length === 0) return NULL;
+      throw new PunkRuntimeError(
+        `name '${node.head}' is not bound`, node.line, node.col,
+      );
+    }
+    cur = { value: env.lookup(node.head), name: node.head };
+  } else {
+    // Head is a node attached via leading-dot paths (e.g. `{1 2}.1?`).
+    cur = { value: evalItem(node.head, env), name: null };
+  }
+  for (const seg of segments) {
+    const next = walkSegment(cur, seg, node);
+    if (next === null) return NULL;
+    cur = next;
+  }
+  return cur.value;
+}
+
+// ---------- Top-level driver ----------
 
 export function evalProgram(tree, env) {
   if (!tree || tree.kind !== 'Tmpl') {

@@ -285,8 +285,10 @@ test(': in middle of path is an error', () => {
   assert.throws(() => parse('xs.:.1?'));
 });
 
-test('zero index is an error', () => {
-  assert.throws(() => parse('xs.0?'));
+test('zero index parses fine (NULL at runtime, since indices are 1-based)', () => {
+  // The parser used to reject `.0`, but the language treats it the
+  // same as any other out-of-range index — NULL at eval time.
+  parse('xs.0?');
 });
 
 // ---------------------------------------------------------------------------
