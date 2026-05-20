@@ -117,18 +117,13 @@ export function parseTree(tokens) {
   // match operator by parseOperators.
   const reglueWords = (items) => {
     const isMarker = (t) => t === '!' || t === '?' || t === "'";
-    const isDotChunk = (t) => t === '.' || t === '.()' || t === '.#?';
     const merged = [];
     for (const it of items) {
       const prev = merged[merged.length - 1];
       if (
         prev && prev.kind === 'Word' && it.kind === 'Word'
         && it.glued && prev._fromWordTok && it._fromWordTok
-        && (
-          isMarker(it.text)
-          || isDotChunk(it.text)
-          || prev.text.endsWith('.')
-        )
+        && isMarker(it.text)
       ) {
         prev.text += it.text;
         if (it.esc) prev.esc = true;
@@ -613,12 +608,54 @@ const decodeWord = (w) => {
   return copy({ kind: 'Word', text, subkind: 'op', line, col });
 };
 
+// Coalesce adjacent glued path segments back into one fat Word.
+//
+// Tokenize emits every unescaped `.` as its own WORD (along with the
+// special tails `.()` and `.#?`). Path assembly is a parser concern, not
+// a tokenizer concern, so we do the gathering here — right at the
+// sibling-walk boundary — instead of in parseTree's reglueWords.
+//
+// Inputs (Word tokens only): start with a Word that doesn't begin with
+// `.` (or DOES begin with `.` for a leading-dot path) and absorb any
+// glued chain of [dot-chunk, name-chunk]* into the fat text. The
+// resulting Word is what decodeWord/splitPath expect.
+const coalesceDots = (items) => {
+  const out = [];
+  let i = 0;
+  while (i < items.length) {
+    const it = items[i];
+    if (it.kind !== 'Word') { out.push(it); i++; continue; }
+    let cur = it;
+    let j = i + 1;
+    while (j < items.length) {
+      const nx = items[j];
+      if (nx.kind !== 'Word' || !nx.glued) break;
+      // Merge if either the new chunk starts a path segment (`.`,
+      // `.()`, `.#?`, or a marker-suffixed variant like `.()?`) or
+      // the running text ends with `.` (so the next chunk is a
+      // segment name like `bar` after `foo.`).
+      const canMerge = nx.text.startsWith('.') || cur.text.endsWith('.');
+      if (!canMerge) break;
+      cur = {
+        ...cur,
+        text: cur.text + nx.text,
+        esc: cur.esc || nx.esc,
+      };
+      j++;
+    }
+    out.push(cur);
+    i = j;
+  }
+  return out;
+};
+
 // Walk a sibling list, decoding each Word. Handles two sibling-aware
 // rules:
 //   (a) A raw Word starting with `.` attaches to the previous sibling
 //       (which must be glued? No — the dot-word must itself be glued).
 //   (b) A `Named` with value=null absorbs the next glued sibling.
 const walkSiblings = (items) => {
+  items = coalesceDots(items);
   // First pass: decode each non-leading-dot word in place. Leading-dot
   // words stay as raw Word for the second pass.
   const decoded = items.map((it) => {
