@@ -117,13 +117,18 @@ export function parseTree(tokens) {
   // match operator by parseOperators.
   const reglueWords = (items) => {
     const isMarker = (t) => t === '!' || t === '?' || t === "'";
+    const isDotChunk = (t) => t === '.' || t === '.()' || t === '.#?';
     const merged = [];
     for (const it of items) {
       const prev = merged[merged.length - 1];
       if (
         prev && prev.kind === 'Word' && it.kind === 'Word'
         && it.glued && prev._fromWordTok && it._fromWordTok
-        && isMarker(it.text)
+        && (
+          isMarker(it.text)
+          || isDotChunk(it.text)
+          || prev.text.endsWith('.')
+        )
       ) {
         prev.text += it.text;
         if (it.esc) prev.esc = true;

@@ -191,6 +191,28 @@ export function tokenize(src) {
         continue;
       }
 
+      // `.` is the path-segment separator. Always emit it as its own
+      // WORD token (re-glued back onto its neighbours by parseTree's
+      // reglueWords pass). The two glued-tail forms `.()` (return the
+      // pattern of a fn) and `.#?` (length-of) are emitted as a single
+      // 3-char WORD here so the inner `(` / `#` don't confuse the
+      // outer loop's bracket / comment handling.
+      if (c === '.') {
+        if (peek(1) === '(' && peek(2) === ')') {
+          advance(3);
+          push(TOKEN_TYPES.WORD, '.()', startLine, startCol);
+          continue;
+        }
+        if (peek(1) === '#' && peek(2) === '?') {
+          advance(3);
+          push(TOKEN_TYPES.WORD, '.#?', startLine, startCol);
+          continue;
+        }
+        advance();
+        push(TOKEN_TYPES.WORD, '.', startLine, startCol);
+        continue;
+      }
+
       // Otherwise — build a WORD by accumulating non-special chars.
       let text = '';
       let esc = false;
@@ -198,31 +220,18 @@ export function tokenize(src) {
         const ch = peek();
         if (ch === '\\') { text += readEscape(); esc = true; continue; }
         if (ch === '#') {
-          // Two cases: `.#?` length-of segment (stays in the word) or
-          // a comment (vanishes; word-building continues across it).
-          if (text.endsWith('.') && peek(1) === '?') {
-            text += '#';
-            advance();
-            continue;
-          }
           skipComment();
           continue;
         }
-        if (STRUCT_DELIMS.has(ch)) {
-          // Special case: `.()` as a path segment (returns the pattern
-          // of a function) — keep it inside the word.
-          if (ch === '(' && text.endsWith('.') && peek(1) === ')') {
-            text += '()';
-            advance(2);
-            continue;
-          }
-          break;
-        }
+        if (STRUCT_DELIMS.has(ch)) break;
         if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') break;
         if (ch === '-' && peek(1) === '>') break;
         // Path-trigger / partial-trigger markers terminate the word;
         // they're emitted by the outer loop as their own WORD tokens.
         if (ch === '!' || ch === '?' || ch === "'") break;
+        // `.` terminates the word; the outer loop emits it (and any
+        // `.()` / `.#?` tail) as its own WORD token.
+        if (ch === '.') break;
         text += ch;
         advance();
         // `:` immediately following a name char ends the word AFTER

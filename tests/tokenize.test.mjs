@@ -30,7 +30,9 @@ test('single word', () => {
 
 test('numbers tokenize as words', () => {
   assert.deepEqual(shape('42'), [[T.WORD, '42']]);
-  assert.deepEqual(shape('3.141'), [[T.WORD, '3.141']]);
+  // Unescaped `.` is its own WORD token; re-glued by parseTree.
+  assert.deepEqual(shape('3.141'),
+    [[T.WORD, '3'], [T.WORD, '.'], [T.WORD, '141']]);
   assert.deepEqual(shape('-5'), [[T.WORD, '-5']]);
 });
 
@@ -156,17 +158,21 @@ test('escaped minus does not form arrow — escape preserved verbatim', () => {
   ]);
 });
 
-test('path word splits at the trailing `?`', () => {
-  // Unescaped `?` terminates a word and is emitted as its own WORD token.
-  // Parsing later re-glues these into one path word.
+test('path word splits at every unescaped `.` and trailing `?`', () => {
+  // Each `.` is its own WORD token; trailing `?` likewise.
+  // parseTree re-glues these into one fat path word.
   assert.deepEqual(shape('people.1.fullname?'), [
-    [T.WORD, 'people.1.fullname'], [T.WORD, '?'],
+    [T.WORD, 'people'], [T.WORD, '.'], [T.WORD, '1'],
+    [T.WORD, '.'], [T.WORD, 'fullname'], [T.WORD, '?'],
   ]);
 });
 
-test('length-of segment .#? — `?` is its own token', () => {
+test('length-of segment .#? — emitted as a single WORD', () => {
+  // `.#?` would otherwise be confused for a comment (`#`) and a
+  // standalone `?`; the tokenizer recognises the 3-char form and
+  // emits it whole, glued to the preceding head.
   assert.deepEqual(shape('people.#?'), [
-    [T.WORD, 'people.#'], [T.WORD, '?'],
+    [T.WORD, 'people'], [T.WORD, '.#?'],
   ]);
 });
 
@@ -196,11 +202,12 @@ test(':: name: at end of input stays as a single token', () => {
   assert.deepEqual(shape('name:'), [[T.WORD, 'name:']]);
 });
 
-test('colon after `.` does NOT split the word (path .:? segment)', () => {
-  // `:` stays embedded after `.`. The trailing `?` still emits as its
-  // own token (then parse re-glues).
+test('colon after `.` — `.` is a token, then the `.:?` tail re-glues', () => {
+  // `.` always splits; `:` only ends a word when it follows a name
+  // char. Here `:` follows `.` (not a name char) so it stays in the
+  // following word.
   assert.deepEqual(shape('xs.:?'), [
-    [T.WORD, 'xs.:'], [T.WORD, '?'],
+    [T.WORD, 'xs'], [T.WORD, '.'], [T.WORD, ':'], [T.WORD, '?'],
   ]);
 });
 
@@ -354,10 +361,11 @@ test('multi-word pipeline', () => {
 });
 
 test('a comment inside a path word is excised, word continues', () => {
+  // The `#bar#` is a comment (the `#` is not part of a `.#?` form).
+  // After excision the source reads `foo..1?`; the dots and `?`
+  // each emit as their own WORD tokens.
   assert.deepEqual(shape('foo.#bar#.1?'), [
-    // The `#bar#` is a comment (no `.#?` because the # is followed by
-    // `b`, not `?`). After excision the word reads `foo..1`, and the
-    // trailing `?` is its own token.
-    [T.WORD, 'foo..1'], [T.WORD, '?'],
+    [T.WORD, 'foo'], [T.WORD, '.'], [T.WORD, '.'],
+    [T.WORD, '1'], [T.WORD, '?'],
   ]);
 });
