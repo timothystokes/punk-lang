@@ -213,6 +213,15 @@ export function tokenize(src) {
         continue;
       }
 
+      // `~` is the range / return-range marker. Always emit it as its
+      // own single-char WORD token (parser-side coalesceDots re-glues
+      // it back into fat range words like `1~5`, `~3`, or `5~`).
+      if (c === '~') {
+        advance();
+        push(TOKEN_TYPES.WORD, '~', startLine, startCol);
+        continue;
+      }
+
       // Otherwise — build a WORD by accumulating non-special chars.
       let text = '';
       let esc = false;
@@ -229,9 +238,9 @@ export function tokenize(src) {
         // Path-trigger / partial-trigger markers terminate the word;
         // they're emitted by the outer loop as their own WORD tokens.
         if (ch === '!' || ch === '?' || ch === "'") break;
-        // `.` terminates the word; the outer loop emits it (and any
-        // `.()` / `.#?` tail) as its own WORD token.
-        if (ch === '.') break;
+        // `.` and `~` terminate the word; the outer loop emits them
+        // (and any `.()` / `.#?` tail) as their own WORD tokens.
+        if (ch === '.' || ch === '~') break;
         text += ch;
         advance();
         // `:` immediately following a name char ends the word AFTER

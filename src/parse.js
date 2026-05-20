@@ -608,18 +608,23 @@ const decodeWord = (w) => {
   return copy({ kind: 'Word', text, subkind: 'op', line, col });
 };
 
-// Coalesce adjacent glued path segments back into one fat Word.
+// Coalesce adjacent glued path/range segments back into one fat Word.
 //
-// Tokenize emits every unescaped `.` as its own WORD (along with the
-// special tails `.()` and `.#?`). Path assembly is a parser concern, not
-// a tokenizer concern, so we do the gathering here — right at the
-// sibling-walk boundary — instead of in parseTree's reglueWords.
+// Tokenize emits every unescaped `.` and `~` as its own WORD (along
+// with the special path tails `.()` and `.#?`). Path/range assembly is
+// a parser concern, not a tokenizer concern, so we do the gathering
+// here — right at the sibling-walk boundary — instead of in
+// parseTree's reglueWords.
 //
-// Inputs (Word tokens only): start with a Word that doesn't begin with
-// `.` (or DOES begin with `.` for a leading-dot path) and absorb any
-// glued chain of [dot-chunk, name-chunk]* into the fat text. The
-// resulting Word is what decodeWord/splitPath expect.
+// A run of glued WORDs is coalesced into one fat Word whenever the new
+// chunk starts with `.` / `~` OR the running text ends with `.` / `~`.
+// The result is what decodeWord / decodeRangeWord / splitPath expect.
 const coalesceDots = (items) => {
+  const startsSep = (t) => t[0] === '.' || t[0] === '~';
+  const endsSep = (t) => {
+    const last = t[t.length - 1];
+    return last === '.' || last === '~';
+  };
   const out = [];
   let i = 0;
   while (i < items.length) {
@@ -630,11 +635,7 @@ const coalesceDots = (items) => {
     while (j < items.length) {
       const nx = items[j];
       if (nx.kind !== 'Word' || !nx.glued) break;
-      // Merge if either the new chunk starts a path segment (`.`,
-      // `.()`, `.#?`, or a marker-suffixed variant like `.()?`) or
-      // the running text ends with `.` (so the next chunk is a
-      // segment name like `bar` after `foo.`).
-      const canMerge = nx.text.startsWith('.') || cur.text.endsWith('.');
+      const canMerge = startsSep(nx.text) || endsSep(cur.text);
       if (!canMerge) break;
       cur = {
         ...cur,
