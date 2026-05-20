@@ -36,11 +36,11 @@ test('num! — empty text is a runtime error', () => {
 
 // ---- text via interpolation (no text! builtin) ------------------------
 
-test('rendering a value as text — interpolate into `"..."`', () => {
-  // Doc note: there's no `text!` builtin; use `"{x?}"` to render.
-  assert.equal(punk('x:42  "{x?}"'), '"42"');
+test('rendering a value as text — interpolate into `"..."` (cascade)', () => {
+  // Text is inert; `!` triggers cascade through embedded queries.
+  assert.equal(punk('x:42  "{x?}"!'), '"42"');
 });
 
 test('rendering a template as text via interpolation', () => {
-  assert.equal(punk('t:{a b c}  "{t?}"'), '"a b c"');
+  assert.equal(punk('t:{a b c}  "{t?}"!'), '"a b c"');
 });

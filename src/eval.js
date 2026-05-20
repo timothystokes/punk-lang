@@ -377,7 +377,17 @@ function spreadIntoTmpl(node, out) {
 function cascadeTmpl(tmpl, env) {
   const items = [];
   for (const it of tmpl.items) {
-    spreadIntoTmpl(cascadeOne(it, env), items);
+    if (it && it.kind === 'Tmpl') {
+      // A literal sub-Tmpl in source stays as one item; cascade its
+      // own children in scope.
+      items.push(cascadeTmpl(it, env));
+    } else if (it && it.kind === 'Text') {
+      items.push(cascadeText(it, env));
+    } else {
+      // A Query/Exec/Named/etc. whose result is a Tmpl SPREADS into
+      // the parent (composition rule).
+      spreadIntoTmpl(evalItem(it, env), items);
+    }
   }
   return mkTmpl(items);
 }

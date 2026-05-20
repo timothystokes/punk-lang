@@ -9,6 +9,7 @@ import {
   mkTmpl, mkText, mkWord, NULL, TRUE, FALSE,
   isTrue, isFalse, equals,
 } from './values.js';
+import * as fs from 'node:fs';
 
 // ---------- Helpers ----------
 
@@ -65,19 +66,15 @@ const mkTextLit = (s) => s === '' ? mkText([]) : mkText([{ lit: s }]);
 
 const boolValue = (b) => b ? TRUE : FALSE;
 
-// Type predicates on the FIRST item of args (`isX!t` → check t).
-const firstArg = (args) => {
+// The "value being operated on" by a 1-arg builtin. Callers write
+// `f!X` (shortcut for `f!{X}`), `f!"text"`, or `f!{x y z}`. In the
+// first two cases the args Tmpl is a singleton wrapper — unwrap it.
+// In the multi-item case, the whole Tmpl IS the value (a list/struct).
+const singleArg = (args) => {
   const xs = argsItems(args);
-  if (xs.length === 0) {
-    throw new PunkRuntimeError('expected an argument');
-  }
-  return xs[0];
+  if (xs.length === 1) return xs[0];
+  return args || mkTmpl([]);
 };
-
-// Unwrap a singleton Tmpl for type checks where auto-wrap has put the
-// real value inside. e.g. `x:42 isnum!{x?}` — x? returns Tmpl{42}.
-const unwrapSingleton = (v) =>
-  (v && v.kind === 'Tmpl' && v.items.length === 1) ? v.items[0] : v;
 
 const isTextV = (v) => v && v.kind === 'Text';
 const isTmplV = (v) => v && v.kind === 'Tmpl';
@@ -201,7 +198,7 @@ export const builtins = {
     return FALSE;
   },
   'not': (args) => {
-    const v = firstArg(args);
+    const v = singleArg(args);
     if (isTrue(v))  return FALSE;
     if (isFalse(v)) return TRUE;
     throw new PunkRuntimeError('not!: expected TRUE or FALSE');
@@ -216,30 +213,28 @@ export const builtins = {
   },
 
   // ----- Type checks --------------------------------------------------
-  'isnum':   (args) => boolValue(isNum(unwrapSingleton(firstArg(args)))),
-  'istext':  (args) => boolValue(isTextV(unwrapSingleton(firstArg(args)))),
+  'isnum':   (args) => boolValue(isNum(singleArg(args))),
+  'istext':  (args) => boolValue(isTextV(singleArg(args))),
   'islist':  (args) => {
-    const v = firstArg(args);
-    // True for any Tmpl (incl. empty and multi-item). The doc says
-    // "more than one item, or zero items" — i.e. not a singleton (a
-    // singleton came from auto-wrap and represents a scalar).
+    const v = singleArg(args);
     if (!isTmplV(v)) return FALSE;
+    // True for empty or multi-item; a singleton came from auto-wrap.
     return boolValue(v.items.length !== 1);
   },
-  'isfn':    (args) => boolValue(isFnV(unwrapSingleton(firstArg(args)))),
+  'isfn':    (args) => boolValue(isFnV(singleArg(args))),
   'isempty': (args) => {
-    const v = firstArg(args);
+    const v = singleArg(args);
     if (isTmplV(v)) return boolValue(v.items.length === 0);
     if (isTextV(v)) return boolValue(valueToText(v).length === 0);
     return FALSE;
   },
 
   // ----- Text ---------------------------------------------------------
-  'upper': (args) => mkTextLit(valueToText(firstArg(args)).toUpperCase()),
-  'lower': (args) => mkTextLit(valueToText(firstArg(args)).toLowerCase()),
-  'trim':  (args) => mkTextLit(valueToText(firstArg(args)).trim()),
+  'upper': (args) => mkTextLit(valueToText(singleArg(args)).toUpperCase()),
+  'lower': (args) => mkTextLit(valueToText(singleArg(args)).toLowerCase()),
+  'trim':  (args) => mkTextLit(valueToText(singleArg(args)).trim()),
   'chars': (args) => {
-    const s = valueToText(firstArg(args));
+    const s = valueToText(singleArg(args));
     return mkTmpl([...s].map((c) => mkWord(c)));
   },
   'split': (args) => {
@@ -260,14 +255,89 @@ export const builtins = {
     const items = isTmplV(xs[1]) ? xs[1].items : [xs[1]];
     return mkTextLit(items.map(valueToText).join(sep));
   },
-  'replace': (args) => {
-    const xs = argsItems(args);
-    if (xs.length !== 3) {
-      throw new PunkRuntimeError(`replace! expects 3 arguments, got ${xs.length}`);
+  // ----- Conversion ---------------------------------------------------
+  'num': (args) => {
+    const s = valueToText(singleArg(args));
+    if (s === '' || !/^-?\d+(\.\d+)?$/.test(s.trim())) {
+      throw new PunkRuntimeError(`num!: cannot parse '${s}' as a number`);
     }
-    const oldS = valueToText(xs[0]);
-    const newS = valueToText(xs[1]);
-    const data = valueToText(xs[2]);
-    return mkTextLit(data.split(oldS).join(newS));
+    return numWord(Number(s));
+  },
+
+  // ----- Assertions ---------------------------------------------------
+  'assert': (args) => {
+    const xs = argsItems(args);
+    if (xs.length === 2) {
+      if (equals(xs[0], xs[1])) return NULL;
+      throw new PunkRuntimeError(
+        `assertion failed: expected ${describe(xs[0])}, got ${describe(xs[1])}`,
+      );
+    }
+    if (xs.length === 1) {
+      const v = xs[0];
+      // Only FALSE and NULL are falsy.
+      if (isFalse(v)) throw new PunkRuntimeError('assertion failed: FALSE');
+      if (v && v.kind === 'Null') throw new PunkRuntimeError('assertion failed: NULL');
+      return NULL;
+    }
+    throw new PunkRuntimeError(`assert! expects 1 or 2 arguments, got ${xs.length}`);
+  },
+
+  // ----- IO -----------------------------------------------------------
+  'print': (args) => {
+    // eslint-disable-next-line no-console
+    console.log(valueToText(singleArg(args)));
+    return NULL;
+  },
+  'exists': (args) => {
+    const path = valueToText(singleArg(args));
+    // Lazy require to avoid loading fs at import time in non-node envs.
+    
+    
+    return boolValue(fs.existsSync(path));
+  },
+  'read': (args) => {
+    const path = valueToText(singleArg(args));
+    
+    
+    const txt = fs.readFileSync(path, 'utf8');
+    return mkTmpl(txt.split(/\r?\n/).map((l) => mkTextLit(l)));
+  },
+  'write': (args) => {
+    const xs = argsItems(args);
+    if (xs.length !== 2) {
+      throw new PunkRuntimeError(`write! expects 2 arguments, got ${xs.length}`);
+    }
+    const path = valueToText(xs[0]);
+    
+    
+    fs.writeFileSync(path, valueToText(xs[1]));
+    return NULL;
+  },
+  'append': (args) => {
+    const xs = argsItems(args);
+    if (xs.length !== 2) {
+      throw new PunkRuntimeError(`append! expects 2 arguments, got ${xs.length}`);
+    }
+    const path = valueToText(xs[0]);
+    
+    
+    fs.appendFileSync(path, valueToText(xs[1]));
+    return NULL;
   },
 };
+
+// Compact debug-style description of a value for assertion messages.
+function describe(v) {
+  try {
+    // Avoid circular import — formatting fallback.
+    if (!v) return '?';
+    if (v.kind === 'Null') return 'NULL';
+    if (v.kind === 'Word') return v.text;
+    if (v.kind === 'Tmpl') return '{' + v.items.map(describe).join(' ') + '}';
+    if (v.kind === 'Text') return '"' + v.parts.map((p) => 'lit' in p ? p.lit : describe(p.embed)).join('') + '"';
+    return v.kind;
+  } catch {
+    return '?';
+  }
+}
