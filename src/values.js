@@ -56,6 +56,18 @@ export const isNull  = (v) => v && v.kind === 'Null';
 export function equals(a, b) {
   if (a === b) return true;
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  // The reserved NULL Word (in patterns / source) compares equal to
+  // the runtime Null value.
+  if (a.kind === 'Null' && b.kind === 'Word'
+      && b.subkind === 'reserved' && b.text === 'NULL') return true;
+  if (b.kind === 'Null' && a.kind === 'Word'
+      && a.subkind === 'reserved' && a.text === 'NULL') return true;
+  // Cross-kind text equivalence: a bare Word and a Text whose content
+  // is just that string are considered equal. Same for a single-item
+  // Tmpl wrapping either.
+  const sa = asPlainString(a);
+  const sb = asPlainString(b);
+  if (sa !== null && sb !== null) return sa === sb;
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case 'Null': return true;
@@ -99,4 +111,25 @@ function equalList(xs, ys) {
     if (!equals(xs[i], ys[i])) return false;
   }
   return true;
+}
+
+// If `v` is a single-string value (a Word, a Text whose only part is a
+// literal, or a Tmpl wrapping one such), return that string. Otherwise
+// return null. Used by equals() so that `HELLO`, `"HELLO"`, and `{HELLO}`
+// all compare equal.
+function asPlainString(v) {
+  if (!v || typeof v !== 'object') return null;
+  if (v.kind === 'Word') {
+    if (v.subkind === 'value' || v.subkind === 'number') return v.text;
+    return null;
+  }
+  if (v.kind === 'Text') {
+    if (v.parts.length === 0) return '';
+    if (v.parts.length === 1 && 'lit' in v.parts[0]) return v.parts[0].lit;
+    return null;
+  }
+  if (v.kind === 'Tmpl' && v.items.length === 1) {
+    return asPlainString(v.items[0]);
+  }
+  return null;
 }

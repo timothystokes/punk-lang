@@ -56,7 +56,15 @@ const evalItem = (node, env) => {
     case 'Text':
     case 'Pattern':
     case 'Box':
+      return stripMeta(node);
+
     case 'Word':
+      // Reserved-name Words resolve to their singleton runtime values.
+      if (node.subkind === 'reserved') {
+        if (node.text === 'NULL')  return NULL;
+        if (node.text === 'TRUE')  return TRUE;
+        if (node.text === 'FALSE') return FALSE;
+      }
       return stripMeta(node);
 
     case 'Pipeline':

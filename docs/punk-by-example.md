@@ -66,7 +66,13 @@ A few words have special meaning **in specific positions**:
 - `*` — inside a `()` pattern, an unnamed variadic wildcard slot (zero or more items). Inside a function body, `*?` queries **the whole argument template** that the function was called with. Anywhere else `*` is just an ordinary word (the same way `+`, `-`, `=` are just words outside an Exec).
 - `TRUE`, `FALSE`, `NULL` — the three reserved values. Always reserved, in every position.
 
-`_` and `*` need no escaping — their special meaning is purely positional. `TRUE`/`FALSE`/`NULL` are the only words that must be escaped (`\T\R\U\E`, etc.) to be used as literal text.
+`_`, `*`, `-`, and `X` need no escaping — their special meaning is purely positional:
+
+- `_` and `*` are only wildcards inside patterns.
+- `-` is only special when glued to form `-!` (subtract) or `->` (pipeline arrow). A bare `-`, or one inside a word like `hello-world` or `X-ray`, is plain text.
+- `X` is only special when glued to form `X!` (multiply). A bare `X`, or one inside a word like `Xenon`, is plain text. If you ever need a literal `X!`, escape the bang: `X\!`.
+
+`TRUE`/`FALSE`/`NULL` are the only words that must be escaped (`\T\R\U\E`, etc.) to be used as literal text.
 
 ### Bare-value bindings auto-wrap
 
@@ -1402,7 +1408,7 @@ A `\` followed by another character produces literal text. The first three rows 
 | `\[` `\]` | a literal `[` or `]` |
 | `\~` | a literal `~` |
 | `\#` | a literal `#` |
-| `\-` | a literal `-` (only needed if it would otherwise pair with `>` to form `->`) |
+| `\-` | a literal `-` — only needed if it would otherwise pair with `>` to form `->`. A bare `-`, or one inside a word (`hello-world`, `X-ray`), needs no escape. |
 | `\"` | a literal `"` |
 | `\\` | a literal `\` |
 | `\/` | a literal `/` |

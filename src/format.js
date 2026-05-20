@@ -70,7 +70,19 @@ export function format(value) {
       return formatRange(value);
     case 'Fn': {
       const params = format(value.params);
-      const body = format(value.body);
+      // The parser wraps a non-Tmpl body (e.g. a Text or a Pattern)
+      // in a singleton Tmpl so the cascading evaluator has a uniform
+      // shape. Reprint that as the bare delimited form it was written
+      // as: `(s:_)"hello"` not `(s:_){"hello"}`.
+      let bodyNode = value.body;
+      if (bodyNode && bodyNode.kind === 'Tmpl' && bodyNode.items.length === 1) {
+        const only = bodyNode.items[0];
+        if (only && (only.kind === 'Text' || only.kind === 'Pattern'
+                     || only.kind === 'Box'  || only.kind === 'Fn')) {
+          bodyNode = only;
+        }
+      }
+      const body = format(bodyNode);
       const rr = value.returnRange ? formatRange(value.returnRange) : '';
       return params + body + rr;
     }
