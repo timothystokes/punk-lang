@@ -226,58 +226,69 @@ export function tokenize(src) {
         continue;
       }
 
-      // `/.../[flags]` — first-class regex literal, recognized ONLY
-      // inside a Pattern `(...)`. Outside patterns, `/` is always a
-      // normal word char (no path/regex ambiguity).
-      if (c === '/' && patternDepth > 0) {
-        const n = peek(1);
-        const isRegexStart = n !== '' && n !== '!' && n !== ' '
-          && n !== '\t' && n !== '\n' && n !== '\r' && !STRUCT_DELIMS.has(n);
-        if (isRegexStart) {
-          advance(); // opening /
-          let body = '';
-          let closed = false;
-          while (!eof()) {
-            const ch = peek();
-            if (ch === '\\') {
-              body += ch;
-              advance();
-              if (eof()) {
-                throw new PunkSyntaxError(
-                  'unterminated regex literal', startLine, startCol,
-                );
-              }
-              body += peek();
-              advance();
-              continue;
-            }
-            if (ch === '/') { advance(); closed = true; break; }
-            if (ch === '\n') {
-              throw new PunkSyntaxError(
-                'unterminated regex literal (newline inside)',
-                startLine, startCol,
-              );
-            }
+      // `/` is special in Punk: reserved for regex literals (only inside
+      // `(...)`) and the division builtin (`/!`). A bare `/` anywhere
+      // else is a syntax error — use `\/` for a literal slash or wrap
+      // in `"..."`. Inside `"..."` (TEXT mode) it's already benign.
+      if (c === '/') {
+        if (patternDepth === 0) {
+          // Outside patterns, the only allowed bare `/` is the division
+          // call site `/!` — `/` immediately followed by `!`.
+          if (peek(1) === '!') {
+            advance();
+            push(TOKEN_TYPES.WORD, '/', startLine, startCol);
+            continue;
+          }
+          throw new PunkSyntaxError(
+            "unexpected '/': use \\/ for a literal slash or wrap in \"...\"",
+            startLine, startCol,
+          );
+        }
+        // Inside a pattern — start a regex literal. The pair MUST close
+        // before a newline or the enclosing `)`; otherwise it's a
+        // syntax error (no fallback to word).
+        advance(); // opening /
+        let body = '';
+        let closed = false;
+        while (!eof()) {
+          const ch = peek();
+          if (ch === '\\') {
             body += ch;
             advance();
+            if (eof()) {
+              throw new PunkSyntaxError(
+                'unterminated regex literal', startLine, startCol,
+              );
+            }
+            body += peek();
+            advance();
+            continue;
           }
-          if (!closed) {
+          if (ch === '/') { advance(); closed = true; break; }
+          if (ch === '\n' || ch === ')') {
             throw new PunkSyntaxError(
               'unterminated regex literal', startLine, startCol,
             );
           }
-          let flags = '';
-          while (!eof()) {
-            const ch = peek();
-            if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
-              flags += ch; advance();
-            } else break;
-          }
-          push(TOKEN_TYPES.REGEX, '/' + body + '/' + flags, startLine, startCol);
-          tokens[tokens.length - 1].body = body;
-          tokens[tokens.length - 1].flags = flags;
-          continue;
+          body += ch;
+          advance();
         }
+        if (!closed) {
+          throw new PunkSyntaxError(
+            'unterminated regex literal', startLine, startCol,
+          );
+        }
+        let flags = '';
+        while (!eof()) {
+          const ch = peek();
+          if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+            flags += ch; advance();
+          } else break;
+        }
+        push(TOKEN_TYPES.REGEX, '/' + body + '/' + flags, startLine, startCol);
+        tokens[tokens.length - 1].body = body;
+        tokens[tokens.length - 1].flags = flags;
+        continue;
       }
 
       // Otherwise — build a WORD by accumulating non-special chars.

@@ -131,8 +131,15 @@ function matchSlot(item, slot, bindings) {
     if (!unwrapped || unwrapped.kind !== 'Tmpl') return false;
     return matchPatternItems(unwrapped.items, slot.items, bindings);
   }
-  // Bare literal — exact value equality.
-  return equals(unwrapped, slot);
+  // Bare literal — exact value equality. Auto-wrap means runtime values
+  // are often a singleton Tmpl (e.g. `{GET}` for `method:GET`); unwrap
+  // for the equality check so pattern literals (parsed as bare Words)
+  // still match.
+  let cmp = unwrapped;
+  if (cmp && cmp.kind === 'Tmpl' && cmp.items.length === 1) {
+    cmp = cmp.items[0];
+  }
+  return equals(cmp, slot);
 }
 
 function matchPatternItems(items, slots, bindings) {

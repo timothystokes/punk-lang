@@ -61,24 +61,24 @@ test('shape dispatch — area of a circle', () => {
 test('value dispatch — literal slots', () => {
   const src = `route:(req:_){
       req??{
-        (method:GET path:/      *){home}
-        (method:GET path:/about *){about}
-        (*                       ){notFound}
+        (method:GET path:\\/      *){home}
+        (method:GET path:\\/about *){about}
+        (*                         ){notFound}
       }
     }
-    route!{method:GET path:/about extra:1}`;
+    route!{method:GET path:\\/about extra:1}`;
   assert.equal(punk(src), '{about}');
 });
 
 test('value dispatch — falls through to catch-all', () => {
   const src = `route:(req:_){
       req??{
-        (method:GET path:/      *){home}
-        (method:GET path:/about *){about}
-        (*                       ){notFound}
+        (method:GET path:\\/      *){home}
+        (method:GET path:\\/about *){about}
+        (*                         ){notFound}
       }
     }
-    route!{method:POST path:/x}`;
+    route!{method:POST path:\\/x}`;
   assert.equal(punk(src), '{notFound}');
 });
 
