@@ -465,12 +465,14 @@ const decodeWord = (w) => {
       // shouldn't happen — findMidBang only returns non-end indices
       throw new PunkSyntaxError(`bad word '${text}'`, line, col);
     }
-    if (!isName(rhs) && !isNumber(rhs) && /[!'?:.]/.test(rhs)) {
-      throw new PunkSyntaxError(
-        `'${text}': the value after '${op}' must be a single value`,
-        line, col,
-      );
-    }
+    // RHS is whatever decodeWord can parse as a single Word: a name,
+    // a number, an operator-like word (e.g. `-`), a path-end call
+    // (`x!`, `y?`, `z'`), or another mid-bang chain (`b!c`). If the
+    // rhs is unparseable (e.g. `1.2.3`), the recursive decode below
+    // throws with its own message. A chained rhs (e.g. `and!` in
+    // `not!and!`, or `b!c` in `a!b!c`) is handled by passArgsAttach
+    // drilling through the nested singleton-tmpl args to attach the
+    // next glued sibling to the innermost call.
     // Head must itself be a valid path head.
     const segs = splitPath(head, line, col);
     const headRaw = segs[0];
@@ -487,6 +489,20 @@ const decodeWord = (w) => {
     const tail = decodeSegments(segs.slice(1), line, col);
     const make = op === '!' ? mkExec : mkPartial;
     const argWord = decodeWord(mkWord(rhs, line, col));
+    // A multi-dot rhs that decodes to a generic op-word (catch-all
+    // for un-classified text like `1.2.3`) is not a meaningful arg —
+    // reject it. `\.`-escaped dots will be preserved verbatim once
+    // the escape-preservation refactor lands; until then, multi-dot
+    // names should use a wrapped tmpl form (`a!{1.2.3}`).
+    if (
+      argWord.kind === 'Word' && argWord.subkind === 'op'
+      && argWord.text.includes('.')
+    ) {
+      throw new PunkSyntaxError(
+        `'${text}': '${rhs}' is not a valid argument after '${op}'`,
+        line, col,
+      );
+    }
     const argTmpl = mkTmpl([argWord], line, col);
     const node = make(headRaw, tail, line, col);
     node.args = argTmpl;
@@ -919,36 +935,56 @@ const passArgsAttach = (xs) => {
     // ends up as a separate token here, it's not glued to the bang
     // anyway.
   );
+  // Drill down: if cur is an Exec/Partial whose args is a singleton
+  // Tmpl wrapping another Exec/Partial-with-no-args, recurse into the
+  // inner one. This is how chained mid-bang words like `not!and!`
+  // (decoded as Exec(not, args:[Exec(and)])) end up with the next
+  // glued sibling attached to the innermost call.
+  const innermostNeedingArgs = (node) => {
+    if (!(node.kind === 'Exec' || node.kind === 'Partial')) return null;
+    if (!node.args) return node;
+    if (node.args.kind === 'Tmpl' && node.args.items.length === 1) {
+      const inner = innermostNeedingArgs(node.args.items[0]);
+      if (inner) return inner;
+    }
+    return null;
+  };
+  // Return a clone of `root` with `args` swapped onto whichever inner
+  // node `innermostNeedingArgs` selected. Walks the same singleton-Tmpl
+  // chain.
+  const setInnerArgs = (node, args) => {
+    if (!(node.kind === 'Exec' || node.kind === 'Partial')) return node;
+    if (!node.args) return { ...node, args };
+    if (node.args.kind === 'Tmpl' && node.args.items.length === 1) {
+      const newInner = setInnerArgs(node.args.items[0], args);
+      if (newInner === node.args.items[0]) return node;
+      return { ...node, args: { ...node.args, items: [newInner] } };
+    }
+    return node;
+  };
   for (let i = 0; i < xs.length; i++) {
     const cur = xs[i];
     const next = xs[i + 1];
     const after = xs[i + 2];
-    if (
-      (cur.kind === 'Exec' || cur.kind === 'Partial') &&
-      !cur.args && next && next.glued
-    ) {
+    const inner = innermostNeedingArgs(cur);
+    if (inner && next && next.glued) {
       // Don't eat a Pattern that will form a Fn with the next sibling.
-      // (passFnFormation runs after this pass and pairs Pattern + glued
-      //  body. We want the resulting Fn to be the args here, not the
-      //  bare Pattern.)
       if (next.kind === 'Pattern' && after && after.glued) {
         out.push(cur);
         continue;
       }
       if (next.kind === 'Tmpl') {
-        const node = { ...cur, args: stripGlued(next) };
-        if (cur.glued) node.glued = true;
-        out.push(node);
+        const updated = setInnerArgs(cur, stripGlued(next));
+        if (cur.glued) updated.glued = true;
+        out.push(updated);
         i++;
         continue;
       }
       if (isSingleArg(next)) {
-        const node = {
-          ...cur,
-          args: mkTmpl([stripGlued(next)], next.line, next.col),
-        };
-        if (cur.glued) node.glued = true;
-        out.push(node);
+        const argTmpl = mkTmpl([stripGlued(next)], next.line, next.col);
+        const updated = setInnerArgs(cur, argTmpl);
+        if (cur.glued) updated.glued = true;
+        out.push(updated);
         i++;
         continue;
       }

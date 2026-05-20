@@ -25,14 +25,15 @@ test('assert! — fail raises a runtime error', () => {
 });
 
 test('assert! — partials cleanly (expected first)', () => {
-  // `is-three:assert!'3` then `is-three!actual` evaluates actual vs 3.
-  const src = `is-three:assert!'3
+  // `assert'3` partials the 2-arg form, fixing the expected value to 3.
+  // Then `is-three!actual` evaluates actual vs 3.
+  const src = `is-three:assert'3
     is-three!+!{1 2}`;
   assert.equal(punk(src), 'NULL');
 });
 
 test("assert! — partials and fails when actual doesn't match", () => {
-  const src = `is-three:assert!'3
+  const src = `is-three:assert'3
     is-three!+!{1 5}`;
   punkThrows(src);
 });

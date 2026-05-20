@@ -147,10 +147,22 @@ test("+'1 → Partial(+) args:{1}", () => {
   assert.equal(p.args.items[0].text, '1');
 });
 
-test('mid-! followed by non-simple RHS is a syntax error', () => {
-  // RHS must be a single name or number; nothing more.
-  assert.throws(() => parse('a!b!c'));
+test('mid-! followed by non-simple multi-dot RHS is a syntax error', () => {
+  // `1.2.3` is neither a valid number nor a valid path; rejecting it
+  // here keeps mid-bang positions strict. Use `a!{1.2.3}` if the
+  // intent is to pass a tmpl containing that text.
   assert.throws(() => parse('a!1.2.3'));
+});
+
+test('chained mid-! decodes as nested Exec (a!b!c is valid)', () => {
+  // a!b!c → Exec(a, args:[Exec(b, args:[Word(c)])])
+  const [outer] = items('a!b!c');
+  assert.equal(outer.kind, 'Exec');
+  assert.equal(outer.head, 'a');
+  const inner = outer.args.items[0];
+  assert.equal(inner.kind, 'Exec');
+  assert.equal(inner.head, 'b');
+  assert.equal(inner.args.items[0].text, 'c');
 });
 
 test("x:foo!5 — PendingNamed + glued Exec at parseWords stage", () => {
