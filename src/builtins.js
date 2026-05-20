@@ -217,6 +217,27 @@ const isBox   = (v) => v && v.kind === 'Box';
 
 // ---------- Builtin registry ----------
 
+// Arity metadata for builtins that have a fixed pattern. Used by
+// partial application (`fn'{...}`) to validate prefilled-arg counts
+// and to know how many args remain for the resulting partial.
+// `variadic: true` means the last slot soaks up 0+ extras (target
+// behaves like `(... *)`), so a partial of it always keeps a trailing
+// variadic and any number of prefills below `slots` is fine.
+// Builtins not listed here are treated as fully variadic — partials
+// of them simply spread later args into the call.
+export const builtinArity = {
+  'map':    { slots: 2, variadic: false },
+  'filter': { slots: 2, variadic: false },
+  'find':   { slots: 2, variadic: false },
+  'each':   { slots: 2, variadic: false },
+  'count':  { slots: 2, variadic: false },
+  'reduce': { slots: 3, variadic: false },
+  'sort':   { slots: 2, variadic: false },
+  'replace':{ slots: 3, variadic: false },
+  'split':  { slots: 2, variadic: false },
+  'join':   { slots: 2, variadic: false },
+};
+
 export const builtins = {
   // ----- Arithmetic ---------------------------------------------------
   '+': (args) => {

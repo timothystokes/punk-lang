@@ -20,8 +20,41 @@
 import { PunkRuntimeError } from './errors.js';
 import { mkTmpl, mkText, mkWord, mkFn, mkPartialFn, NULL, TRUE, FALSE } from './values.js';
 import { match } from './match.js';
-import { builtins } from './builtins.js';
+import { builtins, builtinArity } from './builtins.js';
 import { format } from './format.js';
+
+// Arity of any callable (Fn / Builtin / PartialFn). Returns
+//   { slots, variadic }  — for variadic, `slots` is the slot count
+//                          including the variadic tail.
+//   null                  — unknown (variadic builtin without metadata).
+// Partials report their *remaining* arity (target minus what's already
+// prefilled), preserving the target's variadic flag.
+function getArity(callable) {
+  if (!callable) return null;
+  if (callable.kind === 'Fn') {
+    const items = (callable.params && callable.params.items) || [];
+    let variadic = false;
+    for (const slot of items) {
+      const inner = slot && slot.kind === 'Named' ? slot.value : slot;
+      if (inner && inner.kind === 'Word' && inner.subkind === 'variadic') {
+        variadic = true;
+      }
+    }
+    return { slots: items.length, variadic };
+  }
+  if (callable.kind === 'Builtin') {
+    const a = builtinArity[callable.name];
+    return a ? { slots: a.slots, variadic: a.variadic } : null;
+  }
+  if (callable.kind === 'PartialFn') {
+    const inner = getArity(callable.target);
+    if (!inner) return null;
+    const remaining = inner.slots - callable.prefilled.length;
+    return { slots: Math.max(remaining, 0), variadic: inner.variadic };
+  }
+  return null;
+}
+
 
 // A Range value at the top level expands to a Tmpl of integers.
 const expandRange = (node) => {
@@ -351,8 +384,38 @@ function applyCallable(target, argsTmpl, env, node) {
     return callFn(target, argsTmpl, node);
   }
   if (target && target.kind === 'PartialFn') {
-    const combined = mkTmpl([...target.prefilled, ...argsTmpl.items]);
-    return applyCallable(target.target, combined, env, node);
+    const arity = getArity(target.target);
+    if (!arity || arity.variadic) {
+      // Unknown arity, or target is variadic — spread args (today's behaviour).
+      const combined = mkTmpl([...target.prefilled, ...argsTmpl.items]);
+      return applyCallable(target.target, combined, env, node);
+    }
+    const remaining = arity.slots - target.prefilled.length;
+    if (remaining <= 0) {
+      // Fully prefilled — call must be no-arg.
+      if (argsTmpl.items.length !== 0) {
+        throw new PunkRuntimeError(
+          `fully-prefilled partial takes no further arguments, got ${argsTmpl.items.length}`,
+          node && node.line, node && node.col,
+        );
+      }
+      return applyCallable(target.target, mkTmpl(target.prefilled), env, node);
+    }
+    let combinedItems;
+    if (remaining === 1) {
+      // One slot left — the entire call args tmpl is that single value.
+      combinedItems = [...target.prefilled, argsTmpl];
+    } else {
+      // Multiple slots left — spread items, count must match.
+      if (argsTmpl.items.length !== remaining) {
+        throw new PunkRuntimeError(
+          `partial expects ${remaining} further argument${remaining === 1 ? '' : 's'}, got ${argsTmpl.items.length}`,
+          node && node.line, node && node.col,
+        );
+      }
+      combinedItems = [...target.prefilled, ...argsTmpl.items];
+    }
+    return applyCallable(target.target, mkTmpl(combinedItems), env, node);
   }
   if (target && target.kind === 'Pipeline') {
     // A composed pipeline (execute=false) is callable: feed the args
@@ -473,7 +536,15 @@ function evalPartial(node, env) {
   const argsTmpl = node.args
     ? cascadeTmpl(node.args, env)
     : mkTmpl([]);
-  return mkPartialFn(cur.value, argsTmpl.items);
+  const prefilled = argsTmpl.items;
+  const arity = getArity(cur.value);
+  if (arity && !arity.variadic && prefilled.length > arity.slots) {
+    throw new PunkRuntimeError(
+      `partial prefills ${prefilled.length} args but target only takes ${arity.slots}`,
+      node.line, node.col,
+    );
+  }
+  return mkPartialFn(cur.value, prefilled);
 }
 
 function callFn(fn, args, node) {
