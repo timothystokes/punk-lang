@@ -450,9 +450,9 @@ const decodeWord = (w) => {
       // shouldn't happen — findMidBang only returns non-end indices
       throw new PunkSyntaxError(`bad word '${text}'`, line, col);
     }
-    if (!isName(rhs) && !isInt(rhs)) {
+    if (!isName(rhs) && !isNumber(rhs)) {
       throw new PunkSyntaxError(
-        `'${text}': the value after '${op}' must be a single name or integer`,
+        `'${text}': the value after '${op}' must be a single name or number`,
         line, col,
       );
     }
@@ -710,9 +710,9 @@ const opsWalk = (node) => {
 // The five-pass merge on one sibling list.
 const mergeSiblings = (items) => {
   let xs = items;
+  xs = passArgsAttach(xs);
   xs = passFnFormation(xs);
   xs = passReturnRange(xs);
-  xs = passArgsAttach(xs);
   xs = passPipeline(xs);
   xs = passResolveNamed(xs);
   return xs;
@@ -720,24 +720,25 @@ const mergeSiblings = (items) => {
 
 // Pass 1 — `Pattern + glued <node>` → `Fn`.
 const passFnFormation = (xs) => {
+  // Right-to-left so nested `(p1)(p2){body}` forms the inner Fn first,
+  // then becomes the body of the outer Pattern.
   const out = [];
-  for (let i = 0; i < xs.length; i++) {
+  for (let i = xs.length - 1; i >= 0; i--) {
     const cur = xs[i];
-    const next = xs[i + 1];
+    const next = out[out.length - 1]; // next sibling to the right
     if (cur.kind === 'Pattern' && next && next.glued) {
-      // Body is `next` — wrap if not a Tmpl.
+      out.pop();
       const bodyTmpl = next.kind === 'Tmpl'
         ? next
         : mkTmpl([stripGlued(next)], next.line, next.col);
       const fn = mkFn(cur, bodyTmpl, cur.line, cur.col);
       if (cur.glued) fn.glued = true;
       out.push(fn);
-      i++; // consume next
       continue;
     }
     out.push(cur);
   }
-  return out;
+  return out.reverse();
 };
 
 // Pass 2 — `Fn + glued Range` → set returnRange.

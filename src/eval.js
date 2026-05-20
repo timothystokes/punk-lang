@@ -18,7 +18,9 @@
 // are not reached until `!` is applied to the Tmpl.
 
 import { PunkRuntimeError } from './errors.js';
-import { mkTmpl, mkText, mkWord, NULL } from './values.js';
+import { mkTmpl, mkText, mkWord, mkFn, NULL } from './values.js';
+import { match } from './match.js';
+import { builtins } from './builtins.js';
 
 // A Range value at the top level expands to a Tmpl of integers.
 const expandRange = (node) => {
@@ -53,10 +55,17 @@ const evalItem = (node, env) => {
     case 'Text':
     case 'Pattern':
     case 'Box':
-    case 'Fn':
     case 'Pipeline':
     case 'Word':
       return stripMeta(node);
+
+    case 'Fn':
+      return mkFn(
+        stripMeta(node.params),
+        stripMeta(node.body),
+        env,
+        node.returnRange || null,
+      );
 
     case 'Range':
       return expandRange(node);
@@ -80,6 +89,8 @@ const evalItem = (node, env) => {
       return evalQuery(node, env);
 
     case 'Exec':
+      return evalExec(node, env);
+
     case 'Partial':
       throw new PunkRuntimeError(
         `evaluation of '${node.kind}' is not yet implemented`,
@@ -231,6 +242,136 @@ function evalQuery(node, env) {
     cur = next;
   }
   return cur.value;
+}
+
+// ---------- Exec / function call ----------
+//
+// `name!args` looks up `name`, resolves any path segments, and then
+// calls the resulting function (user Fn or builtin) with the
+// (cascaded) args Tmpl. A user fn matches the args against its
+// params; a builtin reads the args as a Tmpl directly.
+
+function resolveExecTarget(node, env) {
+  if (typeof node.head === 'string') {
+    if (env.has(node.head)) {
+      return { value: env.lookup(node.head), name: node.head };
+    }
+    if (Object.prototype.hasOwnProperty.call(builtins, node.head)) {
+      return {
+        value: { kind: 'Builtin', name: node.head, fn: builtins[node.head] },
+        name: node.head,
+      };
+    }
+    throw new PunkRuntimeError(
+      `name '${node.head}' is not bound`, node.line, node.col,
+    );
+  }
+  return { value: evalItem(node.head, env), name: null };
+}
+
+function evalExec(node, env) {
+  let cur = resolveExecTarget(node, env);
+  for (const seg of node.segments || []) {
+    const next = walkSegment(cur, seg, node);
+    if (next === null) {
+      throw new PunkRuntimeError(
+        `path step off the end while resolving call target`,
+        node.line, node.col,
+      );
+    }
+    cur = next;
+  }
+  const target = cur.value;
+  const argsTmpl = node.args
+    ? cascadeTmpl(node.args, env)
+    : mkTmpl([]);
+
+  if (target && target.kind === 'Builtin') {
+    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl });
+  }
+  if (target && target.kind === 'Fn') {
+    return callFn(target, argsTmpl, node);
+  }
+  throw new PunkRuntimeError(
+    `cannot call a non-function value`, node.line, node.col,
+  );
+}
+
+function callFn(fn, args, node) {
+  const bindings = match(args, fn.params);
+  if (!bindings) {
+    throw new PunkRuntimeError(
+      `argument does not match function pattern`,
+      node && node.line, node && node.col,
+    );
+  }
+  const fnEnv = fn.env.child();
+  for (const [k, v] of bindings) fnEnv.bind(k, v, node);
+  return cascadeBody(fn.body, fn.returnRange, fnEnv);
+}
+
+// Evaluate ("cascade") the items of a body Tmpl in scope. Top-level
+// items are reached (so Queries resolve, Execs run, Nameds bind).
+// Nested Tmpl/Text values remain inert.
+function cascadeTmpl(tmpl, env) {
+  const items = tmpl.items.map((it) => evalItem(it, env));
+  return mkTmpl(items);
+}
+
+function cascadeText(textNode, env) {
+  const parts = textNode.parts.map((p) => {
+    if ('lit' in p) return { lit: p.lit };
+    // An embed is a Tmpl node containing the things to splice in.
+    const inner = cascadeTmpl(p.embed, env);
+    // If the embed reduces to a single textual word/text, splice as text;
+    // otherwise format the whole tmpl content into the text.
+    if (inner.items.length === 1) {
+      const it = inner.items[0];
+      if (it && it.kind === 'Word') return { lit: it.text };
+      if (it && it.kind === 'Text') {
+        // splice its parts in
+        return null; // handled below by flattening
+      }
+    }
+    return { embed: inner };
+  });
+  // Drop nulls (we never produced any above except the splice case).
+  return mkText(parts.filter((p) => p !== null));
+}
+
+// Apply the function-body return rule. A body Tmpl evaluates each
+// item; a 1-item body returns that item directly; multi-item returns
+// the whole Tmpl. A `returnRange` slices/picks from the items.
+function cascadeBody(body, returnRange, env) {
+  if (body.kind === 'Text') return cascadeText(body, env);
+  if (body.kind !== 'Tmpl') return evalItem(body, env);
+
+  // A 1-item body whose single item is a Text triggers a Text cascade
+  // on that item (embeds are resolved). For other 1-item shapes the
+  // item is evaluated and returned directly per the 1-item rule.
+  if (body.items.length === 1 && body.items[0]
+      && body.items[0].kind === 'Text' && !returnRange) {
+    return cascadeText(body.items[0], env);
+  }
+
+  const items = body.items.map((it) => evalItem(it, env));
+
+  if (returnRange) {
+    const { from, to } = returnRange;
+    if (from == null && to == null) {
+      return items.length ? items[items.length - 1] : NULL;
+    }
+    const len = items.length;
+    const lo = from == null ? 1 : from;
+    const hi = to == null ? len : to;
+    const lo1 = Math.max(1, lo);
+    const hi1 = Math.min(len, hi);
+    if (hi1 < lo1) return mkTmpl([]);
+    return mkTmpl(items.slice(lo1 - 1, hi1));
+  }
+
+  if (items.length === 1) return items[0];
+  return mkTmpl(items);
 }
 
 // ---------- Top-level driver ----------

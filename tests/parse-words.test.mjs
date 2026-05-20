@@ -148,9 +148,9 @@ test("+'1 → Partial(+) args:{1}", () => {
 });
 
 test('mid-! followed by non-simple RHS is a syntax error', () => {
-  // RHS must be a single name or integer; nothing more.
+  // RHS must be a single name or number; nothing more.
   assert.throws(() => parse('a!b!c'));
-  assert.throws(() => parse('a!1.2'));
+  assert.throws(() => parse('a!1.2.3'));
 });
 
 test("x:foo!5 — PendingNamed + glued Exec at parseWords stage", () => {
