@@ -7,7 +7,9 @@
 //
 // A Token is `{ type, text, line, col }` where:
 //   - `type` is one of the kinds in TOKEN_TYPES below.
-//   - `text` is the *decoded* text (escapes already applied).
+//   - `text` is the source text with escapes preserved verbatim
+//     (e.g. `\.` stays as the two chars `\.`). Higher layers decide
+//     when an escape is "structural" (always: not) vs "literal".
 //   - `line`/`col` point at the first character of the token (1-based).
 //
 // See docs/punk-by-example.md for the language spec.
@@ -83,10 +85,15 @@ export function tokenize(src) {
     advance(); // closing #
   };
 
-  // Decode a single escape starting at `\`. Returns the literal char
-  // it produces and advances past both chars. `\n` and `\t` decode to
-  // newline/tab; any other `\X` decodes to X. A trailing lone `\` at
-  // EOF is a syntax error.
+  // Read a single escape starting at `\`. Returns the literal two-char
+  // sequence `\X`.
+  //
+  // Escapes are preserved verbatim in BOTH word storage and text
+  // storage. Resolution to "actual" chars (dropping the leading `\`)
+  // happens only at display time (format) and at the data boundaries
+  // (split/join/valueToText). Storing verbatim is what makes the
+  // round-trip `"..." → split → {...} → join → "..."` preserve the
+  // user's original source exactly.
   const readEscape = (inText = false) => {
     const escLine = line, escCol = col;
     advance(); // backslash
@@ -95,15 +102,13 @@ export function tokenize(src) {
     }
     const c = peek();
     advance();
-    if (c === 'n') return '\n';
-    if (c === 't') return '\t';
-    if (inText && (c === ' ' || c === '\t' || c === '\n' || c === '\r')) {
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') {
       throw new PunkSyntaxError(
         'whitespace cannot be escaped — Punk has no whitespace escape',
         escLine, escCol,
       );
     }
-    return c;
+    return '\\' + c;
   };
 
   while (!eof()) {

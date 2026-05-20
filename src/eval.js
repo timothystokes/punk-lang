@@ -558,22 +558,55 @@ function cascadeText(textNode, env) {
   for (const p of textNode.parts) {
     if ('lit' in p) { parts.push({ lit: p.lit }); continue; }
     const inner = cascadeTmpl(p.embed, env);
-    // Stringify the resulting Tmpl into the text: spread items as
-    // their textual forms, joined by single spaces.
-    parts.push({ lit: stringifyForText(inner) });
+    // Splice the embed's result into the surrounding Text. `stringifyForText`
+    // gives us the chars-of-the-string (escapes resolved); we then re-encode
+    // for Text-lit storage so the resulting Text is well-formed source.
+    parts.push({ lit: escapeForText(stringifyForText(inner)) });
   }
   return mkText(parts);
 }
 
+// Resolve `\X` escape sequences to actual chars. `\n` → newline,
+// `\t` → tab, any other `\X` → bare X. Used when converting a value
+// to the chars-of-a-string that get spliced into a Text.
+function resolveEscapes(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && i + 1 < s.length) {
+      const nx = s[i + 1];
+      if (nx === 'n') out += '\n';
+      else if (nx === 't') out += '\t';
+      else out += nx;
+      i++;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+// Pre-escape a JS char-string for safe storage inside a Text-lit.
+// Only `{`, `}`, `\`, `"` are structural inside `"..."` and so need
+// a `\` prefix in storage; every other char survives verbatim.
+function escapeForText(s) {
+  let out = '';
+  for (const ch of s) {
+    if (ch === '{' || ch === '}' || ch === '"' || ch === '\\') out += '\\' + ch;
+    else out += ch;
+  }
+  return out;
+}
+
 function stringifyForText(node) {
   if (!node) return '';
-  if (node.kind === 'Word') return node.text;
+  if (node.kind === 'Word') return resolveEscapes(node.text);
   if (node.kind === 'Text') {
-    // Inline a Text's parts as text (drop the quotes; embeds already
-    // resolved at cascade time so they'd be lits, but be defensive).
+    // Already a Text — its lit parts are in text-lit-storage form, so
+    // resolve them back to chars-of-the-string.
     let s = '';
     for (const p of node.parts) {
-      s += 'lit' in p ? p.lit : stringifyForText(p.embed);
+      s += 'lit' in p ? resolveEscapes(p.lit) : stringifyForText(p.embed);
     }
     return s;
   }

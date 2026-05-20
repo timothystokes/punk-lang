@@ -1406,6 +1406,7 @@ A `\` followed by another character produces literal text. The first three rows 
 | `\{` `\}` | a literal `{` or `}` |
 | `\(` `\)` | a literal `(` or `)` |
 | `\[` `\]` | a literal `[` or `]` |
+| `\<` `\>` | a literal `<` or `>` (escape both so angle-bracket pairs look balanced — e.g. `\<p\>` for HTML-like text) |
 | `\~` | a literal `~` |
 | `\#` | a literal `#` |
 | `\"` | a literal `"` |
@@ -1415,13 +1416,15 @@ A `\` followed by another character produces literal text. The first three rows 
 | `\t` | a tab character (only way to get one inside a single thing) |
 | `\c` | for any other character `c`, a literal `c` (escape is a no-op on non-special characters — `\s` is just an `s`, `\-` is just a `-`, `\+` is just a `+`) |
 
+Note: `.` is first-class inside `{ ... }` — `{a.b.c}` is a single word containing two literal dots. You won't normally need `\.`. It only appears as a byproduct of the text↔structure boundary: when a string is split into words, the boundary escapes any `.` so the resulting word can't be mistaken for a path if later glued to `?` or `!`; when those words are joined back into a string, the boundary unescapes them. The same applies to every other character in the escape table.
+
 ### What does **not** need escaping
 
 | Character | Why it's safe as text |
 | --- | --- |
-| `.` | Only special inside a path token that ends in `?` or `!`. In any other context (including standalone text and decimal-looking numbers like `3.141`) it's just a character. |
+| `.` | First-class inside `{ ... }` — `{a.b.c}` is a single word containing two literal dots. Only structural inside a *path token* (one ending in `?` or `!`), where it separates segments. Numbers like `3.141` use it as a decimal point. The text↔struct boundary (split/join) escapes/unescapes it automatically so a literal dot from a string can't accidentally form a path when fed back into struct context. |
 | `_` `*` | Only special inside a pattern; in templates they're ordinary text. |
-| Letters, digits, `+ - * / ^ % = < >`, `@`, etc. | Ordinary thing characters. Symbol-named built-ins like `+!`, `<!`, `<>!` are simply names whose text happens to be punctuation, followed by `!` to execute. |
+| Letters, digits, `+ - * / ^ % = @`, etc. | Ordinary thing characters. Symbol-named built-ins like `+!`, `<!`, `<>!` are simply names whose text happens to be punctuation, followed by `!` to execute. |
 
 ### Whitespace and adjacency
 

@@ -271,8 +271,44 @@ const NAME_CHAR = /[A-Za-z0-9_$\-]/;
 const isNameHead = (ch) => NAME_HEAD.test(ch);
 const isNameChar = (ch) => NAME_CHAR.test(ch);
 
+// Escapes (`\X` two-char sequences) are preserved verbatim in token
+// text. Helpers below operate on a "structural" view of the text in
+// which each `\X` is an opaque literal char that never carries
+// structural meaning (never a path-dot, name-char, bang, etc.).
+const hasEscape = (s) => s.includes('\\');
+
+// Was the final character of `s` written unescaped? Counts trailing
+// backslashes: an even number means the last char is structural.
+const endsWithUnescaped = (s, c) => {
+  if (s.length === 0 || s[s.length - 1] !== c) return false;
+  let n = 0;
+  for (let i = s.length - 2; i >= 0 && s[i] === '\\'; i--) n++;
+  return n % 2 === 0;
+};
+
+// Does `s` contain an unescaped occurrence of `c`?
+const hasUnescaped = (s, c) => {
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\') { i++; continue; }
+    if (s[i] === c) return true;
+  }
+  return false;
+};
+
+// First index of an unescaped `c` in `s`, or -1.
+const indexOfUnescaped = (s, c) => {
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\') { i++; continue; }
+    if (s[i] === c) return i;
+  }
+  return -1;
+};
+
+// Names cannot contain any escape (or any escaped char). A backslash
+// anywhere disqualifies the word from being a name.
 const isName = (s) => {
   if (!s) return false;
+  if (hasEscape(s)) return false;
   if (!isNameHead(s[0])) return false;
   for (let i = 1; i < s.length; i++) if (!isNameChar(s[i])) return false;
   return true;
@@ -280,21 +316,26 @@ const isName = (s) => {
 
 // A non-negative integer literal (path segments only — no sign, no dot).
 const INT_RE = /^[0-9]+$/;
-const isInt = (s) => INT_RE.test(s);
+const isInt = (s) => !hasEscape(s) && INT_RE.test(s);
+
+// Number literal as used by Word subkind detection. Allows optional
+// leading `-`, a decimal point, and an optional exponent. Escapes in
+// the text disqualify it from being a number.
+const NUMBER_RE = /^-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
+const isNumber = (s) => !hasEscape(s) && NUMBER_RE.test(s);
 
 // Is this string a valid path-head name? Names (JS-ident-style) ARE
 // valid, but Punk also uses operator-style symbols as function names
 // (`+`, `*`, `>`, `=` etc.). For the parse stage we accept anything
-// non-empty that isn't a pure number literal and contains no `.`;
-// "is this name actually bound" is checked by parseValidate / eval.
-const isValidPathHead = (s) =>
-  s.length > 0 && !isNumber(s) && !s.includes('.') && !s.includes('~');
-
-// Number literal as used by Word subkind detection. Allows optional
-// leading `-`, a decimal point, and an optional exponent. Doc lines
-// for numbers may evolve; this matches the obvious cases.
-const NUMBER_RE = /^-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
-const isNumber = (s) => NUMBER_RE.test(s);
+// non-empty that isn't a pure number literal and contains no
+// *unescaped* `.` or `~`. Escapes elsewhere already disqualify since
+// a head with escapes is a literal value-word, not a callable name.
+const isValidPathHead = (s) => {
+  if (s.length === 0) return false;
+  if (hasEscape(s)) return false;
+  if (isNumber(s)) return false;
+  return !s.includes('.') && !s.includes('~');
+};
 
 // Decode a range word like `5~15`, `~15`, `5~`, `~`.
 // Returns { from, to } with integer or null; throws on bad shape.
@@ -355,18 +396,35 @@ const decodeSegments = (segs, line, col) => {
 };
 
 // Split a path body (the part before the trailing ? / ! / ') into
-// segments at unescaped dots. The body itself never contains escapes
-// after tokenize (those are already decoded), but a `.` inside a `()`
-// segment must be respected — though `()` is the entire segment, so a
-// dot can only appear by itself. We just split on `.`.
+// segments at unescaped dots. Escaped dots (`\.`) are preserved
+// verbatim inside their segment.
 //
 // Returns the segments array; empty strings (from leading/trailing
 // dots or doubled dots) are an error.
 const splitPath = (body, line, col) => {
-  const segs = body.split('.');
-  for (const s of segs) {
-    if (s === '') throw new PunkSyntaxError(`empty path segment in '${body}'`, line, col);
+  const segs = [];
+  let cur = '';
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '\\' && i + 1 < body.length) {
+      cur += c + body[i + 1];
+      i++;
+      continue;
+    }
+    if (c === '.') {
+      if (cur === '') {
+        throw new PunkSyntaxError(`empty path segment in '${body}'`, line, col);
+      }
+      segs.push(cur);
+      cur = '';
+    } else {
+      cur += c;
+    }
   }
+  if (cur === '') {
+    throw new PunkSyntaxError(`empty path segment in '${body}'`, line, col);
+  }
+  segs.push(cur);
   return segs;
 };
 
@@ -407,9 +465,11 @@ const decodeWord = (w) => {
   }
 
   // Range word (contains `~` and is not a path)
-  const last = text[text.length - 1];
-  const endsPath = last === '?' || last === '!' || last === "'";
-  if (!endsPath && text.includes('~')) {
+  const endsPath = endsWithUnescaped(text, '?')
+    || endsWithUnescaped(text, '!')
+    || endsWithUnescaped(text, "'");
+  const last = endsPath ? text[text.length - 1] : null;
+  if (!endsPath && hasUnescaped(text, '~')) {
     const { from, to } = decodeRangeWord(text, line, col);
     return copy(mkRange(from, to, line, col));
   }
@@ -421,7 +481,7 @@ const decodeWord = (w) => {
   // Special exception: `xs.:?` is a path whose final segment is `:`, not
   // a `name:value` binding. We only treat `:` as a binder if the prefix
   // before the colon is itself a valid identifier name.
-  const colonIdx = text.indexOf(':');
+  const colonIdx = indexOfUnescaped(text, ':');
   if (colonIdx > 0) {
     const namePart = text.slice(0, colonIdx);
     if (isName(namePart)) {
@@ -556,12 +616,16 @@ const decodeWord = (w) => {
   return copy({ kind: 'Word', text, subkind: 'op', line, col });
 };
 
-// Find the index of the first mid-word `!` or `'` (i.e., not the
-// terminating char). Returns -1 if there isn't one. This is used to
-// detect the `name!arg` / `name'arg` short forms.
+// Find the index of the first mid-word *unescaped* `!` or `'` (i.e.,
+// not the terminating char). Returns -1 if there isn't one. Escaped
+// suffixes like `\!` are skipped. This is used to detect the
+// `name!arg` / `name'arg` short forms. (Phase 4 of the tokenize
+// cleanup will remove this entirely once `!` / `'` terminate words at
+// the tokenizer level.)
 const findMidBang = (text) => {
   for (let i = 0; i < text.length - 1; i++) {
     const c = text[i];
+    if (c === '\\') { i++; continue; }
     if (c === '!' || c === "'") return i;
   }
   return -1;

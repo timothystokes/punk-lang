@@ -1,49 +1,22 @@
 // Format a Punk value back into source-equivalent text.
 //
-// This is what the REPL uses to display a result. The rule of thumb
-// is: print the value in a way that, if pasted back into Punk source,
-// would produce the same value (subject to the REPL's display
-// wrappings for bare Words and Numbers).
+// This is what the REPL uses to display a result. The rule is simple:
+// every stored value is already in source form (escapes preserved
+// verbatim — see tokenize.js readEscape), so format just walks the
+// value and emits the stored text/lit chars as-is. Escape resolution
+// happens ONLY at the word→string boundary (when a word's chars are
+// being treated as the chars of a string — split/join, embeds inside
+// `"..."`, valueToText). Text-to-text display NEVER strips escapes,
+// because doing so would silently rewrite the user's source.
 
 import { mkTmpl } from './values.js';
-
-// Characters that need a leading `\` when they appear inside a Word's
-// text but are not at a position the language gives them meaning.
-const WORD_ESCAPE = new Set([
-  '{', '}', '(', ')', '[', ']', '"', '\\', '#',
-]);
-
-const formatWordText = (text) => {
-  let out = '';
-  for (const ch of text) {
-    if (ch === ' ' || ch === '\t') { out += '\\' + ch; continue; }
-    if (ch === '\n') { out += '\\n'; continue; }
-    if (WORD_ESCAPE.has(ch)) { out += '\\' + ch; continue; }
-    out += ch;
-  }
-  return out;
-};
-
-const formatTextLit = (text) => {
-  // Inside a `"..."` block: only `"` and `\` need escaping; spaces
-  // and newlines are preserved verbatim.
-  let out = '';
-  for (const ch of text) {
-    if (ch === '"' || ch === '\\') { out += '\\' + ch; continue; }
-    out += ch;
-  }
-  return out;
-};
 
 export function format(value) {
   if (value === null || value === undefined) return 'NULL';
   switch (value.kind) {
     case 'Null': return 'NULL';
     case 'Word':
-      if (value.subkind === 'reserved' || value.subkind === 'number') {
-        return value.text;
-      }
-      return formatWordText(value.text);
+      return value.text;
     case 'Tmpl':
       return '{' + value.items.map(format).join(' ') + '}';
     case 'Pattern':
@@ -51,7 +24,7 @@ export function format(value) {
     case 'Text': {
       let out = '"';
       for (const part of value.parts) {
-        if ('lit' in part) out += formatTextLit(part.lit);
+        if ('lit' in part) out += part.lit;
         else out += format(part.embed);
       }
       return out + '"';

@@ -9,6 +9,7 @@ import {
   mkTmpl, mkText, mkWord, NULL, TRUE, FALSE,
   isTrue, isFalse, equals,
 } from './values.js';
+import { format } from './format.js';
 import * as fs from 'node:fs';
 
 // ---------- Helpers ----------
@@ -41,18 +42,97 @@ const numWord = (n) => mkWord(fmtNum(n), 'number');
 const argsItems = (args) =>
   (args && args.kind === 'Tmpl') ? args.items : [];
 
+// Resolve word-source escapes to actual chars for string contexts
+// (join, embeds in `"..."`, etc.). The two-char sequences `\n` and
+// `\t` are preserved verbatim — they're handy split delimiters and
+// the user explicitly wrote them; only the real-IO boundary turns
+// them into actual newline/tab bytes. Every other `\X` resolves to
+// bare `X` (so `\?` → `?`, `\\` → `\`, `\<space>` → space).
+function resolveWordEscapes(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && i + 1 < s.length) {
+      const nx = s[i + 1];
+      if (nx === 'n' || nx === 't') {
+        out += '\\' + nx;
+      } else {
+        out += nx;
+      }
+      i++;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+// Resolve `\n` → newline (0x0A) and `\t` → tab (0x09) in a string.
+// Used by stdio/file IO at the moment chars leave Punk's world. Does
+// not touch any other escapes — those must already be resolved (or
+// kept literal) by the time they reach IO.
+function resolveForIO(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && i + 1 < s.length) {
+      const nx = s[i + 1];
+      if (nx === 'n') { out += '\n'; i++; continue; }
+      if (nx === 't') { out += '\t'; i++; continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+// Chars that have struct-context meaning and so must be escaped when
+// a chunk of arbitrary text is forced into Word storage (split, etc.)
+// so the resulting Word is inert and round-trips back through join.
+//
+// Notably `-` is NOT in this set (only `>` is — it forms `->` with a
+// preceding `-`; escaping `>` blocks pipeline-arrow formation). `<`
+// is included alongside `>` so angle-bracket pairs look consistent
+// to the programmer (e.g. HTML/XML written in words: `\<p\>`).
+// Digits are not escaped either: `42` is already a valid Word.
+const WORD_ESCAPE_CHARS = new Set([
+  '{', '}', '(', ')', '[', ']', '"', '\\', '#',
+  '!', '?', "'", '.', '~', ':', '<', '>',
+  ' ', '\t', '\n',
+]);
+
+function escapeForWord(s) {
+  let out = '';
+  for (const ch of s) {
+    if (WORD_ESCAPE_CHARS.has(ch)) out += '\\' + ch;
+    else out += ch;
+  }
+  return out;
+}
+
 // Render a value to a JS string for text-flavoured builtins.
 // Tmpls join their items with a single space (matches "structured
 // input is implicitly joined with a single space" rule for text
 // builtins). Text concatenates its parts. Words/numbers/reserved use
 // their text directly. Null → "NULL".
+// Render a value to a JS string of "chars-of-the-string".
+//
+// Word: stored text is in struct-source form; resolve word escapes
+//   (drop `\` for everything except `\n`/`\t`) so the result is the
+//   chars the user meant.
+// Text: lit storage IS the chars-of-the-string already (text→text
+//   is identity — user-written escapes are not stripped). Embeds
+//   recurse. NB: this means `\n` inside a Text remains the two-char
+//   sequence `\n` here too; it only becomes a real newline at the
+//   stdio/file IO boundary.
+// Tmpl: each item rendered and joined with a single space.
+// Null → "NULL".
 function valueToText(v) {
   if (!v) return '';
   switch (v.kind) {
     case 'Text':
       return v.parts.map((p) => 'lit' in p ? p.lit : valueToText(p.embed)).join('');
     case 'Word':
-      return v.text;
+      return resolveWordEscapes(v.text);
     case 'Null':
       return 'NULL';
     case 'Tmpl':
@@ -62,7 +142,20 @@ function valueToText(v) {
   }
 }
 
-const mkTextLit = (s) => s === '' ? mkText([]) : mkText([{ lit: s }]);
+// Chars that ARE structural inside `"..."` and must be `\`-prefixed
+// when a raw JS string is stored into Text-lit form.
+const TEXT_STRUCTURAL = new Set(['{', '}', '"', '\\']);
+
+function escapeForText(s) {
+  let out = '';
+  for (const ch of s) {
+    if (TEXT_STRUCTURAL.has(ch)) out += '\\' + ch;
+    else out += ch;
+  }
+  return out;
+}
+
+const mkTextLit = (s) => s === '' ? mkText([]) : mkText([{ lit: escapeForText(s) }]);
 
 const boolValue = (b) => b ? TRUE : FALSE;
 
@@ -244,7 +337,7 @@ export const builtins = {
   'trim':  (args) => mkTextLit(valueToText(singleArg(args)).trim()),
   'chars': (args) => {
     const s = valueToText(singleArg(args));
-    return mkTmpl([...s].map((c) => mkWord(c)));
+    return mkTmpl([...s].map((c) => mkWord(escapeForWord(c))));
   },
   'split': (args) => {
     const xs = argsItems(args);
@@ -253,7 +346,7 @@ export const builtins = {
     }
     const sep    = valueToText(xs[0]);
     const target = valueToText(xs[1]);
-    return mkTmpl(target.split(sep).map((s) => mkWord(s)));
+    return mkTmpl(target.split(sep).map((s) => mkWord(escapeForWord(s))));
   },
   'join': (args) => {
     const xs = argsItems(args);
@@ -291,21 +384,24 @@ export const builtins = {
 
   // ----- IO -----------------------------------------------------------
   'print': (args) => {
+    const v = singleArg(args);
+    // Text values print as raw chars (verbatim stored content, with
+    // `\n`/`\t` finally turning into real newline/tab at the IO
+    // boundary). Other shapes print in struct form via `format` —
+    // they're structured data, not a string.
+    const out = (v && v.kind === 'Text')
+      ? resolveForIO(valueToText(v))
+      : format(v);
     // eslint-disable-next-line no-console
-    console.log(valueToText(singleArg(args)));
+    console.log(out);
     return NULL;
   },
   'exists': (args) => {
-    const path = valueToText(singleArg(args));
-    // Lazy require to avoid loading fs at import time in non-node envs.
-    
-    
+    const path = resolveForIO(valueToText(singleArg(args)));
     return boolValue(fs.existsSync(path));
   },
   'read': (args) => {
-    const path = valueToText(singleArg(args));
-    
-    
+    const path = resolveForIO(valueToText(singleArg(args)));
     const txt = fs.readFileSync(path, 'utf8');
     return mkTmpl(txt.split(/\r?\n/).map((l) => mkTextLit(l)));
   },
@@ -314,10 +410,8 @@ export const builtins = {
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`write! expects 2 arguments, got ${xs.length}`);
     }
-    const path = valueToText(xs[0]);
-    
-    
-    fs.writeFileSync(path, valueToText(xs[1]));
+    const path = resolveForIO(valueToText(xs[0]));
+    fs.writeFileSync(path, resolveForIO(valueToText(xs[1])));
     return NULL;
   },
   'append': (args) => {
@@ -325,10 +419,8 @@ export const builtins = {
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`append! expects 2 arguments, got ${xs.length}`);
     }
-    const path = valueToText(xs[0]);
-    
-    
-    fs.appendFileSync(path, valueToText(xs[1]));
+    const path = resolveForIO(valueToText(xs[0]));
+    fs.appendFileSync(path, resolveForIO(valueToText(xs[1])));
     return NULL;
   },
 
