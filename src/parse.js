@@ -117,21 +117,13 @@ export function parseTree(tokens) {
   // match operator by parseOperators.
   const reglueWords = (items) => {
     const isMarker = (t) => t === '!' || t === '?' || t === "'";
-    const endsWithMarker = (t) => {
-      if (!t) return false;
-      const last = t[t.length - 1];
-      if (!isMarker(last)) return false;
-      let bs = 0;
-      for (let k = t.length - 2; k >= 0 && t[k] === '\\'; k--) bs++;
-      return bs % 2 === 0;
-    };
     const merged = [];
     for (const it of items) {
       const prev = merged[merged.length - 1];
       if (
         prev && prev.kind === 'Word' && it.kind === 'Word'
         && it.glued && prev._fromWordTok && it._fromWordTok
-        && (isMarker(it.text) || endsWithMarker(prev.text))
+        && isMarker(it.text)
       ) {
         prev.text += it.text;
         if (it.esc) prev.esc = true;
@@ -569,62 +561,6 @@ const decodeWord = (w) => {
     }
   }
 
-  // Mid-word `!` or `'` with a simple value on the right.
-  // `add!5` → Exec(add, args:{5}); `times'2` → Partial(times, args:{2}).
-  // Right side must be a single name or single non-negative integer.
-  const midBangIdx = findMidBang(text);
-  if (midBangIdx >= 0) {
-    const head = text.slice(0, midBangIdx);
-    const op = text[midBangIdx];
-    const rhs = text.slice(midBangIdx + 1);
-    if (rhs === '') {
-      // shouldn't happen — findMidBang only returns non-end indices
-      throw new PunkSyntaxError(`bad word '${text}'`, line, col);
-    }
-    // RHS is whatever decodeWord can parse as a single Word: a name,
-    // a number, an operator-like word (e.g. `-`), a path-end call
-    // (`x!`, `y?`, `z'`), or another mid-bang chain (`b!c`). If the
-    // rhs is unparseable (e.g. `1.2.3`), the recursive decode below
-    // throws with its own message. A chained rhs (e.g. `and!` in
-    // `not!and!`, or `b!c` in `a!b!c`) is handled by passArgsAttach
-    // drilling through the nested singleton-tmpl args to attach the
-    // next glued sibling to the innermost call.
-    // Head must itself be a valid path head.
-    const segs = splitPath(head, line, col);
-    const headRaw = segs[0];
-    if (isInt(headRaw)) {
-      throw new PunkSyntaxError(
-        `a number cannot head a path ('${text}')`, line, col,
-      );
-    }
-    if (!isValidPathHead(headRaw)) {
-      throw new PunkSyntaxError(
-        `'${headRaw}' is not a valid path head`, line, col,
-      );
-    }
-    const tail = decodeSegments(segs.slice(1), line, col);
-    const make = op === '!' ? mkExec : mkPartial;
-    const argWord = decodeWord(mkWord(rhs, line, col));
-    // A multi-dot rhs that decodes to a generic op-word (catch-all
-    // for un-classified text like `1.2.3`) is not a meaningful arg —
-    // reject it. `\.`-escaped dots will be preserved verbatim once
-    // the escape-preservation refactor lands; until then, multi-dot
-    // names should use a wrapped tmpl form (`a!{1.2.3}`).
-    if (
-      argWord.kind === 'Word' && argWord.subkind === 'op'
-      && argWord.text.includes('.')
-    ) {
-      throw new PunkSyntaxError(
-        `'${text}': '${rhs}' is not a valid argument after '${op}'`,
-        line, col,
-      );
-    }
-    const argTmpl = mkTmpl([argWord], line, col);
-    const node = make(headRaw, tail, line, col);
-    node.args = argTmpl;
-    return copy(node);
-  }
-
   // Path-end (Query / Exec / Partial with no embedded args)
   if (endsPath) {
     const body = text.slice(0, -1);
@@ -670,21 +606,6 @@ const decodeWord = (w) => {
     return copy({ kind: 'Word', text, subkind: 'value', line, col });
   }
   return copy({ kind: 'Word', text, subkind: 'op', line, col });
-};
-
-// Find the index of the first mid-word *unescaped* `!` or `'` (i.e.,
-// not the terminating char). Returns -1 if there isn't one. Escaped
-// suffixes like `\!` are skipped. This is used to detect the
-// `name!arg` / `name'arg` short forms. (Phase 4 of the tokenize
-// cleanup will remove this entirely once `!` / `'` terminate words at
-// the tokenizer level.)
-const findMidBang = (text) => {
-  for (let i = 0; i < text.length - 1; i++) {
-    const c = text[i];
-    if (c === '\\') { i++; continue; }
-    if (c === '!' || c === "'") return i;
-  }
-  return -1;
 };
 
 // Walk a sibling list, decoding each Word. Handles two sibling-aware
@@ -1045,21 +966,30 @@ const passReturnRange = (xs) => {
 // Pass 3 — `Exec/Partial (no args) + glued value` → attach args.
 // A glued Tmpl attaches as-is; any other glued value-kind attaches as
 // a singleton-Tmpl (`f!"hi"` ≡ `f!{"hi"}`, `f![b]` ≡ `f!{[b]}`).
+//
+// CHAINED ATTACH: a single Exec/Partial-with-no-args can absorb a run
+// of consecutive glued siblings, drilling into its own args each time
+// (the previous absorption becomes a nested Exec/Partial-no-args that
+// the next absorption targets via innermostNeedingArgs). This is how
+// short-form chains like `not!and!5` end up nested
+// Exec(not, [Exec(and, [5])]) without any mid-bang scanning in
+// decodeWord.
 const passArgsAttach = (xs) => {
-  const out = [];
   const isSingleArg = (n) => n && (
     n.kind === 'Text' || n.kind === 'Box' || n.kind === 'Fn' ||
     n.kind === 'Pattern' || n.kind === 'Query' || n.kind === 'Exec' ||
-    n.kind === 'Partial' || n.kind === 'Range'
-    // Bare Word is handled by mid-word `!` in decodeWord; if a Word
-    // ends up as a separate token here, it's not glued to the bang
-    // anyway.
+    n.kind === 'Partial' || n.kind === 'Range' ||
+    // A glued value/number/op Word is the mid-bang RHS in the
+    // short-form chain `add!5` → tokens are now [add, !, 5]; reglue
+    // gives [Word add!, Word 5]; this pass attaches the Word as args.
+    (n.kind === 'Word' &&
+      (n.subkind === 'value' || n.subkind === 'number'
+       || n.subkind === 'op' || n.subkind === 'reserved'))
   );
   // Drill down: if cur is an Exec/Partial whose args is a singleton
   // Tmpl wrapping another Exec/Partial-with-no-args, recurse into the
   // inner one. This is how chained mid-bang words like `not!and!`
-  // (decoded as Exec(not, args:[Exec(and)])) end up with the next
-  // glued sibling attached to the innermost call.
+  // end up with the next glued sibling attached to the innermost call.
   const innermostNeedingArgs = (node) => {
     if (!(node.kind === 'Exec' || node.kind === 'Partial')) return null;
     if (!node.args) return node;
@@ -1082,32 +1012,27 @@ const passArgsAttach = (xs) => {
     }
     return node;
   };
-  for (let i = 0; i < xs.length; i++) {
-    const cur = xs[i];
-    const next = xs[i + 1];
-    const after = xs[i + 2];
-    const inner = innermostNeedingArgs(cur);
-    if (inner && next && next.glued) {
+  const out = [];
+  let i = 0;
+  while (i < xs.length) {
+    let cur = xs[i];
+    i++;
+    // Greedily absorb glued args into the deepest Exec/Partial slot.
+    while (i < xs.length) {
+      const next = xs[i];
+      if (!next.glued) break;
+      if (!isSingleArg(next) && next.kind !== 'Tmpl') break;
+      const inner = innermostNeedingArgs(cur);
+      if (!inner) break;
       // Don't eat a Pattern that will form a Fn with the next sibling.
-      if (next.kind === 'Pattern' && after && after.glued) {
-        out.push(cur);
-        continue;
-      }
-      if (next.kind === 'Tmpl') {
-        const updated = setInnerArgs(cur, stripGlued(next));
-        if (cur.glued) updated.glued = true;
-        out.push(updated);
-        i++;
-        continue;
-      }
-      if (isSingleArg(next)) {
-        const argTmpl = mkTmpl([stripGlued(next)], next.line, next.col);
-        const updated = setInnerArgs(cur, argTmpl);
-        if (cur.glued) updated.glued = true;
-        out.push(updated);
-        i++;
-        continue;
-      }
+      if (next.kind === 'Pattern' && i + 1 < xs.length && xs[i + 1].glued) break;
+      const argTmpl = next.kind === 'Tmpl'
+        ? stripGlued(next)
+        : mkTmpl([stripGlued(next)], next.line, next.col);
+      const wasGlued = cur.glued;
+      cur = setInnerArgs(cur, argTmpl);
+      if (wasGlued) cur.glued = true;
+      i++;
     }
     out.push(cur);
   }

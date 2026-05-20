@@ -113,68 +113,89 @@ test('rebinding reserved name is a syntax error', () => {
 // ---------------------------------------------------------------------------
 // Mid-word `!` / `'` short forms
 
-test("add!5 → Exec with embedded args tmpl {5}", () => {
-  const [e] = items('add!5');
-  assert.equal(e.kind, 'Exec');
-  assert.equal(e.head, 'add');
-  assert.deepEqual(e.segments, []);
-  assert.equal(e.args.kind, 'Tmpl');
-  assert.equal(e.args.items.length, 1);
-  assert.equal(e.args.items[0].text, '5');
-  assert.equal(e.args.items[0].subkind, 'number');
-});
-
-test("node.createServer!handler → Exec(node, [createServer]) args:{handler}", () => {
-  const [e] = items('node.createServer!handler');
-  assert.equal(e.kind, 'Exec');
-  assert.equal(e.head, 'node');
-  assert.deepEqual(e.segments, [{ kind: 'name', text: 'createServer' }]);
-  assert.equal(e.args.items[0].text, 'handler');
-  assert.equal(e.args.items[0].subkind, 'value');
-});
-
-test("times'2 → Partial(times) args:{2}", () => {
-  const [p] = items("times'2");
-  assert.equal(p.kind, 'Partial');
-  assert.equal(p.head, 'times');
-  assert.equal(p.args.items[0].text, '2');
-});
-
-test("+'1 → Partial(+) args:{1}", () => {
-  const [p] = items("+'1");
-  assert.equal(p.kind, 'Partial');
-  assert.equal(p.head, '+');
-  assert.equal(p.args.items[0].text, '1');
-});
-
-test('mid-! followed by non-simple multi-dot RHS is a syntax error', () => {
-  // `1.2.3` is neither a valid number nor a valid path; rejecting it
-  // here keeps mid-bang positions strict. Use `a!{1.2.3}` if the
-  // intent is to pass a tmpl containing that text.
-  assert.throws(() => parse('a!1.2.3'));
-});
-
-test('chained mid-! decodes as nested Exec (a!b!c is valid)', () => {
-  // a!b!c → Exec(a, args:[Exec(b, args:[Word(c)])])
-  const [outer] = items('a!b!c');
-  assert.equal(outer.kind, 'Exec');
-  assert.equal(outer.head, 'a');
-  const inner = outer.args.items[0];
-  assert.equal(inner.kind, 'Exec');
-  assert.equal(inner.head, 'b');
-  assert.equal(inner.args.items[0].text, 'c');
-});
-
-test("x:foo!5 — PendingNamed + glued Exec at parseWords stage", () => {
-  const its = items('x:foo!5');
+test("add!5 → Exec(add) + glued Word(5) at parseWords stage", () => {
+  // Mid-bang short form is now assembled by parseOperators
+  // (passArgsAttach); parseWords only produces the call shell
+  // and the glued arg sibling.
+  const its = items('add!5');
   assert.equal(its.length, 2);
+  assert.equal(its[0].kind, 'Exec');
+  assert.equal(its[0].head, 'add');
+  assert.deepEqual(its[0].segments, []);
+  assert.equal(its[0].args, undefined);
+  assert.equal(its[1].kind, 'Word');
+  assert.equal(its[1].text, '5');
+  assert.equal(its[1].subkind, 'number');
+  assert.equal(its[1].glued, true);
+});
+
+test("node.createServer!handler → Exec(node, [createServer]) + glued Word(handler)", () => {
+  const its = items('node.createServer!handler');
+  assert.equal(its.length, 2);
+  assert.equal(its[0].kind, 'Exec');
+  assert.equal(its[0].head, 'node');
+  assert.deepEqual(its[0].segments, [{ kind: 'name', text: 'createServer' }]);
+  assert.equal(its[1].text, 'handler');
+  assert.equal(its[1].subkind, 'value');
+  assert.equal(its[1].glued, true);
+});
+
+test("times'2 → Partial(times) + glued Word(2)", () => {
+  const its = items("times'2");
+  assert.equal(its.length, 2);
+  assert.equal(its[0].kind, 'Partial');
+  assert.equal(its[0].head, 'times');
+  assert.equal(its[1].text, '2');
+  assert.equal(its[1].glued, true);
+});
+
+test("+'1 → Partial(+) + glued Word(1)", () => {
+  const its = items("+'1");
+  assert.equal(its.length, 2);
+  assert.equal(its[0].kind, 'Partial');
+  assert.equal(its[0].head, '+');
+  assert.equal(its[1].text, '1');
+  assert.equal(its[1].glued, true);
+});
+
+test('mid-! followed by a multi-dot word — RHS is just a glued Word', () => {
+  // Under the split-token model `a!1.2.3` is [Exec(a), Word(1.2.3) glued].
+  // parseWords no longer rejects the RHS — it's a value-shaped sibling
+  // that parseOperators attaches as args. (If `1.2.3` isn't a bound
+  // name at eval time, the runtime will complain.)
+  const its = items('a!1.2.3');
+  assert.equal(its.length, 2);
+  assert.equal(its[0].kind, 'Exec');
+  assert.equal(its[1].kind, 'Word');
+  assert.equal(its[1].text, '1.2.3');
+  assert.equal(its[1].glued, true);
+});
+
+test('chained mid-! → three glued nodes at parseWords stage', () => {
+  // a!b!c → [Exec(a), Exec(b) glued, Word(c) glued]
+  // The chain assembly into Exec(a, [Exec(b, [c])]) happens in
+  // parseOperators (passArgsAttach drills the inner-most slot).
+  const its = items('a!b!c');
+  assert.equal(its.length, 3);
+  assert.equal(its[0].kind, 'Exec'); assert.equal(its[0].head, 'a');
+  assert.equal(its[1].kind, 'Exec'); assert.equal(its[1].head, 'b');
+  assert.equal(its[1].glued, true);
+  assert.equal(its[2].kind, 'Word'); assert.equal(its[2].text, 'c');
+  assert.equal(its[2].glued, true);
+});
+
+test("x:foo!5 — PendingNamed + glued Exec + glued Word at parseWords stage", () => {
+  const its = items('x:foo!5');
+  assert.equal(its.length, 3);
   assert.equal(its[0].kind, 'Named');
   assert.equal(its[0].name, 'x');
   assert.equal(its[0].value, null);
   assert.equal(its[1].kind, 'Exec');
   assert.equal(its[1].head, 'foo');
-  assert.equal(its[1].args.items[0].text, '5');
   assert.equal(its[1].glued, true);
+  assert.equal(its[2].kind, 'Word');
+  assert.equal(its[2].text, '5');
+  assert.equal(its[2].glued, true);
 });
 
 // ---------------------------------------------------------------------------
