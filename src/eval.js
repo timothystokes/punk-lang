@@ -291,7 +291,7 @@ function evalExec(node, env) {
     : mkTmpl([]);
 
   if (target && target.kind === 'Builtin') {
-    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl });
+    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl, callFn });
   }
   if (target && target.kind === 'Fn') {
     return callFn(target, argsTmpl, node);
@@ -445,7 +445,11 @@ function cascadeBody(body, returnRange, env) {
     return cascadeText(body.items[0], env);
   }
 
-  const items = body.items.map((it) => evalItem(it, env));
+  // Each body item cascades: nested Tmpls/Texts resolve their queries
+  // (the body of a function is implicitly executed when the function
+  // is called), but a nested Tmpl stays as one item (no spread into
+  // the body's result list).
+  const items = body.items.map((it) => cascadeOne(it, env));
 
   if (returnRange) {
     const { from, to } = returnRange;

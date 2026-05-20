@@ -331,7 +331,168 @@ export const builtins = {
     fs.appendFileSync(path, valueToText(xs[1]));
     return NULL;
   },
+
+  // ----- Collections --------------------------------------------------
+  // HOFs take behaviour first, data last (so `'`-partial is useful).
+  // Iteration callbacks see (value index key):
+  //   - value: the unwrapped value of a Named item, or the item itself
+  //   - index: 1-based position
+  //   - key:   Word(name) for Named items, else NULL
+  // Callbacks must accept the full 3-arg call (use `___` if ignoring).
+  // reduce! is special: its callback is (acc value).
+  'map':    (args, env, ctx) => collMap(args, ctx),
+  'filter': (args, env, ctx) => collFilter(args, ctx),
+  'find':   (args, env, ctx) => collFind(args, ctx),
+  'each':   (args, env, ctx) => collEach(args, ctx),
+  'count':  (args, env, ctx) => collCount(args, ctx),
+  'reduce': (args, env, ctx) => collReduce(args, ctx),
+  'sort':   (args, env, ctx) => collSort(args, ctx),
+  'rev':    (args) => {
+    const xs = argsItems(singleArg(args));
+    return mkTmpl(xs.slice().reverse());
+  },
+  'unique': (args) => {
+    const xs = argsItems(singleArg(args));
+    const out = [];
+    for (const it of xs) {
+      if (!out.some((o) => equals(o, it))) out.push(it);
+    }
+    return mkTmpl(out);
+  },
+  'contains': (args) => {
+    const xs = argsItems(args);
+    if (xs.length !== 2) {
+      throw new PunkRuntimeError(`contains! expects 2 arguments, got ${xs.length}`);
+    }
+    const needle = xs[0];
+    const haystack = isTmplV(xs[1]) ? xs[1].items : [xs[1]];
+    return boolValue(haystack.some((h) => equals(h, needle)));
+  },
 };
+
+// ---------- Collection helpers ----------
+
+// Pull `fn` and `data` out of an HOF args Tmpl. HOF args are
+// `{fn ...data}` where ...data is one item if it's a Tmpl, or all
+// trailing items collectively forming the data list.
+function takeFnAndData(args, name) {
+  const xs = argsItems(args);
+  if (xs.length < 2) {
+    throw new PunkRuntimeError(`${name}! expects at least 2 arguments`);
+  }
+  const fn = xs[0];
+  if (!isFnV(fn)) {
+    throw new PunkRuntimeError(`${name}!: first argument must be a function`);
+  }
+  // Data is the last item (must be a Tmpl).
+  const last = xs[xs.length - 1];
+  if (!isTmplV(last)) {
+    throw new PunkRuntimeError(`${name}!: last argument must be a template`);
+  }
+  return { fn, data: last.items, middle: xs.slice(1, -1) };
+}
+
+// Build the (value index key) args Tmpl for a callback call.
+function cbArgs(item, i) {
+  if (item && item.kind === 'Named') {
+    return mkTmpl([item.value, numWord(i), mkWord(item.name)]);
+  }
+  return mkTmpl([item, numWord(i), NULL]);
+}
+
+function collMap(args, ctx) {
+  const { fn, data } = takeFnAndData(args, 'map');
+  const out = [];
+  for (let i = 0; i < data.length; i++) {
+    out.push(ctx.callFn(fn, cbArgs(data[i], i + 1), null));
+  }
+  return mkTmpl(out);
+}
+
+function collFilter(args, ctx) {
+  const { fn, data } = takeFnAndData(args, 'filter');
+  const out = [];
+  for (let i = 0; i < data.length; i++) {
+    const r = ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    if (isTrue(r)) out.push(data[i]);
+  }
+  return mkTmpl(out);
+}
+
+function collFind(args, ctx) {
+  const { fn, data } = takeFnAndData(args, 'find');
+  for (let i = 0; i < data.length; i++) {
+    const r = ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    if (isTrue(r)) return data[i];
+  }
+  return NULL;
+}
+
+function collEach(args, ctx) {
+  const { fn, data } = takeFnAndData(args, 'each');
+  for (let i = 0; i < data.length; i++) {
+    ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+  }
+  return NULL;
+}
+
+function collCount(args, ctx) {
+  const { fn, data } = takeFnAndData(args, 'count');
+  let n = 0;
+  for (let i = 0; i < data.length; i++) {
+    const r = ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    if (isTrue(r)) n++;
+  }
+  return numWord(n);
+}
+
+function collReduce(args, ctx) {
+  // `reduce!{fn seed data}` — callback is (acc value).
+  const xs = argsItems(args);
+  if (xs.length !== 3) {
+    throw new PunkRuntimeError(`reduce! expects 3 arguments, got ${xs.length}`);
+  }
+  const [fn, seed, dataT] = xs;
+  if (!isFnV(fn)) throw new PunkRuntimeError(`reduce!: first argument must be a function`);
+  if (!isTmplV(dataT)) throw new PunkRuntimeError(`reduce!: third argument must be a template`);
+  let acc = seed;
+  for (const it of dataT.items) {
+    const v = it && it.kind === 'Named' ? it.value : it;
+    acc = ctx.callFn(fn, mkTmpl([acc, v]), null);
+  }
+  return acc;
+}
+
+function collSort(args, ctx) {
+  const xs = argsItems(args);
+  // Unary: sort!{data}; with comparator: sort!{fn data}.
+  let fn = null;
+  let data;
+  if (xs.length === 1 && isTmplV(xs[0])) {
+    data = xs[0].items.slice();
+  } else if (xs.length === 2 && isFnV(xs[0]) && isTmplV(xs[1])) {
+    fn = xs[0];
+    data = xs[1].items.slice();
+  } else {
+    // Treat whole args as a list of items to sort.
+    data = xs.slice();
+  }
+  const cmp = fn
+    ? (a, b) => {
+        const r = ctx.callFn(fn, mkTmpl([a, b]), null);
+        // TRUE means a comes before b.
+        return isTrue(r) ? -1 : 1;
+      }
+    : defaultCompare;
+  data.sort(cmp);
+  return mkTmpl(data);
+}
+
+function defaultCompare(a, b) {
+  if (isNum(a) && isNum(b)) return Number(a.text) - Number(b.text);
+  const sa = valueToText(a), sb = valueToText(b);
+  return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
 
 // Compact debug-style description of a value for assertion messages.
 function describe(v) {
