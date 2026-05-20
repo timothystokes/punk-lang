@@ -29,8 +29,10 @@ test('pipeline without `!` is a value — a composed function', () => {
 });
 
 test('composed pipeline can be called later with `!`', () => {
+  // `shout:upper?` binds shout to the upper builtin (the `?` queries
+  // the existing function; bare `upper` would just be the literal word).
   assert.equal(
-    punk('shout:upper  shout!hello'),
+    punk('shout:upper?  shout!hello'),
     '"HELLO"'
   );
 });
@@ -44,7 +46,7 @@ test('multi-stage composition executes when called', () => {
 
 test('composed pipeline is itself a stage of another pipeline', () => {
   assert.equal(
-    punk('shout:upper  Hello->shout!'),
+    punk('shout:upper?  Hello->shout!'),
     '"HELLO"'
   );
 });

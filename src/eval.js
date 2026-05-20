@@ -56,8 +56,15 @@ const evalItem = (node, env) => {
     case 'Text':
     case 'Pattern':
     case 'Box':
-    case 'Pipeline':
     case 'Word':
+      return stripMeta(node);
+
+    case 'Pipeline':
+      // A non-execute pipeline is a composed-function value (returned
+      // as-is). An execute=true pipeline runs now: stage[0] is the
+      // initial value; each remaining stage is resolved as a callable
+      // and applied to the running value.
+      if (node.execute) return runPipeline(node, env, /*seed*/ null);
       return stripMeta(node);
 
     case 'Fn':
@@ -226,13 +233,21 @@ function evalQuery(node, env) {
   const segments = node.segments || [];
   let cur;
   if (typeof node.head === 'string') {
-    if (!env.has(node.head)) {
+    if (env.has(node.head)) {
+      cur = { value: env.lookup(node.head), name: node.head };
+    } else if (Object.prototype.hasOwnProperty.call(builtins, node.head)) {
+      // Allow `upper?` to query a builtin reference — useful for
+      // binding a callable to a new name (`shout:upper?`).
+      cur = {
+        value: { kind: 'Builtin', name: node.head, fn: builtins[node.head] },
+        name: node.head,
+      };
+    } else {
       if (segments.length === 0) return NULL;
       throw new PunkRuntimeError(
         `name '${node.head}' is not bound`, node.line, node.col,
       );
     }
-    cur = { value: env.lookup(node.head), name: node.head };
   } else {
     // Head is a node attached via leading-dot paths (e.g. `{1 2}.1?`).
     cur = { value: evalItem(node.head, env), name: null };
@@ -303,6 +318,19 @@ function applyCallable(target, argsTmpl, env, node) {
     const combined = mkTmpl([...target.prefilled, ...argsTmpl.items]);
     return applyCallable(target.target, combined, env, node);
   }
+  if (target && target.kind === 'Pipeline') {
+    // A composed pipeline (execute=false) is callable: feed the args
+    // through its stages. Calling convention: the single arg becomes
+    // the seed value (so `clean!Hello` is equivalent to `Hello->clean!`).
+    const items = argsTmpl.items;
+    if (items.length !== 1) {
+      throw new PunkRuntimeError(
+        `a composed pipeline takes exactly one argument`,
+        node && node.line, node && node.col,
+      );
+    }
+    return runPipeline(target, env, items[0]);
+  }
   if (target && target.kind === 'Tmpl') {
     return cascadeTmpl(target, env);
   }
@@ -311,6 +339,56 @@ function applyCallable(target, argsTmpl, env, node) {
   }
   throw new PunkRuntimeError(
     `cannot call a non-function value`, node && node.line, node && node.col,
+  );
+}
+
+// Run a Pipeline. When `seed` is non-null, every stage is treated as a
+// callable applied left-to-right with `seed` as the running value. When
+// `seed` is null, stage[0] is evaluated as the initial value and the
+// remaining stages are callables. A stage that is a bare value-Word is
+// resolved via env lookup (the user's "references are assumed to be
+// functions" rule); a Query stage is evaluated; anything else is taken
+// as a value and must already be a callable.
+function runPipeline(node, env, seed) {
+  const stages = node.stages;
+  let current;
+  let i;
+  if (seed !== null) {
+    current = seed;
+    i = 0;
+  } else {
+    current = evalItem(stages[0], env);
+    i = 1;
+  }
+  for (; i < stages.length; i++) {
+    const callable = resolveStageCallable(stages[i], env);
+    current = applyCallable(callable, mkTmpl([current]), env, stages[i]);
+  }
+  return current;
+}
+
+function resolveStageCallable(stage, env) {
+  if (stage && stage.kind === 'Word' && stage.subkind === 'value') {
+    // bare name — look it up like an Exec head.
+    return resolveCallableName(stage.text, stage, env);
+  }
+  if (stage && stage.kind === 'Exec' && stage.segments.length === 0 && !stage.args) {
+    // A bare `foo!` at the end of a pipeline is the trigger; the
+    // Exec node names the callable, it doesn't run on its own.
+    return resolveCallableName(stage.head, stage, env);
+  }
+  // Everything else: evaluate and trust the result is callable.
+  return evalItem(stage, env);
+}
+
+function resolveCallableName(name, stage, env) {
+  const found = env.lookup(name);
+  if (found !== undefined) return found;
+  if (Object.prototype.hasOwnProperty.call(builtins, name)) {
+    return { kind: 'Builtin', name, fn: builtins[name] };
+  }
+  throw new PunkRuntimeError(
+    `name '${name}' is not bound`, stage.line, stage.col,
   );
 }
 

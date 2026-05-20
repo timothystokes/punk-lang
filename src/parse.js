@@ -1101,6 +1101,12 @@ const validateNode = (node, stack) => {
           node.line, node.col,
         );
       }
+      if (node.text === '->') {
+        throw new PunkSyntaxError(
+          "'->' must have no whitespace around it (e.g. `a->b`, not `a -> b`)",
+          node.line, node.col,
+        );
+      }
       return;
     }
 
