@@ -45,14 +45,14 @@ test('function inside a template is inert until the template is executed', () =>
   // `shout` is just sitting in source; without `!` on the enclosing template
   // nothing runs.
   assert.equal(
-    punk('shout:(s:_){upper!s?}  "I said {shout!hi}"'),
+    punk('shout:(s:_){upper!{s?}}  "I said {shout!hi}"'),
     '"I said {shout!hi}"'
   );
 });
 
 test('function inside an unstructured template runs when the template is executed', () => {
   assert.equal(
-    punk('shout:(s:_){upper!s?}  "I said {shout!hi}"!'),
+    punk('shout:(s:_){upper!{s?}}  "I said {shout!hi}"!'),
     '"I said HI"'
   );
 });

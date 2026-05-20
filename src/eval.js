@@ -21,6 +21,7 @@ import { PunkRuntimeError } from './errors.js';
 import { mkTmpl, mkText, mkWord, mkFn, NULL } from './values.js';
 import { match } from './match.js';
 import { builtins } from './builtins.js';
+import { format } from './format.js';
 
 // A Range value at the top level expands to a Tmpl of integers.
 const expandRange = (node) => {
@@ -292,6 +293,14 @@ function evalExec(node, env) {
   if (target && target.kind === 'Fn') {
     return callFn(target, argsTmpl, node);
   }
+  // Cascade-execution of a value: `{...}!`, `"..."!`. Resolves
+  // embedded queries / runs reached functions inside the template.
+  if (target && target.kind === 'Tmpl') {
+    return cascadeTmpl(target, env);
+  }
+  if (target && target.kind === 'Text') {
+    return cascadeText(target, env);
+  }
   throw new PunkRuntimeError(
     `cannot call a non-function value`, node.line, node.col,
   );
@@ -312,31 +321,64 @@ function callFn(fn, args, node) {
 
 // Evaluate ("cascade") the items of a body Tmpl in scope. Top-level
 // items are reached (so Queries resolve, Execs run, Nameds bind).
-// Nested Tmpl/Text values remain inert.
+// Nested Tmpls/Texts are also reached recursively: a `!` cascade
+// resolves embedded queries and runs reached functions all the way
+// down (per docs/punk-by-example.md § "When things actually run").
+// When splicing a value into a parent Tmpl during cascade: a Tmpl
+// result spreads ALL its items into the parent (composition). Other
+// kinds stay as a single item.
+function spreadIntoTmpl(node, out) {
+  if (node && node.kind === 'Tmpl') {
+    for (const it of node.items) out.push(it);
+    return;
+  }
+  out.push(node);
+}
+
 function cascadeTmpl(tmpl, env) {
-  const items = tmpl.items.map((it) => evalItem(it, env));
+  const items = [];
+  for (const it of tmpl.items) {
+    spreadIntoTmpl(cascadeOne(it, env), items);
+  }
   return mkTmpl(items);
 }
 
+function cascadeOne(node, env) {
+  if (!node || typeof node !== 'object') return node;
+  if (node.kind === 'Tmpl') return cascadeTmpl(node, env);
+  if (node.kind === 'Text') return cascadeText(node, env);
+  return evalItem(node, env);
+}
+
 function cascadeText(textNode, env) {
-  const parts = textNode.parts.map((p) => {
-    if ('lit' in p) return { lit: p.lit };
-    // An embed is a Tmpl node containing the things to splice in.
+  const parts = [];
+  for (const p of textNode.parts) {
+    if ('lit' in p) { parts.push({ lit: p.lit }); continue; }
     const inner = cascadeTmpl(p.embed, env);
-    // If the embed reduces to a single textual word/text, splice as text;
-    // otherwise format the whole tmpl content into the text.
-    if (inner.items.length === 1) {
-      const it = inner.items[0];
-      if (it && it.kind === 'Word') return { lit: it.text };
-      if (it && it.kind === 'Text') {
-        // splice its parts in
-        return null; // handled below by flattening
-      }
+    // Stringify the resulting Tmpl into the text: spread items as
+    // their textual forms, joined by single spaces.
+    parts.push({ lit: stringifyForText(inner) });
+  }
+  return mkText(parts);
+}
+
+function stringifyForText(node) {
+  if (!node) return '';
+  if (node.kind === 'Word') return node.text;
+  if (node.kind === 'Text') {
+    // Inline a Text's parts as text (drop the quotes; embeds already
+    // resolved at cascade time so they'd be lits, but be defensive).
+    let s = '';
+    for (const p of node.parts) {
+      s += 'lit' in p ? p.lit : stringifyForText(p.embed);
     }
-    return { embed: inner };
-  });
-  // Drop nulls (we never produced any above except the splice case).
-  return mkText(parts.filter((p) => p !== null));
+    return s;
+  }
+  if (node.kind === 'Tmpl') {
+    return node.items.map(stringifyForText).join(' ');
+  }
+  // Fallback for unusual shapes — should be rare inside a cascade.
+  return format(node);
 }
 
 // Apply the function-body return rule. A body Tmpl evaluates each

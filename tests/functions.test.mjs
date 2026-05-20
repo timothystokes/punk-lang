@@ -107,7 +107,7 @@ test('closure — captured name is not affected by later rebinding in another sc
   const src = `make-adder:(n:_){(x:_){+!{x? n?}}}
     add10:make-adder!10
     add20:make-adder!20
-    {add10!5 add20!5}`;
+    {add10!5 add20!5}!`;
   assert.equal(punk(src), '{{15} {25}}');
 });
 

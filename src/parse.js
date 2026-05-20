@@ -713,6 +713,7 @@ const mergeSiblings = (items) => {
   xs = passArgsAttach(xs);
   xs = passFnFormation(xs);
   xs = passReturnRange(xs);
+  xs = passPostfixBang(xs);
   xs = passPipeline(xs);
   xs = passResolveNamed(xs);
   return xs;
@@ -780,7 +781,45 @@ const passArgsAttach = (xs) => {
   return out;
 };
 
-// Pass 4 — collapse `->` chains into Pipeline.
+// Pass 4 — postfix `!` glued to a value: `{...}!`, `"..."!`, `[name]!`
+// → an Exec whose head IS the value, no args. At eval-time this means
+// "cascade through the value": for a Tmpl/Text, resolve embedded
+// queries/Execs; for a Fn, call with no args.
+const passPostfixBang = (xs) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i++) {
+    const cur = xs[i];
+    const next = xs[i + 1];
+    if (
+      next && next.kind === 'Word' && next.subkind === 'bang' && next.glued
+      // Only on values that don't already carry their own `!`/`?` rule.
+      && (cur.kind === 'Tmpl' || cur.kind === 'Text' || cur.kind === 'Box'
+          || cur.kind === 'Fn'  || cur.kind === 'Pattern' || cur.kind === 'Pipeline')
+    ) {
+      // If this is the start of a pipeline (cur + glued ->), let
+      // passPipeline handle it. Otherwise consume the bang here.
+      const after = xs[i + 2];
+      if (after && after.kind === 'Word' && after.text === '->' && after.glued) {
+        out.push(cur);
+        continue;
+      }
+      const exec = {
+        kind: 'Exec',
+        head: stripGlued(cur),
+        segments: [],
+        line: cur.line, col: cur.col,
+      };
+      if (cur.glued) exec.glued = true;
+      out.push(exec);
+      i++; // consume bang
+      continue;
+    }
+    out.push(cur);
+  }
+  return out;
+};
+
+// Pass 5 — collapse `->` chains into Pipeline.
 // A pipeline is a sequence of stages separated by `Word('->')` items.
 // Every `->` must be glued on BOTH sides (the tokenizer already ensures
 // no-whitespace via the ARROW token; here glue is enforced via the

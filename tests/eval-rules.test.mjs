@@ -37,7 +37,7 @@ test('`!` cascades through nested templates', () => {
 
 test('`!` runs functions reached inside the template', () => {
   assert.equal(
-    punk('shout:(s:_){upper!s?}  msg:"I said {shout!hi}"  msg!'),
+    punk('shout:(s:_){upper!{s?}}  msg:"I said {shout!hi}"  msg!'),
     '"I said HI"'
   );
 });

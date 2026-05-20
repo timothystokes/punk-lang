@@ -113,7 +113,7 @@ test('method-style dispatch — same call site, different object', () => {
     silent-printer:{
       print:(msg:_){}
     }
-    log-it:(p:_ m:_){p.print!m?}
+    log-it:(p:_ m:_){p.print!{m?}}
     log-it!{printer hello}`;
   assert.equal(punk(src), '"HELLO"');
 });
