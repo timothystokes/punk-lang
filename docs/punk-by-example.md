@@ -687,7 +687,7 @@ We can execute this function as follows with the result shown.
 
 ```punk
 > sizer!7 # which is the same as saying sizer!{7} #
-{circumference:43.974 {Large Circle}}
+{circumference:{43.974} {Large Circle}}
 ```
 
 This is because the template is calculating a circumference and storing it in a name, then evaluating whether the value constitutes a large circle or not. The ideal result of this function is to just show the final answer and not expose our inner workings. We can use the range notation as part of our function definition to specify which part of the template should be included in the response. Here is the function again with a simple `~` on the end — i.e. just the last item, please.

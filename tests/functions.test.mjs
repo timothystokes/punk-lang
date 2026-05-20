@@ -55,7 +55,7 @@ test('function returns the whole resulting template by default', () => {
       }
     }
     sizer!7`;
-  assert.equal(punk(src), '{circumference:43.974 {Large Circle}}');
+  assert.equal(punk(src), '{circumference:{43.974} {Large Circle}}');
 });
 
 test('return range `~` returns only the last item of the template', () => {
