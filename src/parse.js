@@ -910,6 +910,19 @@ const matchValueSubject = (n) => {
 
 const passMatch = (xs) => {
   const out = [];
+  // After building a body-bearing Match, require the next sibling to be
+  // a glued `!` Word; consume it. The `!` makes execution explicit and
+  // unambiguous (a Match without bodies is a predicate and needs none).
+  const requireBangAfter = (i, atNode) => {
+    const t = xs[i];
+    if (!t || t.kind !== 'Word' || t.subkind !== 'bang' || !t.glued) {
+      throw new PunkSyntaxError(
+        `body-bearing conditional must end with '!' (e.g. x?(p){body}! or x??{...}!)`,
+        atNode.line, atNode.col,
+      );
+    }
+  };
+
   for (let i = 0; i < xs.length; i++) {
     const cur = xs[i];
     const a = xs[i + 1];
@@ -919,13 +932,19 @@ const passMatch = (xs) => {
     // was consumed by the path word).
     if (cur.kind === 'Query' && a && a.glued
         && (a.kind === 'Pattern' || a.kind === 'Fn')) {
+      const hasBody = a.kind === 'Fn';
       const branches = a.kind === 'Pattern'
         ? [{ pattern: stripGlued(a), body: null }]
         : [{ pattern: a.params, body: a.body }];
       const node = mkMatch(stripGlued(cur), branches, cur.line, cur.col);
       if (cur.glued) node.glued = true;
+      let advance = 1;
+      if (hasBody) {
+        requireBangAfter(i + 2, node);
+        advance = 2;
+      }
       out.push(node);
-      i += 1;
+      i += advance;
       continue;
     }
 
@@ -933,10 +952,12 @@ const passMatch = (xs) => {
     if (matchValueSubject(cur) && a && a.glued && isMatchOp(a)
         && b && b.glued) {
       let branches = null;
+      let hasBody = false;
       if (b.kind === 'Pattern') {
         branches = [{ pattern: stripGlued(b), body: null }];
       } else if (b.kind === 'Fn') {
         branches = [{ pattern: b.params, body: b.body }];
+        hasBody = true;
       } else if (b.kind === 'Tmpl') {
         branches = tmplOfFnsBranches(b);
         if (branches === null) {
@@ -945,12 +966,18 @@ const passMatch = (xs) => {
             b.line, b.col,
           );
         }
+        hasBody = true;
       }
       if (branches !== null) {
         const node = mkMatch(stripGlued(cur), branches, cur.line, cur.col);
         if (cur.glued) node.glued = true;
+        let advance = 2;
+        if (hasBody) {
+          requireBangAfter(i + 3, node);
+          advance = 3;
+        }
         out.push(node);
-        i += 2;
+        i += advance;
         continue;
       }
       throw new PunkSyntaxError(

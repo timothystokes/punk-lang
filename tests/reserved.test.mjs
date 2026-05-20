@@ -80,11 +80,11 @@ test('TRUE is not equal to FALSE', () => {
 
 test('reserved values can be matched by pattern', () => {
   assert.equal(
-    punk('x:NULL  x??{ (NULL){"nope"} (_){"yep"} }'),
+    punk('x:NULL  x??{ (NULL){"nope"} (_){"yep"} }!'),
     '"nope"'
   );
   assert.equal(
-    punk('x:TRUE  x??{ (TRUE){"yes"} (FALSE){"no"} }'),
+    punk('x:TRUE  x??{ (TRUE){"yes"} (FALSE){"no"} }!'),
     '"yes"'
   );
 });

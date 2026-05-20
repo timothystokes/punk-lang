@@ -17,7 +17,7 @@ test('arity dispatch — one arg', () => {
       args??{
         (n:_){Hello n?}
         (n:_ t:_){Hello t? n?}
-      }
+      }!
     }
     greet!Tim`;
   assert.equal(punk(src), '{Hello Tim}');
@@ -28,7 +28,7 @@ test('arity dispatch — two args', () => {
       args??{
         (n:_){Hello n?}
         (n:_ t:_){Hello t? n?}
-      }
+      }!
     }
     greet!{Tim Dr.}`;
   assert.equal(punk(src), '{Hello Dr. Tim}');
@@ -40,7 +40,7 @@ test('shape dispatch — area of a rect', () => {
         (circle r:_){X!{X!{3.141 r?} r?}}
         (rect w:_ h:_){X!{w? h?}}
         (tri b:_ h:_){/!{X!{b? h?} 2}}
-      }
+      }!
     }
     area!{rect w:4 h:3}`;
   assert.equal(punk(src), '{12}');
@@ -52,7 +52,7 @@ test('shape dispatch — area of a circle', () => {
         (circle r:_){X!{X!{3.141 r?} r?}}
         (rect w:_ h:_){X!{w? h?}}
         (tri b:_ h:_){/!{X!{b? h?} 2}}
-      }
+      }!
     }
     area!{circle r:5}`;
   assert.equal(punk(src), '{78.525}');
@@ -64,7 +64,7 @@ test('value dispatch — literal slots', () => {
         (method:GET path:\\/      *){home}
         (method:GET path:\\/about *){about}
         (*                         ){notFound}
-      }
+      }!
     }
     route!{{method:GET path:\\/about extra:1}}`;
   assert.equal(punk(src), '{about}');
@@ -76,7 +76,7 @@ test('value dispatch — falls through to catch-all', () => {
         (method:GET path:\\/      *){home}
         (method:GET path:\\/about *){about}
         (*                         ){notFound}
-      }
+      }!
     }
     route!{{method:POST path:\\/x}}`;
   assert.equal(punk(src), '{notFound}');
@@ -88,7 +88,7 @@ test('regex dispatch — integer text', () => {
         (n:/^\\d+$/         ){integer}
         (h:/^#[0-9a-f]{6}$/){color}
         (_                 ){other}
-      }
+      }!
     }
     classify!42`;
   assert.equal(punk(src), '{integer}');
@@ -100,7 +100,7 @@ test('regex dispatch — color text', () => {
         (n:/^\\d+$/         ){integer}
         (h:/^#[0-9a-f]{6}$/){color}
         (_                 ){other}
-      }
+      }!
     }
     classify!"#aabbcc"`;
   assert.equal(punk(src), '{color}');

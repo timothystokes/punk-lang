@@ -52,7 +52,7 @@ test('function returns the whole resulting template by default', () => {
       <!{circumference? 30}??{
         (TRUE){Small Circle}
         (FALSE){Large Circle}
-      }
+      }!
     }
     sizer!7`;
   assert.equal(punk(src), '{circumference:{43.974} {Large Circle}}');
@@ -64,7 +64,7 @@ test('return range `~` returns only the last item of the template', () => {
       <!{circumference? 30}??{
         (TRUE){Small Circle}
         (FALSE){Large Circle}
-      }
+      }!
     }~
     sizer!7`;
   assert.equal(punk(src), '{Large Circle}');
@@ -85,7 +85,7 @@ test('recursion — function references itself by name', () => {
       <=!{n? 1}??{
         (TRUE){1}
         (FALSE){X!{n? factorial!{-!{n? 1}}}}
-      }
+      }!
     }
     factorial!5`;
   assert.equal(punk(src), '{120}');

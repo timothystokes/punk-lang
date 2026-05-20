@@ -85,6 +85,6 @@ test('boolean ops in conditions', () => {
   const src = `and!{TRUE TRUE}??{
     (TRUE){yes}
     (FALSE){no}
-  }`;
+  }!`;
   assert.equal(punk(src), '{yes}');
 });
