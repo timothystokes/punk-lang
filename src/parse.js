@@ -862,3 +862,171 @@ export function parseOperators(tree) {
   }
   return opsWalk(tree);
 }
+
+// ---------------------------------------------------------------------------
+// parseValidate
+//
+// Pass 4 of the parser. Catches purely structural mistakes that survived
+// the earlier passes. Name resolution is NOT done here — that lives in
+// eval where the built-in environment is known.
+//
+// Checks:
+//   1. `_`     (wildcard)  outside a Pattern  →  syntax error
+//   2. `___`   (variadic)  outside a Pattern  →  syntax error
+//   3. Bare `!` (Word{subkind:'bang'}) anywhere in the tree
+//        — parseOperators absorbs valid ones into Pipelines, so a
+//          survivor means a stray `!` with nothing to execute.
+//   4. Range value with both bounds where `to < from`, or `from === to`
+//        (degenerate; use the literal instead).
+//   5. Same check on Range path-segments inside Query/Exec/Partial.
+//   6. PendingNamed (Named{value:null}) survivor → `xs:` with no value.
+//   7. Fn with a returnRange but a body of zero items
+//        — nothing to slice; the range can never produce a value.
+//   8. Standalone Range value (in a Tmpl, not inside a path or a Fn
+//      return-range) with an open end (`from === null` or `to === null`):
+//      `{~5}` and `{5~}` have no implicit endpoint as a value.
+
+const isInsidePattern = (stack) => {
+  // `_` and `___` are valid only when the enclosing "slot" is a direct
+  // child of a Pattern. A `Named` wrapper (e.g. `x:_`) is transparent —
+  // the slot still belongs to the Pattern. A Tmpl or any other parent
+  // means we've stepped into a value position, where wildcards are not
+  // meaningful.
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const parent = stack[i];
+    if (parent.kind === 'Named') continue;
+    return parent.kind === 'Pattern';
+  }
+  return false;
+};
+
+const validateNode = (node, stack) => {
+  if (!node || typeof node !== 'object') return;
+
+  switch (node.kind) {
+    case 'Word': {
+      if (node.subkind === 'wildcard' && !isInsidePattern(stack)) {
+        throw new PunkSyntaxError(
+          "wildcard '_' is only valid inside a pattern",
+          node.line, node.col,
+        );
+      }
+      if (node.subkind === 'variadic' && !isInsidePattern(stack)) {
+        throw new PunkSyntaxError(
+          "variadic '___' is only valid inside a pattern",
+          node.line, node.col,
+        );
+      }
+      if (node.subkind === 'bang') {
+        throw new PunkSyntaxError(
+          "stray '!' — nothing to execute (bare '!' is only valid as the trigger of a -> pipeline)",
+          node.line, node.col,
+        );
+      }
+      return;
+    }
+
+    case 'Named': {
+      if (node.value === null) {
+        throw new PunkSyntaxError(
+          `'${node.name}:' has nothing on the right to bind to`,
+          node.line, node.col,
+        );
+      }
+      validateNode(node.value, [...stack, node]);
+      return;
+    }
+
+    case 'Range': {
+      validateRangeBounds(node, /*standalone*/ true, stack);
+      return;
+    }
+
+    case 'Query':
+    case 'Exec':
+    case 'Partial': {
+      if (node.head && typeof node.head === 'object') {
+        validateNode(node.head, [...stack, node]);
+      }
+      for (const seg of (node.segments || [])) {
+        if (seg.kind === 'range') {
+          // Path-segment range — bounds are seg.from / seg.to (ints or null).
+          validateRangeBounds(seg, /*standalone*/ false, stack, node);
+        }
+      }
+      if (node.args) validateNode(node.args, [...stack, node]);
+      return;
+    }
+
+    case 'Fn': {
+      if (node.returnRange && node.body && node.body.items.length === 0) {
+        throw new PunkSyntaxError(
+          'function has a return-range but an empty body — nothing to slice',
+          node.line, node.col,
+        );
+      }
+      validateNode(node.params, [...stack, node]);
+      validateNode(node.body, [...stack, node]);
+      return;
+    }
+
+    case 'Pipeline': {
+      const childStack = [...stack, node];
+      for (const stage of node.stages) validateNode(stage, childStack);
+      return;
+    }
+
+    case 'Tmpl':
+    case 'Pattern':
+    case 'Box': {
+      const childStack = [...stack, node];
+      for (const item of node.items) validateNode(item, childStack);
+      return;
+    }
+
+    case 'Text': {
+      const childStack = [...stack, node];
+      for (const part of node.parts) {
+        if (part && typeof part === 'object' && 'embed' in part) {
+          validateNode(part.embed, childStack);
+        }
+      }
+      return;
+    }
+
+    default:
+      return;
+  }
+};
+
+const validateRangeBounds = (node, standalone, stack, owner) => {
+  const { from, to } = node;
+  if (standalone) {
+    // Standalone Range value (inside a Tmpl, NOT as a Fn return-range).
+    // Fn return-ranges are stored on the Fn node, not as a sibling Range —
+    // so any Range we land on here is a value-position range.
+    if (from === null || to === null) {
+      throw new PunkSyntaxError(
+        "open-ended range needs a path or collection to anchor to — "
+        + "give it both a 'from' and a 'to' as a value",
+        node.line, node.col,
+      );
+    }
+  }
+  if (from !== null && to !== null) {
+    if (to < from) {
+      throw new PunkSyntaxError(
+        `range '${from}~${to}' goes backwards (to < from)`,
+        node.line, node.col,
+      );
+    }
+  }
+};
+
+export function parseValidate(tree) {
+  if (!tree || tree.kind !== 'Tmpl') {
+    throw new TypeError('parseValidate: expected a Tmpl root');
+  }
+  validateNode(tree, []);
+  return tree;
+}
