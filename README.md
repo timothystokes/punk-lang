@@ -3,6 +3,133 @@
 ## Introduction
 Punk is a functional programming language designed for concise and expressive data processing. It features a unique syntax that emphasizes readability and composability, with a focus on functional programming patterns and data transformation.
 
+### Things
+
+Punk is not a strongly typed language but it does have function that can do math and all sorts of other things. All fucntions work on the premice that if the value feels like the kind of thing that the function can usefully process at runtime then it does. e.g. adding thos things where those things seem like numbers will add them together as number and return a new thing.
+
+### Numbers
+
+Most programing language allow literal numebrs to be part of the code and Punk is no exception. 
+
+```punk
+> 42 ⏎
+{42} 
+```
+
+### Words
+
+Where other languages won't acept literal words as token in the language, Punk is fine with it. 
+
+```punk
+> Paul ⏎
+{Paul}
+```
+
+In fact Punk doesn't differenciate netween 42 and Paul until you do things with them later. They are just data values until then. Data elements are separated by space.
+
+```punk
+> 42 Paul ⏎
+{42 Paul}
+```
+
+42 Paul is two things so the { } wrapper is describing to you that they have been interpreted as two things. In the above reponses you can see Punk is making it clear they are one thing using the same { } notation.
+
+
+
+
+
+
+Templates...
+
+{Hello world}
+
+Unstructured Templates...
+
+"Hello world"
+
+Named Things...
+
+message:{Hello world}
+
+Querying Named Things...
+
+message?
+
+Deeper Queries...
+
+message.1?
+
+Even Deeper...
+
+message.2.3?
+
+Template Placeholders...
+
+message:{Hello name?}
+
+name:Paul
+
+Evaluating a template...
+
+message!
+
+Patterns...
+
+(_)
+
+Conditional Queries...
+
+message?(_)
+
+Conditional Queries with a Template...
+
+name?(n:_){Hello n?}!
+
+Functions...
+
+(n:*){Hello n?}
+
+Named Functions
+
+welcome:(n:*){Hello n?}
+
+welcome!{Paul Jones}
+
+Multi-Conditional Queries...
+
+name??{
+   (Paul Jones){Welcome back}
+   (n:_){n? Please inckude your last name}
+   (first:_ last:_){Welcom first? last?}
+   (*){*? is not valid}
+}!
+
+Built in Functions...
+
+
+Polymorphism...
+
+
+Full Example...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Core Concepts
 
 ### Things and Named Things

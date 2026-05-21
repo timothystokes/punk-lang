@@ -310,6 +310,9 @@ export function tokenize(src) {
         // `.` and `~` terminate the word; the outer loop emits them
         // (and any `.()` / `.#?` tail) as their own WORD tokens.
         if (ch === '.' || ch === '~') break;
+        // `/` terminates the word too — outside `(...)` the outer loop
+        // will either emit `/!` (division) or throw a syntax error.
+        if (ch === '/') break;
         text += ch;
         advance();
         // `:` immediately following a name char ends the word AFTER

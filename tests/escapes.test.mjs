@@ -164,3 +164,45 @@ test('symbol-named builtins do NOT need escaping', () => {
 test('`\\<space>` is a tokenize error — no whitespace escape exists', () => {
   punkThrows('"a\\ b"');
 });
+
+// ---- `\<` and `\>` literal angle brackets -----------------------------
+
+test('`\\<` and `\\>` are literal angle brackets — 3 chars', () => {
+  assert.equal(punk('chars!"\\<x\\>".#?'), '{3}');
+});
+
+// ---- `\.` is a literal dot in text storage ---------------------------
+
+test('escaped dot in a path-shaped word does NOT separate segments', () => {
+  // `name:Tim` then `name\.foo?` — the escape stops `.foo` being a
+  // sub-segment, so the whole thing is an inert word and no query
+  // resolves.
+  assert.equal(
+    punk('name:Tim  {hello name\\.foo\\?}'),
+    '{hello name\\.foo\\?}'
+  );
+});
+
+// ---- `\/` in a template is a literal slash ---------------------------
+
+test('`\\/` inside a template is a literal slash', () => {
+  assert.equal(punk('chars!"a\\/b".#?'), '{3}');
+});
+
+// ---- bare `/` outside `(...)` and `"..."` is a syntax error ----------
+
+test('bare `/` in template context is a syntax error', () => {
+  punkThrows('{a/b}');
+});
+
+test('bare `/` between values is a syntax error', () => {
+  punkThrows('a / b');
+});
+
+test('`/` is benign inside a "..." string', () => {
+  assert.equal(punk('chars!"a/b".#?'), '{3}');
+});
+
+test('`/!` (division) is still a valid call site outside patterns', () => {
+  assert.equal(punk('/!{10 2}'), '{5}');
+});
