@@ -178,7 +178,7 @@ Three bare names always resolve to fixed values. They behave like ordinary Words
 NULL
 > =!{NULL people.99?} ⏎
 TRUE
-> people.99??{ (NULL){"nobody home"} (_){"found someone"} } ⏎
+> people.99??{ (NULL){"nobody home"} (_){"found someone"} }! ⏎
 "nobody home"
 ```
 
@@ -476,29 +476,35 @@ A pattern slot can also be a regex literal written between forward slashes `/...
 > (_ /^\d+$/) ⏎ # two things, the second made entirely of digits #
 ```
 
+Regex literals exist **only inside patterns** (`( ... )`). A bare `/` outside a pattern or string is a syntax error — write `\/` for a literal slash, or wrap text containing `/` in `"..."`. The one exception is `/!` which is the division built-in.
+
+Trailing flags after the closing `/` are passed through to the underlying regex engine (e.g. `/foo/i` for case-insensitive matching).
+
 Like any slot, a regex slot can be named — the name binds to the matched thing for use in the attached template.
 
 ```punk
 > tagger:(n:/^\d+$/){
-    Number:n?
+    Number:n.1?
   } ⏎
-> tagger!42 ⏎
-{Number:42}
+> tagger!"42" ⏎
+Number:"42"
 ```
+
+A regex match always binds the named slot to a *structured value* whose first item is the full match (as Text) followed by each capture group. Use `n.1?` for the whole match.
 
 #### Capture groups
 
-A regex with capture groups binds the named slot to a small structure rather than a bare thing: the full match at position 1, then each capture group in the order it appears.
+A regex with capture groups binds the named slot to a structure: the full match at position 1, then each capture group in the order it appears. Each piece is bound as Text (string) so it round-trips literally.
 
 ```punk
 > halve:(p:/^(\w+)-(\w+)$/){
     left:p.2? right:p.3?
   } ⏎
-> halve!{red-blue} ⏎
-{left:red right:blue}
+> halve!"red-blue" ⏎
+{left:"red" right:"blue"}
 ```
 
-`p.1?` is the whole match (`red-blue`), `p.2?` is the first group, `p.3?` is the second.
+`p.1?` is the whole match (`"red-blue"`), `p.2?` is the first group, `p.3?` is the second.
 
 #### Named capture groups
 
@@ -508,8 +514,8 @@ Named groups `(?<name>...)` are bound the usual positional way **and** are also 
 > parseDate:(s:/^(?<y>\d{4})-(?<m>\d{2})-(?<d>\d{2})$/){
     s.y? s.m? s.d?
   } ⏎
-> parseDate!2024-01-15 ⏎
-{2024 01 15}
+> parseDate!"2024-01-15" ⏎
+{"2024" "01" "15"}
 ```
 
 #### Unmatched groups
@@ -521,12 +527,12 @@ A group that didn't participate in the match (for example, an alternative branch
     p.sign??{
       (NULL){unsigned p.n?}
       (_){signed p.n?}
-    }
+    }!
   } ⏎
-> classify!42 ⏎
-{unsigned 42}
-> classify!-7 ⏎
-{signed 7}
+> classify!"42" ⏎
+{unsigned "42"}
+> classify!"-7" ⏎
+{signed "7"}
 ```
 
 The slot itself only binds at all when the whole regex matches; if the regex doesn't match the input, the *pattern* doesn't match and the next pattern in a dispatch is tried. `NULL` is reserved for groups that didn't capture — it's a value the function can inspect and handle, not a failure mode.
@@ -551,22 +557,22 @@ In this case the 5 does not match 6 so the pattern returns FALSE
 
 ### Using Patterns for conditions
 
-Rather than just return true or false, a pattern can have a template attached to use in the case of a match.
+Rather than just return true or false, a pattern can have a template attached to use in the case of a match. A conditional with a template attached **must end with a `!`** — the `!` is what makes the matched template actually run.
 
 ```punk
 > number:5 # named thing # ⏎
-> number?(5){Found five.} ⏎
+> number?(5){Found five.}! ⏎
 ```
 
 This gives us the same functionality as an if statement in other languages.
 
 > Q: What about else-if or else?
-> A: `??` is the same kind of conditional query as `?(pattern){...}`, just one that accepts a list of conditions instead of one. Each condition is a pattern/template pair and Punk picks the first whose pattern matches.
+> A: `??` is the same kind of conditional query as `?(pattern){...}`, just one that accepts a list of conditions instead of one. Each condition is a pattern/template pair and Punk picks the first whose pattern matches. The trailing `!` goes on the outer group — inner branches don't each need one, because Punk first picks the matching branch and then runs *that* template via the single outer `!`.
 
 ```punk
-> tim?(tim){yes} ⏎              # single condition #
+> tim?(tim){yes}! ⏎              # single condition #
 {yes}
-> tim??{(tim){yes} (bob){no}} ⏎ # list of conditions #
+> tim??{(tim){yes} (bob){no}}! ⏎ # list of conditions #
 {yes}
 ```
 
@@ -576,15 +582,17 @@ This gives us the same functionality as an if statement in other languages.
     (5){Found five.}
     (7){Found seven.}
     (_){Found something else.}
-  } ⏎
+  }! ⏎
 ```
 
 Punk will find the first matching pattern and then query that template.
 
 > NOTE: Results of conditional queries:
-> - `value?(pattern)` — bare predicate. Returns `TRUE` if the pattern matches, `FALSE` if not.
-> - `value?(pattern){template}` — if-then. Returns the template result on match, `NULL` on miss.
-> - `value??{ ... }` — multi-branch. First match wins. With no matching branch it's a **runtime error**. To make a `??` total, give it a final catch-all branch — `(_){...}` for a single thing, `(*){...}` for any shape at all.
+> - `value?(pattern)` — bare predicate (no template). Returns `TRUE` if the pattern matches, `FALSE` if not. No `!` needed.
+> - `value?(pattern){template}!` — if-then. Returns the template result on match, `NULL` on miss. The trailing `!` is required.
+> - `value??{ ... }!` — multi-branch. First match wins. With no matching branch it's a **runtime error**. To make a `??` total, give it a final catch-all branch — `(_){...}` for a single thing, `(*){...}` for any shape at all. The trailing `!` is required.
+>
+> Forgetting the `!` on a body-bearing conditional is a syntax error.
 
 ### Truthiness
 
@@ -596,7 +604,7 @@ Anywhere Punk needs a yes/no answer — most commonly inside `??` branches that 
 | `NULL` | false |
 | anything else (including `0`, `{}`, `()`) | true |
 
-So a `value??{(TRUE){...}(FALSE){...}}` block covers the explicit boolean cases, and a `(_)` catch-all picks up everything else as "truthy".
+So a `value??{(TRUE){...}(FALSE){...}}!` block covers the explicit boolean cases, and a `(_)` catch-all picks up everything else as "truthy".
 
 ## Functions
 
@@ -650,7 +658,7 @@ An example function that calculates circumference using the `X` multiply built-i
 
 A function's body is a template. What comes back when you call it follows the same rule as anything else in Punk — you get the content, not extra wrapping:
 
-- If the body has **one top-level item**, the function returns *that item directly*. A function whose body is a single function literal returns the function itself; a body that is a single arithmetic call returns the number; a body that is a single dispatch (`x??{...}`) returns whatever branch matched.
+- If the body has **one top-level item**, the function returns *that item directly*. A function whose body is a single function literal returns the function itself; a body that is a single arithmetic call returns the number; a body that is a single dispatch (`x??{...}!`) returns whatever branch matched.
 - If the body has **multiple top-level items**, the function returns the whole template containing them in order.
 - A return-range constraint (`}~`) on the function lets you slice the body before it goes back to the caller — useful when intermediate steps live in the body but you only want the final answer to escape.
 
@@ -678,7 +686,7 @@ For functions that work like data templates, getting the whole resulting templat
     <!{circumference? 30}??{
       (TRUE){Small Circle}
       (FALSE){Large Circle}
-    }
+    }!
 
   }  
 ```
@@ -708,7 +716,7 @@ This is because the template is calculating a circumference and storing it in a 
     <!{circumference? 30}??{
       (TRUE){Small Circle}
       (FALSE){Large Circle}
-    }
+    }!
 
   }~  
 ```
@@ -735,7 +743,7 @@ Once a name is bound, it's bound — including for the body of the function bein
     <=!{n? 1}??{
       (TRUE){1}
       (FALSE){X!{n? factorial!{-!{n? 1}}}}
-    }
+    }!
   }
 > factorial!5
 {120}
@@ -906,7 +914,7 @@ Punk doesn't bake in a single polymorphism mechanism — no classes, no multimet
     args??{
       (n:_    ){Hello n?   }
       (n:_ t:_){Hello t? n?}
-    }
+    }!
   }
 > greet!Tim
 {Hello Tim}
@@ -924,7 +932,7 @@ Because pattern slots are structural, the same `??` block dispatches on tag-styl
       (circle r:_   ){X!{X!{3.141 r?} r?} }
       (rect w:_ h:_ ){X!{w? h?}           }
       (tri b:_ h:_  ){/!{X!{b? h?} 2}     }
-    }
+    }!
   }
 > area!{circle r:5}
 78.525
@@ -941,13 +949,15 @@ Slots can be literal values, so dispatch by exact value falls out of the same me
 ```punk
 > route:(req:_){
     req??{
-      (method:GET  path:/      *){index!req?    }
-      (method:GET  path:/about *){about!req?    }
-      (method:POST path:/login *){login!req?    }
-      (*                        ){notFound!req? }
-    }
+      (method:GET  path:\/      *){index!req?    }
+      (method:GET  path:\/about *){about!req?    }
+      (method:POST path:\/login *){login!req?    }
+      (*                         ){notFound!req? }
+    }!
   }
 ```
+
+Note `\/` — `/` is a reserved character outside patterns and strings, so a literal slash in a value position is escaped. Inside a pattern slot, `/` always starts a regex literal — use `\/` there too if you want a literal slash.
 
 ### By regex — dispatch on textual shape
 
@@ -959,7 +969,7 @@ Regex slots dispatch on the *kind* of text, which covers the cases another langu
       (n:/^\d+$/         ){integer}
       (h:/^#[0-9a-f]{6}$/){color  }
       (_                 ){other  }
-    }
+    }!
   }
 ```
 
@@ -1007,19 +1017,21 @@ To call use the greeters...
 
 Because a name-path query (`http.serve!…`, `db.read!…`) is just navigation into a template, swapping the *object* swaps the implementation. The same call site works against any template that carries the right names — the Punk version of structural typing or duck-typed protocols.
 
+The trick when the receiver is itself bound to a name is the `?.` query-chain head: `p?.print!{...}` says "fetch what `p` is bound to, then follow `.print`". If `p` is bound to the bareword `printer`, the `?` step also dereferences that bareword as a name in scope, landing on the `printer` template before walking into `.print`. Without the leading `?`, `p.print!` would try to walk a path *inside* the bareword `printer` and fail.
+
 ```punk
 > printer:{
-    print:(msg:_){msg?->log!}
+    print:(msg:_){upper!{msg?}}
   }
 
 > silent-printer:{
     print:(msg:_){}
   }
 
-> log-it:(p:_ m:_){ p.print!m? }
+> log-it:(p:_ m:_){ p?.print!{m?} }
 
 > log-it!{printer hello}
-hello
+"HELLO"
 > log-it!{silent-printer hello}
 ```
 
@@ -1354,10 +1366,10 @@ keystore.open!todo->[db]!
 
 dispatch:(req:_){
   req??{
-    (method:GET  path:/      *){index!req?     }
-    (method:POST path:/todo  *){createTodo!req? }
-    (*                        ){notFound!req?  }
-  }
+    (method:GET  path:\/      *){index!req?     }
+    (method:POST path:\/todo  *){createTodo!req? }
+    (*                         ){notFound!req?  }
+  }!
 }
 
 http.serve!{8080 dispatch}
@@ -1378,8 +1390,8 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | `(` `)` | Pattern delimiters | Anywhere outside an escape |
 | `[` `]` | Box delimiters — `[name]` refers to a box; the brackets *are* the box. Boxes come into existence on first write: `value->[name]!` | Anywhere outside an escape |
 | `:` | Names a thing — `name:value` | Anywhere outside an escape |
-| `?` | Query — resolves nested queries in a template | Suffix of a path token; `?(pattern){...}` is the single-condition form; `??{(p1){...}(p2){...}}` is the multi-condition form |
-| `!` | Execute — runs a function or evaluates a template, by name or directly. Also invokes any embedded calls like `+!`. | Suffix of a path token, or of a function name |
+| `?` | Query — resolves nested queries in a template | Suffix of a path token; `?(pattern){...}!` is the single-condition form (trailing `!` required when a template body is attached); `??{(p1){...}(p2){...}}!` is the multi-condition form (same rule); `head?.seg.seg` is the query-chain head — a `?` glued to the first segment dereferences a bareword binding once before walking the rest of the path |
+| `!` | Execute — runs a function or evaluates a template, by name or directly. Also invokes any embedded calls like `+!`. A body-bearing conditional (`?(p){...}!`, `??{...}!`) requires a trailing `!`. | Suffix of a path token, or of a function name |
 | `'` | Partial application — like `!` but returns a new function with the leftmost parameters pre-filled | Suffix of a function name where `!` would otherwise execute it |
 | `.` | Path segment separator | Only inside a path token that ends in `?` or `!` |
 | `.:?` | Name segment — resolves to the name of the referenced thing, or `NULL` if it has no name | At the end of a path |
@@ -1387,7 +1399,7 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | `~` | Range / last-item | Inside paths (`.~`, `.N~M`), as a value constructor (`5~15`), and as a function-return constraint (`{…}~`) |
 | `#` | Comment delimiter / length-of segment | `#` is a paired comment delimiter anywhere outside of escapes — `# ... #`. Comments vanish entirely (zero-width); unclosed `#` is a syntax error. The one exception is `.#?` at the end of a path, where `#` is the length-of segment. |
 | `->` | Pipeline operator | Joins two sides with no whitespace; left flows into right when the chain ends in `!`, otherwise the chain is a composed function |
-| `/` `/` | Regex literal delimiters | Used as a pattern slot to match text against a regular expression |
+| `/` `/` | Regex literal delimiters | Reserved — `/` outside `(...)` or `"..."` is a syntax error. Inside a pattern `(...)` a `/`-delimited literal is a regex pattern slot. `\/` escapes a literal slash; `/!` is the division builtin (a complete word, not a bare `/`). |
 | `_` | Single wildcard | Only inside patterns |
 | `*` | Variadic wildcard (zero or more) | Only inside patterns |
 | `\` | Escape character — makes the next character literal | Anywhere a special character needs to appear as text |
