@@ -533,7 +533,7 @@ function evalExec(node, env) {
 // on Fn values, and by HOF builtins that want to invoke callbacks.
 function applyCallable(target, argsTmpl, env, node) {
   if (target && target.kind === 'Builtin') {
-    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl, callFn: (fn, a, n) => applyCallable(fn, a, env, n) });
+    return target.fn(argsTmpl, env, { evalItem, cascadeTmpl, callFn: (fn, a, n) => applyCallable(fn, a, env, n), node });
   }
   if (target && target.kind === 'Fn') {
     // A Fn extracted from an inert Tmpl (literal binding like

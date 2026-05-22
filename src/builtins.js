@@ -32,9 +32,10 @@ function toNum(v, node) {
   if (v && v.kind === 'Tmpl' && v.items.length === 1) {
     return toNum(v.items[0], node);
   }
+  const loc = (v && v.line) ? v : node;
   throw new PunkRuntimeError(
     'expected a number',
-    node && node.line, node && node.col,
+    loc && loc.line, loc && loc.col,
   );
 }
 
@@ -205,7 +206,7 @@ const boolValue = (b) => b ? TRUE : FALSE;
 // `f!X` (shortcut for `f!{X}`), `f!"text"`, or `f!{x y z}`. In the
 // first two cases the args Tmpl is a singleton wrapper — unwrap it.
 // In the multi-item case, the whole Tmpl IS the value (a list/struct).
-const singleArg = (args) => {
+const singleArg = (args, _env, ctx) => {
   const xs = argsItems(args);
   if (xs.length === 1) return xs[0];
   return args || mkTmpl([]);
@@ -241,56 +242,56 @@ export const builtinArity = {
 
 export const builtins = {
   // ----- Arithmetic ---------------------------------------------------
-  '+': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '+': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     return numWord(xs.reduce((a, b) => a + b, 0));
   },
-  'X': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  'X': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     return numWord(xs.reduce((a, b) => a * b, 1));
   },
-  '-': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '-': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`-! expects 2 arguments, got ${xs.length}`);
     }
     return numWord(xs[0] - xs[1]);
   },
-  '/': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '/': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`/! expects 2 arguments, got ${xs.length}`);
     }
     return numWord(xs[0] / xs[1]);
   },
-  '^': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '^': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`^! expects 2 arguments, got ${xs.length}`);
     }
     return numWord(Math.pow(xs[0], xs[1]));
   },
-  '%': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '%': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`%! expects 2 arguments, got ${xs.length}`);
     }
     return numWord(xs[0] % xs[1]);
   },
-  'min': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  'min': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     return numWord(Math.min(...xs));
   },
-  'max': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  'max': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     return numWord(Math.max(...xs));
   },
-  'abs':   (args) => numWord(Math.abs(toNum(argsItems(args)[0]))),
-  'neg':   (args) => numWord(-toNum(argsItems(args)[0])),
-  'floor': (args) => numWord(Math.floor(toNum(argsItems(args)[0]))),
-  'ceil':  (args) => numWord(Math.ceil(toNum(argsItems(args)[0]))),
-  'round': (args) => numWord(Math.round(toNum(argsItems(args)[0]))),
-  'sqrt':  (args) => numWord(Math.sqrt(toNum(argsItems(args)[0]))),
+  'abs':   (args, _env, ctx) => numWord(Math.abs(toNum(argsItems(args)[0], ctx && ctx.node))),
+  'neg':   (args, _env, ctx) => numWord(-toNum(argsItems(args)[0], ctx && ctx.node)),
+  'floor': (args, _env, ctx) => numWord(Math.floor(toNum(argsItems(args)[0], ctx && ctx.node))),
+  'ceil':  (args, _env, ctx) => numWord(Math.ceil(toNum(argsItems(args)[0], ctx && ctx.node))),
+  'round': (args, _env, ctx) => numWord(Math.round(toNum(argsItems(args)[0], ctx && ctx.node))),
+  'sqrt':  (args, _env, ctx) => numWord(Math.sqrt(toNum(argsItems(args)[0], ctx && ctx.node))),
   'rand':  () => {
     // Float in [0, 1] inclusive. 21+32 = 53 bits of randomness divided
     // by (2^53 - 1) so both endpoints are reachable.
@@ -302,43 +303,43 @@ export const builtins = {
   },
 
   // ----- Comparison ---------------------------------------------------
-  '=': (args) => {
+  '=': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`=! expects 2 arguments, got ${xs.length}`);
     }
     return boolValue(equals(xs[0], xs[1]));
   },
-  '<>': (args) => {
+  '<>': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`<>! expects 2 arguments, got ${xs.length}`);
     }
     return boolValue(!equals(xs[0], xs[1]));
   },
-  '<': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '<': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`<! expects 2 arguments, got ${xs.length}`);
     }
     return boolValue(xs[0] < xs[1]);
   },
-  '>': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '>': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`>! expects 2 arguments, got ${xs.length}`);
     }
     return boolValue(xs[0] > xs[1]);
   },
-  '<=': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '<=': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`<=! expects 2 arguments, got ${xs.length}`);
     }
     return boolValue(xs[0] <= xs[1]);
   },
-  '>=': (args) => {
-    const xs = argsItems(args).map((v) => toNum(v));
+  '>=': (args, _env, ctx) => {
+    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`>=! expects 2 arguments, got ${xs.length}`);
     }
@@ -346,7 +347,7 @@ export const builtins = {
   },
 
   // ----- Boolean ------------------------------------------------------
-  'and': (args) => {
+  'and': (args, _env, ctx) => {
     for (const v of argsItems(args)) {
       if (isTrue(v))  continue;
       if (isFalse(v)) return FALSE;
@@ -354,7 +355,7 @@ export const builtins = {
     }
     return TRUE;
   },
-  'or': (args) => {
+  'or': (args, _env, ctx) => {
     for (const v of argsItems(args)) {
       if (isFalse(v)) continue;
       if (isTrue(v))  return TRUE;
@@ -362,13 +363,13 @@ export const builtins = {
     }
     return FALSE;
   },
-  'not': (args) => {
+  'not': (args, _env, ctx) => {
     const v = singleArg(args);
     if (isTrue(v))  return FALSE;
     if (isFalse(v)) return TRUE;
     throw new PunkRuntimeError('not!: expected TRUE or FALSE');
   },
-  'xor': (args) => {
+  'xor': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`xor! expects 2 arguments, got ${xs.length}`);
@@ -380,14 +381,14 @@ export const builtins = {
   // ----- Type checks --------------------------------------------------
   'isnum':   (args) => boolValue(isNum(singleArg(args))),
   'istext':  (args) => boolValue(isTextV(singleArg(args))),
-  'islist':  (args) => {
+  'islist':  (args, _env, ctx) => {
     const v = singleArg(args);
     if (!isTmplV(v)) return FALSE;
     // True for empty or multi-item; a singleton came from auto-wrap.
     return boolValue(v.items.length !== 1);
   },
   'isfn':    (args) => boolValue(isFnV(singleArg(args))),
-  'isempty': (args) => {
+  'isempty': (args, _env, ctx) => {
     const v = singleArg(args);
     if (isTmplV(v)) return boolValue(v.items.length === 0);
     if (isTextV(v)) return boolValue(valueToText(v).length === 0);
@@ -398,11 +399,11 @@ export const builtins = {
   'upper': (args) => mkTextLit(valueToText(singleArg(args)).toUpperCase()),
   'lower': (args) => mkTextLit(valueToText(singleArg(args)).toLowerCase()),
   'trim':  (args) => mkTextLit(valueToText(singleArg(args)).trim()),
-  'chars': (args) => {
+  'chars': (args, _env, ctx) => {
     const s = storageString(singleArg(args));
     return mkTmpl(logicalChars(s).map((lc) => mkWord(logicalCharToWordText(lc))));
   },
-  'split': (args) => {
+  'split': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`split! expects 2 arguments, got ${xs.length}`);
@@ -411,7 +412,7 @@ export const builtins = {
     const target = valueToText(xs[1]);
     return mkTmpl(target.split(sep).map((s) => mkWord(escapeForWord(s))));
   },
-  'replace': (args) => {
+  'replace': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 3) {
       throw new PunkRuntimeError(`replace! expects 3 arguments, got ${xs.length}`);
@@ -422,7 +423,7 @@ export const builtins = {
     if (old === '') return mkTextLit(target);
     return mkTextLit(target.split(old).join(neu));
   },
-  'join': (args) => {
+  'join': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`join! expects 2 arguments, got ${xs.length}`);
@@ -432,7 +433,7 @@ export const builtins = {
     return mkTextLit(items.map(valueToText).join(sep));
   },
   // ----- Conversion ---------------------------------------------------
-  'num': (args) => {
+  'num': (args, _env, ctx) => {
     const s = valueToText(singleArg(args));
     if (s === '' || !/^-?\d+(\.\d+)?$/.test(s.trim())) {
       throw new PunkRuntimeError(`num!: cannot parse '${s}' as a number`);
@@ -441,7 +442,7 @@ export const builtins = {
   },
 
   // ----- Assertions ---------------------------------------------------
-  'assert': (args) => {
+  'assert': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length === 2) {
       if (equals(xs[0], xs[1])) return NULL;
@@ -457,7 +458,7 @@ export const builtins = {
   },
 
   // ----- IO -----------------------------------------------------------
-  'print': (args) => {
+  'print': (args, _env, ctx) => {
     const v = singleArg(args);
     // Text values print as raw chars (verbatim stored content, with
     // `\n`/`\t` finally turning into real newline/tab at the IO
@@ -470,16 +471,16 @@ export const builtins = {
     console.log(out);
     return NULL;
   },
-  'exists': (args) => {
+  'exists': (args, _env, ctx) => {
     const path = resolveForIO(valueToText(singleArg(args)));
     return boolValue(fs.existsSync(path));
   },
-  'read': (args) => {
+  'read': (args, _env, ctx) => {
     const path = resolveForIO(valueToText(singleArg(args)));
     const txt = fs.readFileSync(path, 'utf8');
     return mkTmpl(txt.split(/\r?\n/).map((l) => mkTextLit(l)));
   },
-  'write': (args) => {
+  'write': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`write! expects 2 arguments, got ${xs.length}`);
@@ -488,7 +489,7 @@ export const builtins = {
     fs.writeFileSync(path, resolveForIO(valueToText(xs[1])));
     return NULL;
   },
-  'append': (args) => {
+  'append': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`append! expects 2 arguments, got ${xs.length}`);
@@ -513,11 +514,11 @@ export const builtins = {
   'count':  (args, env, ctx) => collCount(args, ctx),
   'reduce': (args, env, ctx) => collReduce(args, ctx),
   'sort':   (args, env, ctx) => collSort(args, ctx),
-  'rev':    (args) => {
+  'rev':    (args, _env, ctx) => {
     const xs = argsItems(singleArg(args));
     return mkTmpl(xs.slice().reverse());
   },
-  'unique': (args) => {
+  'unique': (args, _env, ctx) => {
     const xs = argsItems(singleArg(args));
     const out = [];
     for (const it of xs) {
@@ -525,7 +526,7 @@ export const builtins = {
     }
     return mkTmpl(out);
   },
-  'contains': (args) => {
+  'contains': (args, _env, ctx) => {
     const xs = argsItems(args);
     if (xs.length !== 2) {
       throw new PunkRuntimeError(`contains! expects 2 arguments, got ${xs.length}`);
