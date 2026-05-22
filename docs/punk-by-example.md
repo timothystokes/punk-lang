@@ -62,8 +62,8 @@ Names are **immutable** once bound in a scope: rebinding `x:1` in a scope where 
 
 A few words have special meaning **in specific positions**:
 
-- `_` — inside a `()` pattern, an unnamed single-item wildcard slot. Anywhere else (template, name binding, function body), `_` is just an ordinary word — it can be a name, appear as literal text, or be used however you'd use any other word.
-- `*` — inside a `()` pattern, an unnamed variadic wildcard slot (zero or more items). Inside a function body, `*?` queries **the whole argument template** that the function was called with. Anywhere else `*` is just an ordinary word (the same way `+`, `-`, `=` are just words outside an Exec).
+- `_` — inside a `()` pattern, an unnamed single-item wildcard slot. **In a function body**, when the function's pattern is exactly `(_)` (a single anonymous slot), `_?` resolves that one slot — so you don't need to name it. Anywhere else (template, name binding, body of a multi-slot fn), `_` is just an ordinary word — `_?` outside a `(_)` body is a syntax error.
+- `*` — inside a `()` pattern, an unnamed variadic wildcard slot (zero or more items). It must be the **last** slot in the pattern — anywhere else there is no way to decide how many items it should swallow (use `_` for a single-slot hole). Inside a function body, `*?` queries **the whole argument template** that the function was called with. Anywhere else `*` is just an ordinary word (the same way `+`, `-`, `=` are just words outside an Exec).
 - `TRUE`, `FALSE`, `NULL` — the three reserved values. Always reserved, in every position.
 
 `_`, `*`, `-`, and `X` need no escaping — their special meaning is purely positional:
@@ -257,12 +257,53 @@ Here are some other ways of querying:
 | `people.1.2~3?` | `{42 black}` | `n~n` | Range: items from position `n` through position `m` inclusive. |
 | `people.1.fullname.:?` | `{fullname}` | `:` | Name: the name of the referenced thing as a Word, or `NULL` if it has no name. |
 | `add.()?` | `(a:_ b:_)` | `()` | Pattern: the pattern of a function, or `NULL` if the referenced thing is not a function. |
+| `people.1.?` | `fullname:"John Smith" age:42 hair:black ...` | `.?` | Spread: the full thing at the end of the path, inlined into the parent (Named names preserved; plain `{}` boundary dropped). See *How values splice into their surroundings* below. |
 
 > NOTE: Querying a built-in function name with `?` gives you the function itself (e.g. `+?` is the `+!` function as a value). This is how you alias a built-in under a new name: `add:+?` — bare `+` on its own would be the literal Word `+`, but `+?` looks it up and returns the function.
 
 > NOTE: Querying templates is safe. Punk does not evaluate anything when querying. It simply resolves the information as it is currently contained within the structure of a template.
 
 > NOTE: The terminal segments `.#`, `.:` and `.()` only make sense at the **end** of a path — they each return a value that isn't further structured by the same path. So `xs.#.1?` (length, then first item of it) is not a valid path; if you need to use a length or name in further work, get it out with one query and use it in the next.
+
+#### Dynamic path steps
+
+A literal path step is fixed at the time you write the code: `people.1.fullname?` always looks up `fullname` on the first person. To compute a step from a value (the way JS does `x[n]`), wrap any expression in `{...}` where the step would go.
+
+```punk
+> data:{a:1 b:2 c:3}  k:b  data.{k?}? ⏎  
+{2}
+```
+
+```punk
+> xs:{10 20 30 40}   i:3   xs.{i?}? ⏎  
+{30}
+```
+
+The result of the inner expression is interpreted by its type:
+
+- a Word/Text → name step (`.name`)
+- a number → index step (`.n`)
+- anything else (multi-item template, function, etc.) → runtime error
+
+Dynamic steps chain with literal steps in either direction, and you can have several in the same path:
+
+```punk
+> x:{a:{b:{c:99}}}  k:a   x.{k?}.b.c? ⏎  
+{99}
+> x:{a:{b:5}}  n:a  m:b   x.{n?}.{m?}? ⏎  
+{5}
+```
+
+The inner `{...}` can be any expression, not just a name lookup — a function call, arithmetic, anything that resolves to a single value:
+
+```punk
+> xs:{10 20 30 40}   xs.{+!{1 2}}? ⏎  
+{30}
+```
+
+> NOTE: Ranges (`a~b`) and length (`#`) are literal-only — they describe shape, not a value to evaluate.
+
+> NOTE: A bare Word ending in `.` is a syntax error (`foo.` is not a valid value). It's only legal when followed by a dynamic step `{...}`. To include a literal dot in a value, escape it: `end\.`.
 
 ### Templates can contain queries
 
@@ -325,24 +366,37 @@ Templates are inert until something asks Punk to run them. A template just sitti
 
 The `~` constraint on a function (`{…}~`, covered later) is part of the *shape* of the result, not a trigger — slicing only happens once the function is actually called with `!`.
 
-### How values splice into their surroundings
+### How values splice into their surroundings — `?` vs `.?`
 
-When a cascade resolves a value and slots it back into the surrounding form, the splicing rule depends on what that surrounding form is:
+A query has two flavours. The terminator decides how the resolved value lands in the surrounding form:
 
-- **Into a template** the resolved value's items are *spread* into the parent. This is composition. A template that resolves to `{Tim Jones}` adds both `Tim` and `Jones` to the parent — not a nested `{Tim Jones}`.
-- **Into a string** the resolved value is *stringified*: its items are joined into the surrounding text as plain characters (multi-item templates are joined by a single space). The structure flattens away because a string is just characters.
+- `ref?` returns **the value** at the end of the path and lands it as **one item**. The outer name is stripped if the slot was Named, but no spreading happens — a tmpl value lands nested with its `{}` intact.
+- `ref.?` returns **the full thing** at the end of the path and lands it **in place, without an extra `{}` wrapper**:
+  - If the full thing is a Named (e.g. `birthday:{...}`) it lands as that Named — name and all.
+  - If the full thing is an unwrapped Tmpl (literal `{b c d}` or a value whose slot has no name) the `{}` boundary is dropped and its items splice inline.
+  - If the full thing is a bare Word/Number/Text it lands as that one item.
 
 ```punk
 > name:{Tim Jones}
 
-> {name is name?}!     ⏎ # composition — items spread into the parent template #
+> {name is name?}!     ⏎ # value as one item — the {} stays around it #
+{name is {Tim Jones}}
+
+> {name is name?.?}!   ⏎ # full thing, inlined — items splice into the parent #
 {name is Tim Jones}
 
-> "name is {name?}"!   ⏎ # stringification — items become text inside the string #
+> "name is {name?}"!   ⏎ # stringified into a string — joined by spaces #
 "name is Tim Jones"
 ```
 
-The same rule applies when the bound value is a single word — `name:Bob` auto-wraps to `{Bob}`, so `{hi name?}!` is `{hi Bob}` and `"Hello {name?}"!` is `"Hello Bob"`. The auto-wrap and the splice rule together make the single-value case look the way you'd expect, but the underlying rule is the same: templates spread, strings stringify.
+Strings are simpler — there is no `.?` distinction in a string because text has no structure: the value is stringified (multi-item templates joined by a single space) however it was resolved.
+
+The same rules apply when the bound value is a single word — `name:Bob` auto-wraps to `{Bob}`, so `{hi name?}!` is `{hi {Bob}}` (nested singleton) and `{hi name?.?}!` is `{hi Bob}` (inlined). Inside a string they both render as `"hi Bob"`.
+
+Common idioms:
+
+- `person.birthday.?` walks to the `birthday` slot and inlines the full Named thing — `birthday:{day:12 month:June year:1997}` lands in the parent name-and-all.
+- `person.birthday?.?` first reads the value (`{day:12 month:June year:1997}`), then `.?` on that drops the `{}` and inlines the items: `day:12 month:June year:1997`.
 
 ## Punk Data Notation (PDN)
 
@@ -432,16 +486,16 @@ Literals and wildcards can be mixed in the same pattern. A literal slot matches 
 > (TRUE _ _) ⏎ # three things starting with {TRUE} #
 ```
 
-The variadic wildcard `*` consumes any number of things — zero or more — and can be combined with fixed slots to match "this then anything", "anything then that", or "this surrounded by anything".
+The variadic wildcard `*` consumes any number of things — zero or more. It must be the **last** slot in the pattern. Anywhere earlier there would be no way to decide how many items to swallow — use `_` when you mean exactly one slot.
 
 ```punk
+> (*) ⏎ # any number of things (including zero) #
 > (_ *) ⏎ # one thing followed by any number of others #
-> (* _) ⏎ # any number of things followed by exactly one #
-> (start * end) ⏎ # begins with {start}, ends with {end}, anything between #
-> (* TRUE *) ⏎ # contains {TRUE} somewhere — anywhere #
+> (start *) ⏎ # begins with {start}, then any number of others #
+> (_ _ *) ⏎ # at least two things; first two are free #
 ```
 
-> NOTE: Only one variadic `*` slot is allowed in a pattern, because two would make the split between them ambiguous.
+> NOTE: Only one variadic `*` slot is allowed in a pattern, and it must be the last slot.
 
 Patterns nest. A slot in a pattern can itself be a pattern, which constrains the shape of the *thing* at that position.
 
@@ -458,7 +512,7 @@ You can give the slots in a pattern names. The name is just a local binding — 
 
 ```punk
 > (head:_ tail:*) ⏎ # first thing bound to head; rest bound to tail #
-> (first:_ middle:* last:_) ⏎ # three names spanning a template of two or more #
+> (first:_ second:_ rest:*) ⏎ # at least two; first two named, rest captured #
 > (name:John age:_) ⏎ # first must be {John}, second is bound to age #
 ```
 
@@ -1140,12 +1194,11 @@ The collection built-ins operate on a template as a sequence of things. They nev
 > - `double:map'doubleFn` is a list transformer — `double!{1 2 3}` → `{2 4 6}`
 > - `sum:reduce'{+! 0}` is a list summer — `sum!{1 2 3}` → `{6}`
 
-> NOTE: Callback signature for collection HOFs is `(value index key)`:
-> - `value` — the item itself, unwrapped if it's a NamedThing
-> - `index` — its 1-based position in the source
-> - `key`   — the binding name if the item was a NamedThing, otherwise `NULL`
+> NOTE: Callback signature for collection HOFs is `(item)` or `(item index)`:
+> - `item` — the value at this position, with its name preserved if it was Named (use `item.:?` to read the name, `item?` for the value).
+> - `index` — its 1-based position in the source. Optional: leave this slot off if you don't need it.
 >
-> The callback is always called with three things, so its pattern must account for all three. When you only care about the value, swallow the rest with a variadic — `(v:_ *)` — or name the slots you want and use `_` placeholders for the rest: `(v:_ _ _)`. A bare `(v:_)` would fail the arity check.
+> The HOF introspects the callback's arity and binds accordingly — `(v:_)` receives just the item, `(v:_ i:_)` receives item and index.
 >
 > `reduce!` is the exception — its callback is a fold and receives `(acc value)`. Accumulator first so a partial like `step:reduce'fn` is meaningful with the seed and collection still open.
 
@@ -1164,11 +1217,11 @@ The collection built-ins operate on a template as a sequence of things. They nev
 | `contains!{item t}` | `TRUE` if `item` appears in `t` |
 
 ```punk
-> map!{(n:_ *){X!{n? 10}} {1 2 3}} ⏎
+> map!{(n:_)X!{n? 10} {1 2 3}} ⏎
 {10 20 30}
-> filter!{(n:_ *){>!{n? 2}} {1 2 3 4 5}} ⏎
+> filter!{(n:_)>!{n? 2} {1 2 3 4 5}} ⏎
 {3 4 5}
-> reduce!{(a:_ b:_){+!{a? b?}} 0 {1 2 3 4}} ⏎
+> reduce!{(a:_ b:_)+!{a? b?} 0 {1 2 3 4}} ⏎
 {10}
 > sort!{3 1 4 1 5 9 2 6} ⏎
 {1 1 2 3 4 5 6 9}
@@ -1176,7 +1229,7 @@ The collection built-ins operate on a template as a sequence of things. They nev
 TRUE
 ```
 
-> NOTE: Because a query splices its contents into the surrounding template, collection plumbing you'd expect to find as functions in other languages — prepend, append, concat, slice — is already covered by template composition. For example `{x? xs?}` prepends `x` to `xs`, and `xs.2~?` is the tail. Only operations that *compute* (transform, search, summarise) live here.
+> NOTE: Collection plumbing you'd expect to find as functions in other languages — prepend, append, concat, slice — is already covered by template composition with `.?` spread. For example `{x? xs?.?}` prepends `x` to the items of `xs`, and `xs.2~?` is the tail. Only operations that *compute* (transform, search, summarise) live here.
 
 ### Text
 

@@ -1,6 +1,6 @@
 {
   "name": "punk",
-  "version": "1.0.0",
+  "version": "0.2.1",
   "description": "Punk is a functional programming language designed for concise and expressive data manipulation. It features a unique syntax that emphasizes readability and composability, with a focus on functional programming patterns and data transformation.",
   "type": "module",
   "main": "src/cli.js",

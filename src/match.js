@@ -116,7 +116,9 @@ function matchSlot(item, slot, bindings) {
       return bind(bindings, slot.name, regexMatchTmpl(r, re));
     }
     if (!matchSlot(unwrapped, slot.value, bindings)) return false;
-    return bind(bindings, slot.name, unwrapped);
+    // Bind to the ORIGINAL item (Named-preserved), not the unwrapped value,
+    // so the binding can reflect on its name via `.:?`.
+    return bind(bindings, slot.name, item);
   }
   if (isWildcard(slot)) return true;
   if (slot.kind === 'Regex') {
@@ -143,36 +145,34 @@ function matchSlot(item, slot, bindings) {
 }
 
 function matchPatternItems(items, slots, bindings) {
-  // Find variadic position (at most one — parseValidate enforces).
-  let varIdx = -1;
-  for (let i = 0; i < slots.length; i++) {
-    const inner = slotInner(slots[i]);
-    if (isVariadic(inner)) { varIdx = i; break; }
-  }
+  // Variadic, if present, is always the LAST slot (parseValidate enforces).
+  const lastIdx = slots.length - 1;
+  const hasVariadic =
+    slots.length > 0 && isVariadic(slotInner(slots[lastIdx]));
 
-  if (varIdx === -1) {
+  if (!hasVariadic) {
     if (items.length !== slots.length) return false;
     for (let i = 0; i < items.length; i++) {
       if (!matchSlot(items[i], slots[i], bindings)) return false;
     }
+    // Single-slot wildcard `(_)` also binds `_` so `_?` can resolve it.
+    if (slots.length === 1 && isWildcard(slots[0])) {
+      bind(bindings, '_', items[0]);
+    }
     return true;
   }
 
-  const head = slots.slice(0, varIdx);
-  const tail = slots.slice(varIdx + 1);
-  if (items.length < head.length + tail.length) return false;
+  const head = slots.slice(0, lastIdx);
+  if (items.length < head.length) return false;
 
   for (let i = 0; i < head.length; i++) {
     if (!matchSlot(items[i], head[i], bindings)) return false;
   }
-  for (let i = 0; i < tail.length; i++) {
-    const itemIdx = items.length - tail.length + i;
-    if (!matchSlot(items[itemIdx], tail[i], bindings)) return false;
-  }
-  // Variadic captures the middle. Bind to a Tmpl of those items if named.
-  const variadicSlot = slots[varIdx];
+  // Trailing variadic captures everything left over. Bind to a Tmpl of
+  // those items if named.
+  const variadicSlot = slots[lastIdx];
   if (variadicSlot.kind === 'Named') {
-    const captured = items.slice(head.length, items.length - tail.length);
+    const captured = items.slice(head.length);
     if (!bind(bindings, variadicSlot.name, { kind: 'Tmpl', items: captured })) return false;
   }
   return true;

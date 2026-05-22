@@ -1,13 +1,16 @@
 // Collection built-ins.
 //
 // From doc § "Collections":
-//   - Callback signature is (value index key) — variadic `*` required
-//     when a callback only cares about `value` (strict arity).
+//   - HOF callbacks take one or two args: `(item)` or `(item index)`.
+//     `item` preserves Named-ness; use `item.:?` for its name.
 //   - `reduce!` is special: its callback is (acc value).
 //   - HOFs take behaviour first, data last (so `'`-partial is useful).
 //
 // Functions covered:
 //   map filter reduce find each count sort rev unique contains
+//
+// Callback-arity is covered exhaustively in hof-arity.test.mjs;
+// this file only sanity-checks each builtin's data behaviour.
 //
 // Notes on REPL display:
 //   - A template prints as `{...}`.
@@ -22,50 +25,30 @@ import { punk, punkThrows } from './_punk.mjs';
 
 test('map! — applies fn to each item', () => {
   assert.equal(
-    punk('map!{(n:_ *){X!{n? 10}} {1 2 3}}'),
+    punk('map!{(n:_){X!{n? 10}} {1 2 3}}'),
     '{10 20 30}'
   );
 });
 
 test('map! — empty template maps to empty', () => {
   assert.equal(
-    punk('map!{(n:_ *){X!{n? 2}} {}}'),
+    punk('map!{(n:_){X!{n? 2}} {}}'),
     '{}'
   );
-});
-
-test('map! — callback can use index (2nd arg)', () => {
-  // Pair each item with its 1-based index.
-  assert.equal(
-    punk('map!{(v:_ i:_ _){{i? v?}} {a b c}}'),
-    '{{1 a} {2 b} {3 c}}'
-  );
-});
-
-test('map! — callback can use key (3rd arg) on NamedThings', () => {
-  // For named items, key is the binding name; otherwise NULL.
-  assert.equal(
-    punk('map!{(v:_ _ k:_){{k? v?}} {x:1 y:2}}'),
-    '{{x 1} {y 2}}'
-  );
-});
-
-test('map! — bare `(v:_)` callback fails arity', () => {
-  punkThrows('map!{(n:_){X!{n? 2}} {1 2 3}}');
 });
 
 // ---- filter! ----------------------------------------------------------
 
 test('filter! — keeps items where predicate is TRUE', () => {
   assert.equal(
-    punk('filter!{(n:_ *){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('filter!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
     '{3 4 5}'
   );
 });
 
 test('filter! — empty result when no item passes', () => {
   assert.equal(
-    punk('filter!{(n:_ *){>!{n? 100}} {1 2 3}}'),
+    punk('filter!{(n:_){>!{n? 100}} {1 2 3}}'),
     '{}'
   );
 });
@@ -91,14 +74,14 @@ test('reduce! — seed is returned for empty collection', () => {
 
 test('find! — first item matching predicate', () => {
   assert.equal(
-    punk('find!{(n:_ *){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('find!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
     '{3}'
   );
 });
 
 test('find! — NULL when nothing matches', () => {
   assert.equal(
-    punk('find!{(n:_ *){>!{n? 100}} {1 2 3}}'),
+    punk('find!{(n:_){>!{n? 100}} {1 2 3}}'),
     'NULL'
   );
 });
@@ -108,7 +91,7 @@ test('find! — NULL when nothing matches', () => {
 test('each! — returns NULL', () => {
   // Side-effect only; value is NULL.
   assert.equal(
-    punk('each!{(v:_ *){v?} {1 2 3}}'),
+    punk('each!{(v:_){v?} {1 2 3}}'),
     'NULL'
   );
 });
@@ -117,14 +100,14 @@ test('each! — returns NULL', () => {
 
 test('count! — number of items matching predicate', () => {
   assert.equal(
-    punk('count!{(n:_ *){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('count!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
     '{3}'
   );
 });
 
 test('count! — zero when no item matches', () => {
   assert.equal(
-    punk('count!{(n:_ *){>!{n? 100}} {1 2 3}}'),
+    punk('count!{(n:_){>!{n? 100}} {1 2 3}}'),
     '{0}'
   );
 });
@@ -179,7 +162,7 @@ test('contains! — FALSE when absent', () => {
 // ---- partial-friendly arg order ---------------------------------------
 
 test("partial — `map'fn` is a unary list transformer", () => {
-  const src = `double:map'(n:_ *){X!{n? 2}}
+  const src = `double:map'(n:_){X!{n? 2}}
     double!{1 2 3}`;
   assert.equal(punk(src), '{2 4 6}');
 });

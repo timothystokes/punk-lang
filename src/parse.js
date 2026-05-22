@@ -64,12 +64,15 @@ const mkWord    = (text, line, col)     => ({ kind: 'Word',    text,  line, col 
 // surrounding parseWords walk — see attachLeadingDotPaths.
 //
 // Path segments[]:
-//   { kind: 'index',  n: <int> }                  // .1
-//   { kind: 'name',   text: <string> }            // .fullname
-//   { kind: 'length' }                            // .#  (final only)
-//   { kind: 'nameOf' }                            // .:  (final only)
-//   { kind: 'pattern' }                           // .() (final only)
-//   { kind: 'range',  from: <int|null>, to: <int|null> }
+//   { kind: 'index',   n: <int> }                  // .1
+//   { kind: 'name',    text: <string> }            // .fullname
+//   { kind: 'length' }                             // .#  (final only)
+//   { kind: 'nameOf' }                             // .:  (final only)
+//   { kind: 'pattern' }                            // .() (final only)
+//   { kind: 'range',   from: <int|null>, to: <int|null> }
+//   { kind: 'dynamic', expr: <Node> }              // .{q?}  — eval expr; result
+//                                                  //   chooses index (number) or
+//                                                  //   name (text) at runtime
 //
 // parseWords is pure: it returns a new tree.
 
@@ -524,6 +527,18 @@ const decodeWord = (w) => {
     || endsWithUnescaped(text, '!')
     || endsWithUnescaped(text, "'");
   const last = endsPath ? text[text.length - 1] : null;
+
+  // A Word ending in an unescaped `.` is only valid as the head of a
+  // dynamic-path chain (handled earlier by assembleDynamicPaths). If
+  // we reach decodeWord with a trailing dot, the chain didn't form —
+  // so this is a syntax error. Use `\.` to embed a literal dot.
+  if (!endsPath && endsWithUnescaped(text, '.')) {
+    throw new PunkSyntaxError(
+      `'${text}' — a word cannot end with '.' (use \\. for a literal dot)`,
+      line, col,
+    );
+  }
+
   if (!endsPath && hasUnescaped(text, '~')) {
     const { from, to } = decodeRangeWord(text, line, col);
     return copy(mkRange(from, to, line, col));
@@ -570,8 +585,19 @@ const decodeWord = (w) => {
 
   // Path-end (Query / Exec / Partial with no embedded args)
   if (endsPath) {
-    const body = text.slice(0, -1);
+    let body = text.slice(0, -1);
+    // `.?` spread terminator: a trailing dot just before `?` flips this
+    // into a "spread the full thing" query (P1 — uniform query model).
+    let spread = false;
+    if (last === '?' && body.length >= 1 && body[body.length - 1] === '.'
+        && !(body.length >= 2 && body[body.length - 2] === '\\')) {
+      spread = true;
+      body = body.slice(0, -1);
+    }
     if (body === '') {
+      if (spread) {
+        throw new PunkSyntaxError(`'.?' with no path head`, line, col);
+      }
       throw new PunkSyntaxError(`'${last}' with no path`, line, col);
     }
     const segs = splitPath(body, line, col);
@@ -600,7 +626,9 @@ const decodeWord = (w) => {
     const make =
       last === '?' ? mkQuery :
       last === '!' ? mkExec  : mkPartial;
-    return copy(make(headNode || headRaw, tail, line, col));
+    const node = make(headNode || headRaw, tail, line, col);
+    if (spread) node.spread = true;
+    return copy(node);
   }
 
   // Bare number literal
@@ -642,6 +670,12 @@ const coalesceDots = (items) => {
     while (j < items.length) {
       const nx = items[j];
       if (nx.kind !== 'Word' || !nx.glued) break;
+      // Don't merge across a path terminator: if `cur` already ends in
+      // `?`/`!`/`'` (unescaped), what follows starts a NEW path/exec
+      // (e.g. `p.birthday?.?` → [Word('p.birthday?'), Word('.?')]).
+      const curLast = cur.text[cur.text.length - 1];
+      const curEsc = cur.text.length >= 2 && cur.text[cur.text.length - 2] === '\\';
+      if (!curEsc && (curLast === '?' || curLast === '!' || curLast === "'")) break;
       const canMerge = startsSep(nx.text) || endsSep(cur.text);
       if (!canMerge) break;
       cur = {
@@ -657,6 +691,246 @@ const coalesceDots = (items) => {
   return out;
 };
 
+// Assemble dynamic-path sequences.
+//
+// After coalesceDots, a path like `xs.{n?}?` shows up as the items
+// `[Word('xs.'), Tmpl({n?}), Word('?')]` (with Word/Word merging into
+// `xs.` but stopping at the Tmpl). This pass collapses such a chain
+// into a single Query/Exec/Partial node whose segments may include a
+// new `dynamic` kind carrying the inner Tmpl as an expression to be
+// evaluated at runtime.
+//
+// Two trigger shapes are recognised:
+//   (a) Word-headed: a Word ending with `.` (and containing at least
+//       one `.`) immediately followed by a glued Tmpl.
+//         e.g. `xs.{n?}?` → [Word('xs.'), Tmpl, Word('?')]
+//   (b) Prev-sibling-headed: a previously-emitted sibling followed by
+//       a glued Word that starts AND ends with `.` (or is just `.`),
+//       followed by a glued Tmpl.
+//         e.g. `(1 2 3).{n?}?` → [Pattern, Word('.'), Tmpl, Word('?')]
+//
+// The chain is walked greedily, alternating Tmpl and dot-Word fragments,
+// until a glued Word ending in `?`/`!`/`'` terminates it.
+const assembleDynamicPaths = (items) => {
+  const out = [];
+  let i = 0;
+  while (i < items.length) {
+    const it = items[i];
+    const nx = items[i + 1];
+
+    // (a) Word-headed.
+    if (it.kind === 'Word'
+      && it.text.length >= 2 && it.text.endsWith('.')
+      && it.text.includes('.')
+      && nx && nx.glued && nx.kind === 'Tmpl') {
+      const built = collectDynPath(items, i, /*headOverride=*/null);
+      out.push(built.node);
+      i = built.next;
+      continue;
+    }
+
+    // (b) Prev-sibling-headed.
+    const prev = out[out.length - 1];
+    if (prev && it.kind === 'Word' && it.glued
+      && it.text.startsWith('.') && it.text.endsWith('.')
+      && nx && nx.glued && nx.kind === 'Tmpl') {
+      out.pop();
+      // The prev sibling was emitted by this pass before its inner
+      // siblings were walked. As it becomes the head of a Query node,
+      // it won't be revisited by walkSiblings — so walk it now.
+      const headNode = (prev.kind === 'Word') ? prev : walkNode(prev);
+      if (prev.glued) headNode.glued = true;
+      const built = collectDynPath(items, i, /*headOverride=*/headNode);
+      out.push(built.node);
+      i = built.next;
+      continue;
+    }
+
+    out.push(it);
+    i++;
+  }
+  return out;
+};
+
+// Walk a glued path chain starting at items[i] and produce one
+// Query/Exec/Partial node. `headOverride` is non-null when the chain
+// is attached to a preceding sibling (case b above).
+const collectDynPath = (items, i, headOverride) => {
+  const startWithItem = headOverride === null;
+  const lineRef = items[i].line;
+  const colRef = items[i].col;
+
+  // Interleaved string/Tmpl parts. Strings carry raw fragment text
+  // including any leading/trailing `.` separators.
+  const parts = [];
+  parts.push(items[i].text);
+  let j = i + 1;
+
+  // After a string-fragment ending in `.`, the next item must be a
+  // glued Tmpl. After a Tmpl, the next item must be a glued Word
+  // (either ending in `.` to continue, or in `?`/`!`/`'` to terminate).
+  while (j < items.length) {
+    const t = items[j];
+    if (!t.glued || t.kind !== 'Tmpl') {
+      throw new PunkSyntaxError(
+        "dynamic path step expected after '.'",
+        items[j - 1].line, items[j - 1].col,
+      );
+    }
+    parts.push(t);
+    j++;
+    const after = items[j];
+    if (!after || !after.glued || after.kind !== 'Word') {
+      throw new PunkSyntaxError(
+        "dynamic path step must be followed by a literal segment or terminator (?, !, ')",
+        t.line, t.col,
+      );
+    }
+    parts.push(after.text);
+    j++;
+    const lc = after.text[after.text.length - 1];
+    if (lc === '?' || lc === '!' || lc === "'") break;
+    if (!after.text.startsWith('.') || !after.text.endsWith('.')) {
+      throw new PunkSyntaxError(
+        `bad mid-path fragment '${after.text}'`,
+        after.line, after.col,
+      );
+    }
+  }
+
+  // Last string fragment must end in a path terminator.
+  const lastStr = parts[parts.length - 1];
+  if (typeof lastStr !== 'string') {
+    throw new PunkSyntaxError(
+      "incomplete dynamic path — missing terminator (?, !, ')",
+      lineRef, colRef,
+    );
+  }
+  const term = lastStr[lastStr.length - 1];
+  if (term !== '?' && term !== '!' && term !== "'") {
+    throw new PunkSyntaxError(
+      "incomplete dynamic path — missing terminator (?, !, ')",
+      lineRef, colRef,
+    );
+  }
+
+  // Flatten parts into a list of raw segments ({str} or {tmpl}).
+  const rawSegs = [];
+  for (let k = 0; k < parts.length; k++) {
+    const p = parts[k];
+    const isFirst = k === 0;
+    const isLast = k === parts.length - 1;
+    if (typeof p !== 'string') {
+      rawSegs.push({ tmpl: p });
+      continue;
+    }
+    let body = p;
+    if (isLast) body = body.slice(0, -1); // strip terminator
+    if (startWithItem && isFirst) {
+      // First fragment must look like "x." or "x.foo." — head + maybe
+      // some literal segments, then a trailing '.' linking to the Tmpl.
+      if (!body.endsWith('.')) {
+        throw new PunkSyntaxError(
+          `expected '.' before dynamic step in '${p}'`, lineRef, colRef,
+        );
+      }
+      body = body.slice(0, -1);
+      const segStrs = splitPath(body, lineRef, colRef);
+      for (const s of segStrs) rawSegs.push({ str: s });
+    } else {
+      // Non-first OR prev-sibling-headed-first.
+      //   - If this is also the last fragment, body may be "" (when
+      //     the original word was just the terminator).
+      //   - Otherwise body must start with '.' and (unless last) also
+      //     end with '.' linking to the following Tmpl.
+      if (body === '') continue; // pure terminator-only last fragment
+      if (!body.startsWith('.')) {
+        throw new PunkSyntaxError(
+          `expected '.' at start of '${p}'`, lineRef, colRef,
+        );
+      }
+      body = body.slice(1);
+      if (!isLast) {
+        // Middle fragment: must end with '.' (after leading-dot strip).
+        // Body could now be "" (original was ".") — that's a pure link.
+        if (body !== '') {
+          if (!body.endsWith('.')) {
+            throw new PunkSyntaxError(
+              `expected '.' at end of '${p}'`, lineRef, colRef,
+            );
+          }
+          body = body.slice(0, -1);
+        }
+      }
+      if (body === '') continue;
+      const segStrs = splitPath(body, lineRef, colRef);
+      for (const s of segStrs) rawSegs.push({ str: s });
+    }
+  }
+
+  // Build head and segment ASTs.
+  let head;
+  let segStart = 0;
+  if (startWithItem) {
+    if (rawSegs.length === 0 || !rawSegs[0].str) {
+      throw new PunkSyntaxError('dynamic path missing head', lineRef, colRef);
+    }
+    const hs = rawSegs[0].str;
+    if (isInt(hs)) {
+      head = { kind: 'Word', text: hs, subkind: 'number', line: lineRef, col: colRef };
+    } else if (isValidPathHead(hs)) {
+      head = hs;
+    } else {
+      throw new PunkSyntaxError(`'${hs}' is not a valid path head`, lineRef, colRef);
+    }
+    segStart = 1;
+  } else {
+    head = headOverride;
+  }
+
+  const segs = [];
+  const tail = rawSegs.slice(segStart);
+  for (let k = 0; k < tail.length; k++) {
+    const rs = tail[k];
+    const isLast = k === tail.length - 1;
+    if (rs.tmpl) {
+      segs.push({ kind: 'dynamic', expr: walkNode(rs.tmpl) });
+    } else {
+      const s = rs.str;
+      if (s === '#') {
+        if (!isLast) throw new PunkSyntaxError("'#' must be the final path segment", lineRef, colRef);
+        segs.push({ kind: 'length' });
+      } else if (s === ':') {
+        if (!isLast) throw new PunkSyntaxError("':' must be the final path segment", lineRef, colRef);
+        segs.push({ kind: 'nameOf' });
+      } else if (s === '()') {
+        if (!isLast) throw new PunkSyntaxError("'()' must be the final path segment", lineRef, colRef);
+        segs.push({ kind: 'pattern' });
+      } else if (s.includes('~')) {
+        const { from, to } = decodeRangeWord(s, lineRef, colRef);
+        segs.push({ kind: 'range', from, to });
+      } else if (isInt(s)) {
+        segs.push({ kind: 'index', n: parseInt(s, 10) });
+      } else if (isName(s)) {
+        segs.push({ kind: 'name', text: s });
+      } else {
+        throw new PunkSyntaxError(`bad path segment '${s}'`, lineRef, colRef);
+      }
+    }
+  }
+
+  const make = term === '?' ? mkQuery : term === '!' ? mkExec : mkPartial;
+  const node = make(head, segs, lineRef, colRef);
+  // Propagate glue. For Word-headed, the chain sits where items[i] was;
+  // for prev-sibling-headed, it sits where the head sibling was.
+  if (startWithItem) {
+    if (items[i].glued) node.glued = true;
+  } else {
+    if (headOverride.glued) node.glued = true;
+  }
+  return { node, next: j };
+};
+
 // Walk a sibling list, decoding each Word. Handles two sibling-aware
 // rules:
 //   (a) A raw Word starting with `.` attaches to the previous sibling
@@ -664,6 +938,7 @@ const coalesceDots = (items) => {
 //   (b) A `Named` with value=null absorbs the next glued sibling.
 const walkSiblings = (items) => {
   items = coalesceDots(items);
+  items = assembleDynamicPaths(items);
   // First pass: decode each non-leading-dot word in place. Leading-dot
   // words stay as raw Word for the second pass.
   const decoded = items.map((it) => {
@@ -690,17 +965,34 @@ const walkSiblings = (items) => {
           `'${text}' is not a valid path`, line, col,
         );
       }
-      const body = text.slice(1, -1); // strip leading `.` and suffix
-      if (body === '') {
-        throw new PunkSyntaxError(`'${text}' has no segments`, line, col);
+      let body = text.slice(1, -1); // strip leading `.` and suffix
+      let spread = false;
+      if (last === '?') {
+        if (body.length >= 1 && body[body.length - 1] === '.'
+            && !(body.length >= 2 && body[body.length - 2] === '\\')) {
+          spread = true;
+          body = body.slice(0, -1);
+        } else if (body === '') {
+          // text was exactly `.?` — the leading dot IS the spread marker.
+          spread = true;
+        }
       }
-      const segs = splitPath(body, line, col);
-      const decodedSegs = decodeSegments(segs, line, col);
+      let decodedSegs;
+      if (body === '') {
+        if (!spread) {
+          throw new PunkSyntaxError(`'${text}' has no segments`, line, col);
+        }
+        decodedSegs = [];
+      } else {
+        const segs = splitPath(body, line, col);
+        decodedSegs = decodeSegments(segs, line, col);
+      }
       const make =
         last === '?' ? mkQuery :
         last === '!' ? mkExec  : mkPartial;
       // The new node inherits prev's `glued` flag (it sits where prev sat).
       const node = make(prev, decodedSegs, prev.line, prev.col);
+      if (spread) node.spread = true;
       if (prev.glued) node.glued = true;
       attached[attached.length - 1] = node;
       continue;
@@ -842,10 +1134,16 @@ const opsWalk = (node) => {
       // The head may be a node (when attached from a leading-dot path)
       // — recurse into it. Also recurse into embedded args (rare;
       // arg tmpls from mid-`!` short forms contain only a single
-      // primitive value, but be safe).
+      // primitive value, but be safe). Dynamic segments hold a
+      // sub-expression that needs operator passes too.
       const out = { ...node };
       if (node.head && typeof node.head === 'object') {
         out.head = opsWalk(node.head);
+      }
+      if (node.segments && node.segments.some((s) => s.kind === 'dynamic')) {
+        out.segments = node.segments.map((s) =>
+          s.kind === 'dynamic' ? { ...s, expr: opsWalk(s.expr) } : s,
+        );
       }
       if (node.args) out.args = opsWalk(node.args);
       return out;
@@ -1320,6 +1618,33 @@ const validateNode = (node, stack) => {
     case 'Query':
     case 'Exec':
     case 'Partial': {
+      if (node.kind === 'Query' && node.head === '_') {
+        // `_?` (and `_.x?` etc.) is only legal inside a `(_)` function
+        // — the wildcard `_` of a single-slot pattern is the only place
+        // `_` is bound as a name.
+        let ok = false;
+        for (let i = stack.length - 1; i >= 0; i--) {
+          const anc = stack[i];
+          if (anc && anc.kind === 'Fn') {
+            const ps = anc.params;
+            if (
+              ps && ps.kind === 'Pattern'
+              && ps.items.length === 1
+              && ps.items[0].kind === 'Word'
+              && ps.items[0].subkind === 'wildcard'
+            ) {
+              ok = true;
+            }
+            break;
+          }
+        }
+        if (!ok) {
+          throw new PunkSyntaxError(
+            "`_?` is only valid inside a `(_)` single-slot function",
+            node.line, node.col,
+          );
+        }
+      }
       if (node.head && typeof node.head === 'object') {
         validateNode(node.head, [...stack, node]);
       }
@@ -1327,6 +1652,8 @@ const validateNode = (node, stack) => {
         if (seg.kind === 'range') {
           // Path-segment range — bounds are seg.from / seg.to (ints or null).
           validateRangeBounds(seg, /*standalone*/ false, stack, node);
+        } else if (seg.kind === 'dynamic') {
+          validateNode(seg.expr, [...stack, node]);
         }
       }
       if (node.args) validateNode(node.args, [...stack, node]);
@@ -1356,7 +1683,8 @@ const validateNode = (node, stack) => {
     case 'Box': {
       if (node.kind === 'Pattern') {
         let varCount = 0;
-        for (const item of node.items) {
+        for (let i = 0; i < node.items.length; i++) {
+          const item = node.items[i];
           const v =
             (item.kind === 'Word' && item.subkind === 'variadic') ? item :
             (item.kind === 'Named' && item.value
@@ -1367,6 +1695,12 @@ const validateNode = (node, stack) => {
             if (varCount > 1) {
               throw new PunkSyntaxError(
                 'a pattern can have at most one variadic slot',
+                v.line, v.col,
+              );
+            }
+            if (i !== node.items.length - 1) {
+              throw new PunkSyntaxError(
+                'variadic `*` must be the last slot in a pattern',
                 v.line, v.col,
               );
             }

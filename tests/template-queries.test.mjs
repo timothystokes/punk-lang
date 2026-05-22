@@ -93,7 +93,7 @@ test('a query in a structured template is also inert until the surrounding templ
 
 test('executing a structured template resolves embedded queries', () => {
   assert.equal(
-    punk('name:Bob  {hi name?}!'),
+    punk('name:Bob  {hi name?.?}!'),
     '{hi Bob}'
   );
 });

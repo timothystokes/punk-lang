@@ -23,14 +23,14 @@ test('bare predicate — non-match returns FALSE', () => {
 
 test('if-then on match returns the template result', () => {
   assert.equal(
-    punk('number:5  number?(5){Found five.}!'),
-    '{Found five.}'
+    punk('number:5  number?(5){Found five\\.}!'),
+    '{Found five\\.}'
   );
 });
 
 test('if-then on miss returns NULL', () => {
   assert.equal(
-    punk('number:5  number?(6){Found six.}!'),
+    punk('number:5  number?(6){Found six\\.}!'),
     'NULL'
   );
 });
@@ -38,21 +38,21 @@ test('if-then on miss returns NULL', () => {
 test('multi-branch dispatch — first matching pattern wins', () => {
   const src = `number:5
     number??{
-      (5){Found five.}
-      (7){Found seven.}
-      (_){Found something else.}
+      (5){Found five\\.}
+      (7){Found seven\\.}
+      (_){Found something else\\.}
     }!`;
-  assert.equal(punk(src), '{Found five.}');
+  assert.equal(punk(src), '{Found five\\.}');
 });
 
 test('multi-branch falls through to wildcard', () => {
   const src = `number:99
     number??{
-      (5){Found five.}
-      (7){Found seven.}
-      (_){Found something else.}
+      (5){Found five\\.}
+      (7){Found seven\\.}
+      (_){Found something else\\.}
     }!`;
-  assert.equal(punk(src), '{Found something else.}');
+  assert.equal(punk(src), '{Found something else\\.}');
 });
 
 test('multi-branch with no matching branch is a runtime error', () => {

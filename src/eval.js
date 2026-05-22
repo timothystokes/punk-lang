@@ -121,7 +121,21 @@ const evalItem = (node, env) => {
       return expandRange(node);
 
     case 'Named': {
-      let value = evalItem(node.value, env);
+      let value;
+      // `name:Q.?` — when the value side is a spread Query, we want the
+      // FULL thing (Named-preserved). Mirrors the cascadeTmpl rule.
+      if (node.value && node.value.kind === 'Query' && node.value.spread) {
+        const full = evalQueryFull(node.value, env);
+        if (full === null) {
+          value = NULL;
+        } else if (full.name != null) {
+          value = { kind: 'Named', name: full.name, value: full.value };
+        } else {
+          value = full.value;
+        }
+      } else {
+        value = evalItem(node.value, env);
+      }
       // Auto-wrap rule: a bare-value binding (`x:42`, `n:hello`) is
       // shorthand for `x:{42}` / `n:{hello}`. Bare Words and Numbers
       // have no inherent delimiter, so binding wraps them in a
@@ -221,8 +235,12 @@ const sliceText = (parts, lo, hi) => {
 
 // Apply one path segment. Returns { value, name } or null (meaning
 // "fell off the end" — caller substitutes NULL).
-function walkSegment(cur, seg, node) {
-  const v = cur.value;
+function walkSegment(cur, seg, node, env) {
+  // If the current value is itself a Named, unwrap to walk into its
+  // value. The Named-name is reflected by the `:` segment (nameOf),
+  // not by walking — so it doesn't leak into deeper steps here.
+  let v = cur.value;
+  if (v && v.kind === 'Named') v = v.value;
   switch (seg.kind) {
     case 'index': {
       const n = seg.n;
@@ -251,6 +269,11 @@ function walkSegment(cur, seg, node) {
         return { value: mkText([{ lit: chars[n - 1] }]), name: null };
       }
       if (v.kind === 'Word' && v.subkind === 'number') {
+        const s = v.text;
+        if (n < 1 || n > s.length) return null;
+        return { value: mkWord(s[n - 1], 'number'), name: null };
+      }
+      if (v.kind === 'Word') {
         const s = v.text;
         if (n < 1 || n > s.length) return null;
         return { value: mkWord(s[n - 1]), name: null };
@@ -285,11 +308,17 @@ function walkSegment(cur, seg, node) {
       let n;
       if      (v.kind === 'Tmpl') n = v.items.length;
       else if (v.kind === 'Text') n = textLength(v.parts);
-      else if (v.kind === 'Word' && v.subkind === 'number') n = v.text.length;
+      else if (v.kind === 'Word') n = v.text.length;
       else return null;
       return { value: mkWord(String(n), 'number'), name: null };
     }
     case 'nameOf': {
+      // Prefer the value's own Named name (data) over the binding name
+      // (label). `x:Jan:{...}; x.:?` should give `Jan`, not `x`.
+      const raw = cur.value;
+      if (raw && raw.kind === 'Named') {
+        return { value: mkWord(raw.name), name: null };
+      }
       if (cur.name == null) return null;
       return { value: mkWord(cur.name), name: null };
     }
@@ -298,25 +327,68 @@ function walkSegment(cur, seg, node) {
       return { value: v.params, name: null };
     }
     case 'range': {
-      const isNum = v.kind === 'Word' && v.subkind === 'number';
+      const isNum  = v.kind === 'Word' && v.subkind === 'number';
+      const isWord = v.kind === 'Word';
       const len =
         v.kind === 'Tmpl' ? v.items.length :
         v.kind === 'Text' ? textLength(v.parts) :
-        isNum             ? v.text.length    : null;
+        isWord            ? v.text.length    : null;
       if (len == null) return null;
       if (seg.from === null && seg.to === null) {
         if (len === 0) return null;
-        return walkSegment(cur, { kind: 'index', n: len }, node);
+        return walkSegment(cur, { kind: 'index', n: len }, node, env);
       }
       const from = seg.from === null ? 1   : seg.from;
       const to   = seg.to   === null ? len : seg.to;
       if (v.kind === 'Tmpl') return { value: sliceTmpl(v.items, from, to), name: null };
-      if (isNum) {
+      if (isWord) {
         const lo = Math.max(1, from), hi = Math.min(len, to);
         if (lo > hi) return null;
-        return { value: mkWord(v.text.slice(lo - 1, hi)), name: null };
+        return { value: mkWord(v.text.slice(lo - 1, hi), isNum ? 'number' : 'value'), name: null };
       }
       return { value: sliceText(v.parts, from, to), name: null };
+    }
+    case 'dynamic': {
+      // The parser wraps the user's expression in a Tmpl. Evaluate
+      // by cascading (so embedded Queries / Execs actually resolve)
+      // and then unwrap the single-item result.
+      const t = cascadeTmpl(seg.expr, env);
+      if (!t || t.kind !== 'Tmpl' || t.items.length !== 1) {
+        throw new PunkRuntimeError(
+          `dynamic path step must resolve to a single value`,
+          node.line, node.col,
+        );
+      }
+      const only = t.items[0];
+      let r = (only && only.kind === 'Named') ? only.value : only;
+      // Unwrap auto-wrapped singleton tmpl (a bare-bound `n:1` evaluates
+      // to `{1}` under the auto-wrap rule).
+      if (r && r.kind === 'Tmpl' && r.items.length === 1) {
+        const inner = r.items[0];
+        r = (inner && inner.kind === 'Named') ? inner.value : inner;
+      }
+      if (!r) return null;
+      if (r.kind === 'Word' && r.subkind === 'number') {
+        const n = parseInt(r.text, 10);
+        if (!Number.isFinite(n)) {
+          throw new PunkRuntimeError(
+            `dynamic path step resolved to non-integer number '${r.text}'`,
+            node.line, node.col,
+          );
+        }
+        return walkSegment(cur, { kind: 'index', n }, node, env);
+      }
+      if (r.kind === 'Word') {
+        return walkSegment(cur, { kind: 'name', text: r.text }, node, env);
+      }
+      if (r.kind === 'Text') {
+        const s = textLogicalChars(r.parts).join('');
+        return walkSegment(cur, { kind: 'name', text: s }, node, env);
+      }
+      throw new PunkRuntimeError(
+        `dynamic path step must resolve to a name or number (got ${r.kind})`,
+        node.line, node.col,
+      );
     }
     default:
       throw new PunkRuntimeError(
@@ -326,34 +398,40 @@ function walkSegment(cur, seg, node) {
 }
 
 function evalQuery(node, env) {
+  const result = evalQueryFull(node, env);
+  if (result === null) return NULL;
+  return result.value;
+}
+
+// Like evalQuery, but returns { value, name } so callers can reconstruct
+// the original Named (for `.?` spread semantics). Returns null on
+// off-the-end walks.
+function evalQueryFull(node, env) {
   const segments = node.segments || [];
   let cur;
   if (typeof node.head === 'string') {
     if (env.has(node.head)) {
       cur = { value: env.lookup(node.head), name: node.head };
     } else if (Object.prototype.hasOwnProperty.call(builtins, node.head)) {
-      // Allow `upper?` to query a builtin reference — useful for
-      // binding a callable to a new name (`shout:upper?`).
       cur = {
         value: { kind: 'Builtin', name: node.head, fn: builtins[node.head] },
         name: node.head,
       };
     } else {
-      if (segments.length === 0) return NULL;
+      if (segments.length === 0) return null;
       throw new PunkRuntimeError(
         `name '${node.head}' is not bound`, node.line, node.col,
       );
     }
   } else {
-    // Head is a node attached via leading-dot paths (e.g. `{1 2}.1?`).
     cur = { value: evalItem(node.head, env), name: null };
   }
   for (const seg of segments) {
-    const next = walkSegment(cur, seg, node);
-    if (next === null) return NULL;
+    const next = walkSegment(cur, seg, node, env);
+    if (next === null) return null;
     cur = next;
   }
-  return cur.value;
+  return cur;
 }
 
 // ---------- Exec / function call ----------
@@ -405,13 +483,21 @@ function resolveExecTarget(node, env) {
   if (typeof node.head === 'string') {
     return resolveHeadName(node.head, node, env);
   }
-  return { value: evalItem(node.head, env), name: null };
+  let cur = { value: evalItem(node.head, env), name: null };
+  // If the head is a Query with no segments (a bare `name?`) and the
+  // resolved value is a Word that itself names a binding, follow that
+  // binding — same as the head-name deref path for `name?.foo!`.
+  if (node.head && node.head.kind === 'Query'
+      && (!node.head.segments || node.head.segments.length === 0)) {
+    cur = derefHeadWord(cur, env);
+  }
+  return cur;
 }
 
 function evalExec(node, env) {
   let cur = resolveExecTarget(node, env);
   for (const seg of node.segments || []) {
-    const next = walkSegment(cur, seg, node);
+    const next = walkSegment(cur, seg, node, env);
     if (next === null) {
       throw new PunkRuntimeError(
         `path step off the end while resolving call target`,
@@ -462,8 +548,17 @@ function applyCallable(target, argsTmpl, env, node) {
     }
     let combinedItems;
     if (remaining === 1) {
-      // One slot left — the entire call args tmpl is that single value.
-      combinedItems = [...target.prefilled, argsTmpl];
+      // One slot left. The caller supplied exactly one value for it.
+      // Direct calls cascade their args, so a Tmpl literal in source
+      // spreads its queries into argsTmpl.items; the slot then receives
+      // the full argsTmpl as that single value. Pipeline calls wrap the
+      // piped value in a single-item argsTmpl; the slot must receive
+      // the wrapped value, not the wrapper.
+      if (argsTmpl.items.length === 1) {
+        combinedItems = [...target.prefilled, argsTmpl.items[0]];
+      } else {
+        combinedItems = [...target.prefilled, argsTmpl];
+      }
     } else {
       // Multiple slots left — spread items, count must match.
       if (argsTmpl.items.length !== remaining) {
@@ -520,7 +615,7 @@ function runPipeline(node, env, seed) {
       // Reading a box as the initial value of a pipeline.
       current = readBox(s0, env);
     } else {
-      current = evalItem(s0, env);
+      current = cascadeOne(s0, env);
     }
     i = 1;
   }
@@ -583,7 +678,7 @@ function resolveCallableName(name, stage, env) {
 function evalPartial(node, env) {
   let cur = resolveExecTarget(node, env);
   for (const seg of node.segments || []) {
-    const next = walkSegment(cur, seg, node);
+    const next = walkSegment(cur, seg, node, env);
     if (next === null) {
       throw new PunkRuntimeError(
         `path step off the end while resolving partial target`,
@@ -662,15 +757,26 @@ function evalMatch(node, env) {
 // Nested Tmpls/Texts are also reached recursively: a `!` cascade
 // resolves embedded queries and runs reached functions all the way
 // down (per docs/punk-by-example.md § "When things actually run").
-// When splicing a value into a parent Tmpl during cascade: a Tmpl
-// result spreads ALL its items into the parent (composition). Other
-// kinds stay as a single item.
-function spreadIntoTmpl(node, out) {
-  if (node && node.kind === 'Tmpl') {
-    for (const it of node.items) out.push(it);
+//
+// Placement rules (P1 — uniform query model):
+//   - `?` (Query/Exec/Named/etc.): the result lands as ONE item in the
+//     parent — never spread. A Tmpl value lands NESTED.
+//   - `.?` (Query with spread flag): the FULL thing inlines into the
+//     parent — Named lands as Named (name kept); an unwrapped Tmpl
+//     drops its `{}` and its items spread inline; bare items are
+//     identity.
+function spreadFull(items, full) {
+  // `full` is { value, name } from evalQueryFull.
+  if (full.name != null) {
+    items.push({ kind: 'Named', name: full.name, value: full.value });
     return;
   }
-  out.push(node);
+  const v = full.value;
+  if (v && v.kind === 'Tmpl') {
+    for (const it of v.items) items.push(it);
+    return;
+  }
+  items.push(v);
 }
 
 function cascadeTmpl(tmpl, env) {
@@ -682,10 +788,13 @@ function cascadeTmpl(tmpl, env) {
       items.push(cascadeTmpl(it, env));
     } else if (it && it.kind === 'Text') {
       items.push(cascadeText(it, env));
+    } else if (it && it.kind === 'Query' && it.spread) {
+      const full = evalQueryFull(it, env);
+      if (full === null) { items.push(NULL); continue; }
+      spreadFull(items, full);
     } else {
-      // A Query/Exec/Named/etc. whose result is a Tmpl SPREADS into
-      // the parent (composition rule).
-      spreadIntoTmpl(evalItem(it, env), items);
+      // Query/Exec/Named/etc. results land as ONE item — no spread.
+      items.push(evalItem(it, env));
     }
   }
   return mkTmpl(items);
@@ -812,4 +921,27 @@ export function evalProgram(tree, env) {
     last = evalItem(item, env);
   }
   return last;
+}
+
+// Same as `evalProgram` but returns every top-level item's value
+// wrapped in a Tmpl — the natural semantics for REPL submissions, as
+// if the user had typed `{ ... }!`. Bindings still mutate `env` so
+// they persist across submissions.
+//
+// Special case: if there is exactly one top-level item and its value
+// is already a Tmpl, return that value as-is. Tmpls don't get
+// re-wrapped — a value already "inside a template" doesn't need
+// another wrapper.
+export function evalProgramAsTmpl(tree, env) {
+  if (!tree || tree.kind !== 'Tmpl') {
+    throw new TypeError('evalProgramAsTmpl: expected a Tmpl root');
+  }
+  const items = [];
+  for (const item of tree.items) {
+    items.push(evalItem(item, env));
+  }
+  if (items.length === 1 && items[0] && items[0].kind === 'Tmpl') {
+    return items[0];
+  }
+  return mkTmpl(items);
 }

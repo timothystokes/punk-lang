@@ -183,3 +183,90 @@ test('querying a Word via a name returns the (wrapped) Word', () => {
 test('querying into a Word literally wrapped in a template returns the Word', () => {
   assert.equal(punk('{hello}.1?'), '{hello}');
 });
+
+// ---------- Dynamic path steps `.{q?}?` ----------
+//
+// A path step wrapped in `{...}` evaluates the inner expression and uses
+// the resulting value as the step. A text/Word resolves to a name step;
+// a number resolves to an index step. Anything else is a runtime error.
+
+test('dynamic step — name from a bound value', () => {
+  assert.equal(punk('x:{a:1 b:2 c:3} n:b   x.{n?}?'), '{2}');
+});
+
+test('dynamic step — index from a bound number', () => {
+  assert.equal(punk('xs:{10 20 30 40}  i:3   xs.{i?}?'), '{30}');
+});
+
+test('dynamic step — literal Tmpl head', () => {
+  assert.equal(punk('k:b   {a:1 b:2 c:3}.{k?}?'), '{2}');
+});
+
+test('dynamic step — literal number expression as index', () => {
+  assert.equal(punk('{10 20 30}.{2}?'), '{20}');
+});
+
+test('dynamic step — chained with literal segments before and after', () => {
+  assert.equal(
+    punk('x:{a:{b:{c:99}}} k:a   x.{k?}.b.c?'),
+    '{99}',
+  );
+  assert.equal(
+    punk('x:{a:{b:{c:99}}} k:b   x.a.{k?}.c?'),
+    '{99}',
+  );
+});
+
+test('dynamic step — multiple dynamic steps in a row', () => {
+  assert.equal(
+    punk('x:{a:{b:5}}  n:a  m:b   x.{n?}.{m?}?'),
+    '{5}',
+  );
+});
+
+test('dynamic step — name lookup that misses returns NULL', () => {
+  assert.equal(punk('x:{a:1 b:2} k:nope   x.{k?}?'), 'NULL');
+});
+
+test('dynamic step — error when result is a multi-item Tmpl', () => {
+  punkThrows('x:{a:1 b:2} bad:{1 2}   x.{bad?}?');
+});
+
+test('dynamic step — closes over an outer name', () => {
+  // a dynamic step inside a nested function literal must resolve its
+  // name against the enclosing scope at call time, just like any other
+  // query inside that body.
+  assert.equal(
+    punk('f:(attribute:_){(a:_){a.{attribute?}?}}~  g:f!b  g!{{a:1 b:2 c:3}}'),
+    '{2}',
+  );
+});
+
+test('dynamic step — closes over an outer name through a higher-order builtin', () => {
+  // The callback passed to `map!` runs in the helper's scope; a dynamic
+  // step inside it must see the helper's parameters.
+  assert.equal(
+    punk(`
+      pick:(attribute:_ items:_){
+        map!{(item:_){item.{attribute?}?} items?}
+      }~
+      ms:{Jan:{tokens:850} Feb:{tokens:870}}
+      pick!{tokens ms?}
+    `),
+    '{850 870}',
+  );
+});
+
+// ---------- Trailing-dot Words are syntax errors ----------
+//
+// A Word ending in an unescaped `.` is only valid as the head of a
+// dynamic-path chain (e.g. `xs.{n?}?`). On its own it is a syntax error;
+// to embed a literal dot in a value, escape it as `\.`.
+
+test('a Word ending in a bare dot is a syntax error', () => {
+  punkThrows('foo.');
+});
+
+test('a Word ending in an escaped dot is allowed', () => {
+  assert.equal(punk('end\\.'), '{end\\.}');
+});

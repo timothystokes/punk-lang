@@ -27,6 +27,7 @@ const isNum = (v) =>
 // counts as that number (this is how `x:5` then `x?` flows through
 // arithmetic — auto-wrap put it in a Tmpl).
 function toNum(v, node) {
+  if (v && v.kind === 'Named') return toNum(v.value, node);
   if (isNum(v)) return Number(v.text);
   if (v && v.kind === 'Tmpl' && v.items.length === 1) {
     return toNum(v.items[0], node);
@@ -557,19 +558,60 @@ function takeFnAndData(args, name) {
   return { fn, data: last.items, middle: xs.slice(1, -1) };
 }
 
-// Build the (value index key) args Tmpl for a callback call.
-function cbArgs(item, i) {
-  if (item && item.kind === 'Named') {
-    return mkTmpl([item.value, numWord(i), mkWord(item.name)]);
+// Inspect a callback's *positional* arity for HOF dispatch.
+// Returns the number of positional slots (1 or 2). Variadic-trailing slot
+// counts as the upper bound (still legal to call with item-only).
+// For Builtins / non-Fn callables, defaults to 1.
+function hofArity(fn, hofName) {
+  let target = fn;
+  let prefilled = 0;
+  while (target && target.kind === 'PartialFn') {
+    prefilled += target.prefilled.length;
+    target = target.target;
   }
-  return mkTmpl([item, numWord(i), NULL]);
+  if (!target || target.kind !== 'Fn') return 1;
+  const items = (target.params && target.params.items) || [];
+  const remaining = items.length - prefilled;
+  // Detect variadic trailing slot (last slot is `*` or `name:*`).
+  let variadic = false;
+  if (items.length > 0) {
+    const last = items[items.length - 1];
+    const inner = last && last.kind === 'Named' ? last.value : last;
+    if (inner && inner.kind === 'Word' && inner.subkind === 'variadic') {
+      variadic = true;
+    }
+  }
+  // Effective non-variadic slot count we must satisfy.
+  const fixed = variadic ? remaining - 1 : remaining;
+  if (variadic) {
+    // Variadic callbacks: pass (item) — variadic captures zero extras.
+    if (fixed > 1) {
+      throw new PunkRuntimeError(
+        `${hofName}!: callback takes (item) or (item index), got ${remaining} slots`,
+      );
+    }
+    return 1;
+  }
+  if (remaining === 1) return 1;
+  if (remaining === 2) return 2;
+  throw new PunkRuntimeError(
+    `${hofName}!: callback takes (item) or (item index), got ${remaining} slots`,
+  );
+}
+
+// Build the args Tmpl for a HOF callback call, respecting the callback's
+// declared arity. Item is passed as-is (Named-preserved).
+function cbArgs(item, i, fn, hofName) {
+  const arity = hofArity(fn, hofName);
+  if (arity === 2) return mkTmpl([item, numWord(i)]);
+  return mkTmpl([item]);
 }
 
 function collMap(args, ctx) {
   const { fn, data } = takeFnAndData(args, 'map');
   const out = [];
   for (let i = 0; i < data.length; i++) {
-    out.push(ctx.callFn(fn, cbArgs(data[i], i + 1), null));
+    out.push(ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'map'), null));
   }
   return mkTmpl(out);
 }
@@ -578,7 +620,7 @@ function collFilter(args, ctx) {
   const { fn, data } = takeFnAndData(args, 'filter');
   const out = [];
   for (let i = 0; i < data.length; i++) {
-    const r = ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'filter'), null);
     if (isTrue(r)) out.push(data[i]);
   }
   return mkTmpl(out);
@@ -587,7 +629,7 @@ function collFilter(args, ctx) {
 function collFind(args, ctx) {
   const { fn, data } = takeFnAndData(args, 'find');
   for (let i = 0; i < data.length; i++) {
-    const r = ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'find'), null);
     if (isTrue(r)) return data[i];
   }
   return NULL;
@@ -596,7 +638,7 @@ function collFind(args, ctx) {
 function collEach(args, ctx) {
   const { fn, data } = takeFnAndData(args, 'each');
   for (let i = 0; i < data.length; i++) {
-    ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'each'), null);
   }
   return NULL;
 }
@@ -605,7 +647,7 @@ function collCount(args, ctx) {
   const { fn, data } = takeFnAndData(args, 'count');
   let n = 0;
   for (let i = 0; i < data.length; i++) {
-    const r = ctx.callFn(fn, cbArgs(data[i], i + 1), null);
+    const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'count'), null);
     if (isTrue(r)) n++;
   }
   return numWord(n);

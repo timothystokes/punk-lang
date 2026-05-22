@@ -82,13 +82,14 @@ const formatSegment = (seg) => {
     case 'nameOf':  return '.:';
     case 'pattern': return '.()';
     case 'range':   return '.' + formatRange(seg);
+    case 'dynamic': return '.' + format(seg.expr);
     default:
       throw new Error(`format: unknown path segment '${seg.kind}'`);
   }
 };
 
 const formatPath = ({ head, segments }) => {
-  let out = head;
+  let out = typeof head === 'string' ? head : format(head);
   for (const seg of segments || []) out += formatSegment(seg);
   return out;
 };

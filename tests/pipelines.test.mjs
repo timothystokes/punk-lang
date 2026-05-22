@@ -56,3 +56,82 @@ test('whitespace around `->` is a syntax error', () => {
   punkThrows('Hello-> upper!');
   punkThrows('Hello ->upper!');
 });
+
+// Pipeline stage shape: a pipeline always delivers ONE thing to each
+// stage. That one thing keeps its shape — if it's a multi-item tmpl,
+// the next stage's slot receives the tmpl as its single argument. The
+// pipeline must not silently spread, wrap, or unwrap that value.
+
+test('pipeline a multi-item tmpl into a 1-arg fn — slot receives the tmpl', () => {
+  // len takes ONE arg (a tmpl) and returns its item count.
+  // Piping xs (a 3-item tmpl) must deliver xs as that single arg.
+  assert.equal(
+    punk(`
+      len:(t:_){t.#?}
+      xs:{1 2 3}
+      xs?->len!
+    `),
+    '{3}',
+  );
+});
+
+test('pipeline seed: tmpl literal pipes the WHOLE tmpl as one arg', () => {
+  // Under the new no-spread `?` model, `{xs?}` is a 1-item tmpl whose
+  // single item is xs's value (a 3-item tmpl), giving `{{1 2 3}}`.
+  // Piped into len, the slot receives that outer 1-item tmpl, so
+  // `t.#?` is 1. To spread xs into the seed instead, use `{xs?.?}`.
+  assert.equal(
+    punk(`
+      len:(t:_){t.#?}
+      xs:{1 2 3}
+      {xs?}->len!
+    `),
+    '{1}',
+  );
+});
+
+test('pipeline seed: `.?` spreads inside seed to recover length-3 behaviour', () => {
+  assert.equal(
+    punk(`
+      len:(t:_){t.#?}
+      xs:{1 2 3}
+      {xs?.?}->len!
+    `),
+    '{3}',
+  );
+});
+
+test('pipeline into a 1-remaining partial — slot receives the tmpl, hof iterates', () => {
+  // map takes (fn coll); pre-fill fn, then deliver coll via pipeline.
+  // The piped tmpl must reach the coll slot intact so map iterates over
+  // its items and produces a 3-item tmpl of results.
+  assert.equal(
+    punk(`
+      xs:{10 20 30}
+      grow:map'(s:_){+!{s? 1}}
+      xs?->grow!
+    `),
+    '{11 21 31}',
+  );
+});
+
+test('pipeline into a 1-remaining partial matches direct call', () => {
+  // Direct and pipeline forms must produce the same value.
+  const direct = punk(`
+    xs:{10 20 30}
+    grow:map'(s:_){+!{s? 1}}
+    grow!{xs?}
+  `);
+  const piped = punk(`
+    xs:{10 20 30}
+    grow:map'(s:_){+!{s? 1}}
+    xs?->grow!
+  `);
+  assert.equal(piped, direct);
+});
+
+test('scalar values still pipe through 1-arg stages unchanged', () => {
+  // Regression: simple scalar pipelines must keep working.
+  assert.equal(punk('Hello->upper!'), '"HELLO"');
+  assert.equal(punk('double:X\'2  5->double!'), '{10}');
+});

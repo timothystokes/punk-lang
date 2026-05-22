@@ -6,7 +6,9 @@
 //   - `(*)` matches any number of things (zero or more).
 //   - Positional matching: `(_ _)` is exactly two things; `(_ _ _)` three.
 //   - Literals match exact values: `(hello _)` etc.
-//   - Only one variadic `*` per pattern.
+//   - `*` is a variadic wildcard meaning "zero or more". It only makes
+//     sense at the **end** of a pattern — anywhere else there is no way
+//     to decide how many items it should swallow. At most one per pattern.
 //   - Patterns nest: `((_ _) _)`.
 //   - Slots can be named: `(x:_ y:_)`.
 //   - Patterns can have regex slots `/.../`; capture groups bind by index;
@@ -73,22 +75,20 @@ test('TRUE as a literal slot', () => {
   assert.equal(punk('{FALSE a b}?(TRUE _ _)'), 'FALSE');
 });
 
-test('variadic mid-pattern — start ... end', () => {
-  assert.equal(punk('{start a b c end}?(start * end)'), 'TRUE');
-  assert.equal(punk('{start end}?(start * end)'),       'TRUE');
-  assert.equal(punk('{start a b}?(start * end)'),       'FALSE');
-});
-
-test('variadic leading — `* end`', () => {
-  assert.equal(punk('{a b end}?(* end)'), 'TRUE');
-  assert.equal(punk('{end}?(* end)'),     'TRUE');
-  assert.equal(punk('{end a}?(* end)'),   'FALSE');
-});
-
 test('variadic trailing — `start *`', () => {
   assert.equal(punk('{start a b}?(start *)'), 'TRUE');
   assert.equal(punk('{start}?(start *)'),     'TRUE');
   assert.equal(punk('{a start}?(start *)'),   'FALSE');
+});
+
+test('variadic must be the last slot — non-trailing `*` is a syntax error', () => {
+  // `*` means "any number of items"; with anything after it there is no
+  // way to decide how many it should swallow. `_` is the right tool when
+  // you mean "exactly one slot".
+  punkThrows('{a b}?(* end)');
+  punkThrows('{a b c}?(start * end)');
+  punkThrows('{a b c}?(* TRUE *)');
+  punkThrows('{a b}?(first:_ middle:* last:_)');
 });
 
 test('two variadics in one pattern is a syntax error', () => {

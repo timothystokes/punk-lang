@@ -30,8 +30,8 @@ test('arity dispatch — two args', () => {
         (n:_ t:_){Hello t? n?}
       }!
     }
-    greet!{Tim Dr.}`;
-  assert.equal(punk(src), '{Hello Dr. Tim}');
+    greet!{Tim Dr\\.}`;
+  assert.equal(punk(src), '{Hello Dr\\. Tim}');
 });
 
 test('shape dispatch — area of a rect', () => {
