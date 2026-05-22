@@ -106,11 +106,10 @@ teams:{
     rows:r.teamSummary?->map'(t:_){renderRow!t?}!.?
     body:join!{"
 " rows?}
-    "| Team    | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
-|---------|-------:|-------:|------------------:|-------------|-------------|
+    "| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
+|-------------|-------:|-------:|------------------:|-------------|-------------|
 {body?}
-
-**Totals:** {r.totals.totalTokens?} tokens, {r.totals.totalPizzas?} pizzas, {r.totals.tokensPerPizza?} tokens/pizza"!
+| **Totals**  | {r.totals.totalTokens?} | {r.totals.totalPizzas?} | {r.totals.tokensPerPizza?} | — | — |"!
   }~
 
   renderReport!{processTeams!teams?}

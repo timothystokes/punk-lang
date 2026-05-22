@@ -289,77 +289,89 @@ teams:{
 
 ```
 
-Now let's summarise each team's year — peak month, average, and totals — for both tokens and pizzas, then render a per-team report with a yearly totals section. We build small helpers, transform the raw `teams` template into a tidy `teamSummaries` template of per-team records, derive the annual totals from that, and finally produce a `""` block per team plus one for the totals — piping the list of team blocks straight into `each` for printing:
+Now let's summarise each team's year — peak month, average, and totals — for both tokens and pizzas, then render a markdown report with rows per team and a totals line:
 
 ```punk
 
 # --- helpers --- #
-  
+
   # sort items by a given attribute, highest first — so .1 is the peak #
   sortByAttribute:(attribute:_ items:_){
     items?->sort'(a:_ b:_){
       >!{a.{attribute?}? b.{attribute?}?}
     }!
   }
- 
+
   # sum the values of a given attribute across the data items #
   sumByAttribute:(attribute:_ items:_){
-    +!{
-      items?->map'(item:_){
-        item.{attribute?}?
-      }!
-    }
+    +!{items?->map'(item:_){item.{attribute?}?}!.?}
   }
- 
+
   # --- per-team processing --- #
- 
+
   processTeam:(team:_){
+    months:team.#?
+    tTotal:sumByAttribute!{tokens team?}
+    pTotal:sumByAttribute!{pizzas team?}
     {
       name:team.:?
       tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
-      tokensTotal:sumByAttribute!{tokens team?}
-      tokensAverageMonth:/!{tokensTotal? team.#?}
+      tokensTotal:tTotal?
+      tokensAverageMonth:/!{tTotal? months?}
       pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
-      pizzasTotal:sumByAttribute!{pizzas team?}
-      pizzasAverageMonth:/!{pizzasTotal? team.#?}
-      tokensPerPizza:/!{tokensTotal? pizzasTotal?}
+      pizzasTotal:pTotal?
+      pizzasAverageMonth:/!{pTotal? months?}
+      tokensPerPizza:/!{tTotal? pTotal?}
     }
-  }
- 
+  }~
+
   # --- pull data processing --- #
 
   processTeams:(teams:_){
-    teamSummary:teams?->map'(team:_)processTeam!team?
-    totals:{
-      totalTokens:sumByAttribute!{tokensTotal teamSummary?}
-      totalPizzas:sumByAttribute!{pizzasTotal teamSummary?}
-      tokensPerPizza:/!{totalTokens? totalPizzas?}
+    summary:teams?->map'(team:_){processTeam!team.?}!
+    totalTokens:sumByAttribute!{tokensTotal summary?}
+    totalPizzas:sumByAttribute!{pizzasTotal summary?}
+    tokensPerPizza:/!{totalTokens? totalPizzas?}
+    {
+      teamSummary:summary?
+      totals:{
+        totalTokens:totalTokens?
+        totalPizzas:totalPizzas?
+        tokensPerPizza:tokensPerPizza?
+      }!
     }
-  }
+  }~
 
-  processTeams!teams?
+  # --- rendering --- #
+
+  # one markdown table row for a team's processed summary #
+  renderRow:(t:_){
+    "| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {t.tokensPerPizza?} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"!
+  }~
+
+  # render a full report (rows + totals line) as a markdown table #
+  renderReport:(r:_){
+    rows:r.teamSummary?->map'(t:_){renderRow!t?}!.?
+    body:join!{"
+" rows?}
+    "| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
+|-------------|-------:|-------:|------------------:|-------------|-------------|
+{body?}
+| **Totals**  | {r.totals.totalTokens?} | {r.totals.totalPizzas?} | {r.totals.tokensPerPizza?} | — | — |"!
+  }~
+
+  renderReport!{processTeams!teams?}
 
 ```
 
 Which produces:
 
-```
-TEAM: Phoenix
-  peak tokens: 890 in Sep (avg 863/mo)
-  peak pizzas: 8 in Sep (avg 7/mo)
-  totals:      10355 tokens, 81 pizzas
-  ratio:       128 tokens per pizza
+| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
+|-------------|-------:|-------:|------------------:|-------------|-------------|
+| Phoenix | 10355 | 81 | 127.83950617284 | Sep (890) | Sep (8) |
+| Legends | 16100 | 123 | 130.894308943089 | Dec (2640) | Dec (18) |
+| **Totals**  | 26455 | 204 | 129.68137254902 | — | — |
 
-TEAM: Legends
-  peak tokens: 2640 in Dec (avg 1342/mo)
-  peak pizzas: 18 in Dec (avg 10/mo)
-  totals:      16100 tokens, 123 pizzas
-  ratio:       131 tokens per pizza
 
-TOTALS
-  annual tokens: 26455
-  annual pizzas: 204
-  annual ratio:  130 tokens per pizza
-```
 
 
