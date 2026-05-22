@@ -65,10 +65,10 @@ teams:{
     name:team.:?
     tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
     tokensTotal:sumByAttribute!{tokens team?}
-    tokensAverageMonth:/!{tTotal? team.#?}
+    tokensAverageMonth:/!{tokensTotal? team.#?}
     pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
     pizzasTotal:sumByAttribute!{pizzas team?}
-    pizzasAverageMonth:/!{pTotal? team.#?}
+    pizzasAverageMonth:/!{pizzasTotal? team.#?}
     tokensPerPizza:/!{tokensTotal? pizzasTotal?}
   }
  

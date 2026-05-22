@@ -542,19 +542,29 @@ export const builtins = {
 // Pull `fn` and `data` out of an HOF args Tmpl. HOF args are
 // `{fn ...data}` where ...data is one item if it's a Tmpl, or all
 // trailing items collectively forming the data list.
-function takeFnAndData(args, name) {
+function takeFnAndData(args, name, ctx) {
+  const node = ctx && ctx.node;
   const xs = argsItems(args);
   if (xs.length < 2) {
-    throw new PunkRuntimeError(`${name}! expects at least 2 arguments`);
+    throw new PunkRuntimeError(
+      `${name}! expects at least 2 arguments`,
+      node && node.line, node && node.col,
+    );
   }
   const fn = xs[0];
   if (!isFnV(fn)) {
-    throw new PunkRuntimeError(`${name}!: first argument must be a function`);
+    throw new PunkRuntimeError(
+      `${name}!: first argument must be a function`,
+      node && node.line, node && node.col,
+    );
   }
   // Data is the last item (must be a Tmpl).
   const last = xs[xs.length - 1];
   if (!isTmplV(last)) {
-    throw new PunkRuntimeError(`${name}!: last argument must be a template`);
+    throw new PunkRuntimeError(
+      `${name}!: last argument must be a template`,
+      node && node.line, node && node.col,
+    );
   }
   return { fn, data: last.items, middle: xs.slice(1, -1) };
 }
@@ -609,7 +619,7 @@ function cbArgs(item, i, fn, hofName) {
 }
 
 function collMap(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'map');
+  const { fn, data } = takeFnAndData(args, 'map', ctx);
   const out = [];
   for (let i = 0; i < data.length; i++) {
     out.push(ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'map'), null));
@@ -618,7 +628,7 @@ function collMap(args, ctx) {
 }
 
 function collFilter(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'filter');
+  const { fn, data } = takeFnAndData(args, 'filter', ctx);
   const out = [];
   for (let i = 0; i < data.length; i++) {
     const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'filter'), null);
@@ -628,7 +638,7 @@ function collFilter(args, ctx) {
 }
 
 function collFind(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'find');
+  const { fn, data } = takeFnAndData(args, 'find', ctx);
   for (let i = 0; i < data.length; i++) {
     const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'find'), null);
     if (isTrue(r)) return data[i];
@@ -637,7 +647,7 @@ function collFind(args, ctx) {
 }
 
 function collEach(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'each');
+  const { fn, data } = takeFnAndData(args, 'each', ctx);
   for (let i = 0; i < data.length; i++) {
     ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'each'), null);
   }
@@ -645,7 +655,7 @@ function collEach(args, ctx) {
 }
 
 function collCount(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'count');
+  const { fn, data } = takeFnAndData(args, 'count', ctx);
   let n = 0;
   for (let i = 0; i < data.length; i++) {
     const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'count'), null);
