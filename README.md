@@ -295,51 +295,51 @@ Now let's summarise each team's year — peak month, average, and totals — for
 
 # --- helpers --- #
 
-  # sort items by a given attribute, highest first — so .1 is the peak #
-  sortByAttribute:(attribute:_ items:_){
-    items?->sort'(a:_ b:_){
-      >!{a.{attribute?}? b.{attribute?}?}
-    }!
-  }
+# sort items by a given attribute, highest first — so .1 is the peak #
+sortByAttribute:(attribute:_ items:_){
+  items?->sort'(a:_ b:_){
+    >!{a.{attribute?}? b.{attribute?}?}
+  }!
+}
 
-  # sum the values of a given attribute across the data items #
-  sumByAttribute:(attribute:_ items:_){
-    +!{items?->map'(item:_){item.{attribute?}?}!.?}
-  }
+# sum the values of a given attribute across the data items #
+sumByAttribute:(attribute:_ items:_){
+  +!{items?->map'(item:_){item.{attribute?}?}!.?}
+}
 
-  # --- per-team processing --- #
+# --- per-team processing --- #
 
-  processTeam:(team:_){
-    name:team.:?
-    tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
-    tokensTotal:sumByAttribute!{tokens team?}
-    tokensAverageMonth:/!{tokensTotal? team.#?}
-    pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
-    pizzasTotal:sumByAttribute!{pizzas team?}
-    pizzasAverageMonth:/!{pizzasTotal? team.#?}
-    tokensPerPizza:/!{tokensTotal? pizzasTotal?}
-  }
+processTeam:(team:_){
+  name:team.:?
+  tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
+  tokensTotal:sumByAttribute!{tokens team?}
+  tokensAverageMonth:/!{tokensTotal? team.#?}
+  pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
+  pizzasTotal:sumByAttribute!{pizzas team?}
+  pizzasAverageMonth:/!{pizzasTotal? team.#?}
+  tokensPerPizza:/!{tokensTotal? pizzasTotal?}
+}
 
-  # --- pull data processing --- #
+# --- full data processing --- #
 
-  processTeams:(teams:_){
-    teamSummary:teams?->map'(team:_){processTeam!team.?}!
-    totalTokens:sumByAttribute!{tokensTotal teamSummary?}
-    totalPizzas:sumByAttribute!{pizzasTotal teamSummary?}
-    tokensPerPizza:/!{totalTokens? totalPizzas?}
-  }
+processTeams:(teams:_){
+  teamSummary:teams?->map'(team:_){processTeam!team.?}!
+  totalTokens:sumByAttribute!{tokensTotal teamSummary?}
+  totalPizzas:sumByAttribute!{pizzasTotal teamSummary?}
+  tokensPerPizza:/!{totalTokens? totalPizzas?}
+}
 
-  # --- rendering --- #
+# --- printing --- #
 
-  # one markdown table row for a team's processed summary #
-  renderRow:(t:_)"| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {round!{t.tokensPerPizza? 2}} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"
+# one markdown table row for a team's processed summary #
+renderRow:(t:_)"  | {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {round!{t.tokensPerPizza? 2}} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"
 
-  # render a full report (rows + totals line) as a markdown table #
-  renderReport:(r:_)print!"
-| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
-|-------------|-------:|-------:|------------------:|-------------|-------------|
-{join!{"\n" r.teamSummary?->map'(t:_){renderRow!t?}!}}
-| **Totals**  | {r.totalTokens?} | {r.totalPizzas?} | {round!{r.tokensPerPizza? 2}} | — | — |
+# render a full report (rows + totals line) as a markdown table #
+renderReport:(r:_)print!"
+  | Team | Tokens | Pizzas | Tokens per Pizza | Peak Month for Tokens | Peak Month for Pizzas |
+  |------|-------:|-------:|-----------------:|-----------------------|-----------------------|
+  {join!{"\n" r.teamSummary?->map'(t:_){renderRow!t?}!}}
+  | **Totals**  | {r.totalTokens?} | {r.totalPizzas?} | {round!{r.tokensPerPizza? 2}} | — | — |
 "
 
 renderReport!{processTeams!teams?}
@@ -348,8 +348,8 @@ renderReport!{processTeams!teams?}
 
 Which produces:
 
-| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
-|-------------|-------:|-------:|------------------:|-------------|-------------|
+| Team | Tokens | Pizzas | Tokens per Pizza | Peak Month for Tokens | Peak Month for Pizzas |
+|------|-------:|-------:|-----------------:|-----------------------|-----------------------|
 | Phoenix | 10355 | 81 | 127.84 | Sep (890) | Sep (8) |
 | Legends | 16100 | 123 | 130.89 | Dec (2640) | Dec (18) |
 | **Totals**  | 26455 | 204 | 129.68 | — | — |
