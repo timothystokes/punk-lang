@@ -411,7 +411,17 @@ function evalQueryFull(node, env) {
   let cur;
   if (typeof node.head === 'string') {
     if (env.has(node.head)) {
-      cur = { value: env.lookup(node.head), name: node.head };
+      const bound = env.lookup(node.head);
+      // If the bound value is itself a Named (e.g. map iteration of a
+      // Named item, or `x:a:5`), unwrap: the data-name takes precedence
+      // over the binding-name. `team?` returns the inner value; `team.:?`
+      // reflects on the Named's name; `team.?` reconstructs the full
+      // Named pair.
+      if (bound && bound.kind === 'Named') {
+        cur = { value: bound.value, name: bound.name };
+      } else {
+        cur = { value: bound, name: node.head };
+      }
     } else if (Object.prototype.hasOwnProperty.call(builtins, node.head)) {
       cur = {
         value: { kind: 'Builtin', name: node.head, fn: builtins[node.head] },
@@ -464,7 +474,12 @@ function resolveHeadName(head, node, env) {
   }
   let cur;
   if (env.has(name)) {
-    cur = { value: env.lookup(name), name };
+    const bound = env.lookup(name);
+    if (bound && bound.kind === 'Named') {
+      cur = { value: bound.value, name: bound.name };
+    } else {
+      cur = { value: bound, name };
+    }
   } else if (Object.prototype.hasOwnProperty.call(builtins, name)) {
     cur = {
       value: { kind: 'Builtin', name, fn: builtins[name] },
@@ -765,7 +780,7 @@ function evalMatch(node, env) {
 //     parent — Named lands as Named (name kept); an unwrapped Tmpl
 //     drops its `{}` and its items spread inline; bare items are
 //     identity.
-function spreadFull(items, full) {
+function spreadFull(items, full, env) {
   // `full` is { value, name } from evalQueryFull.
   if (full.name != null) {
     items.push({ kind: 'Named', name: full.name, value: full.value });
@@ -773,7 +788,15 @@ function spreadFull(items, full) {
   }
   const v = full.value;
   if (v && v.kind === 'Tmpl') {
-    for (const it of v.items) items.push(it);
+    // Spread items but evaluate each — a referenced tmpl may hold
+    // unresolved Exec/Query items that must run when used.
+    for (const it of v.items) {
+      if (env && it && (it.kind === 'Exec' || it.kind === 'Query' || it.kind === 'Pipeline')) {
+        items.push(evalItem(it, env));
+      } else {
+        items.push(it);
+      }
+    }
     return;
   }
   items.push(v);
@@ -791,13 +814,39 @@ function cascadeTmpl(tmpl, env) {
     } else if (it && it.kind === 'Query' && it.spread) {
       const full = evalQueryFull(it, env);
       if (full === null) { items.push(NULL); continue; }
-      spreadFull(items, full);
+      spreadFull(items, full, env);
+    } else if (it && it.kind === 'Named') {
+      // Named-item INSIDE a tmpl literal is a data pair, NOT a binding
+      // into outer scope. Evaluate the value side; do not env.bind.
+      items.push({ kind: 'Named', name: it.name, value: evalDataValue(it.value, env) });
     } else {
-      // Query/Exec/Named/etc. results land as ONE item — no spread.
+      // Query/Exec/etc. results land as ONE item — no spread.
       items.push(evalItem(it, env));
     }
   }
   return mkTmpl(items);
+}
+
+// Evaluate the value side of a Named pair WITHOUT binding into env.
+// Used for data-Named items inside tmpl literals — they are tagged
+// pairs, not bindings. Applies the same auto-wrap as binding.
+function evalDataValue(node, env) {
+  if (!node || typeof node !== 'object') return node;
+  let value;
+  if (node.kind === 'Tmpl') value = cascadeTmpl(node, env);
+  else if (node.kind === 'Text') value = cascadeText(node, env);
+  else if (node.kind === 'Query' && node.spread) {
+    const full = evalQueryFull(node, env);
+    if (full === null) value = NULL;
+    else if (full.name != null) value = { kind: 'Named', name: full.name, value: full.value };
+    else value = full.value;
+  }
+  else value = evalItem(node, env);
+  if (value && value.kind === 'Word'
+      && (value.subkind === 'value' || value.subkind === 'number')) {
+    value = mkTmpl([value]);
+  }
+  return value;
 }
 
 function cascadeOne(node, env) {

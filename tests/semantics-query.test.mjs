@@ -99,23 +99,24 @@ test('`.?` on a bare Word is identity (one item)', () => {
 // ---------- Path terminators on arbitrary expressions ----------
 
 test('path step on a call result — `(f!arg).x?` precedence', () => {
-  // sortByX returns the input unchanged. `.1?` on its result should
-  // yield the first item. The call must bind tighter than `.1?`.
+  // id returns its single arg unchanged. `.1?` on its result should
+  // yield the first item of the returned tmpl. The call must bind
+  // tighter than `.1?` (post-Exec query attaches to call RESULT).
   assert.equal(
     punk(`
       id:(x:_){x?}
-      id!{a b c}.1?
+      id!{{a b c}}.1?
     `),
     '{a}',
   );
 });
 
 test('path step on a call result without parens — call binds tighter', () => {
-  // `id!{a:1 b:2 c:3}.b?` ≡ `(id!{...}).b?`
+  // `id!{{a:1 b:2 c:3}}.b?` ≡ `(id!{...}).b?`
   assert.equal(
     punk(`
       id:(x:_){x?}
-      id!{a:1 b:2 c:3}.b?
+      id!{{a:1 b:2 c:3}}.b?
     `),
     '{2}',
   );
@@ -126,6 +127,30 @@ test('path terminator on a literal Tmpl head', () => {
   assert.equal(
     punk('{{a:1 b:2}}.1.b?'),
     '{2}',
+  );
+});
+
+test('`.?` spread on a call result expands the value inline', () => {
+  // `f!{...}.?` ≡ `(f!{...}).?` — the post-Exec query rule routes
+  // the leading-dot path to the call RESULT, not into the args.
+  assert.equal(
+    punk(`
+      pair:(x:_ y:_){{a:x? b:y?}}
+      {got pair!{1 2}.?}!
+    `),
+    '{got a:{1} b:{2}}',
+  );
+});
+
+test('pipeline result accepts a `.path?` query via `!.path?`', () => {
+  // Stage chain `xs?->...!` triggers execute; `.?` glued after the
+  // trigger `!` becomes a wrapping Query on the pipeline result.
+  assert.equal(
+    punk(`
+      add:(a:_ b:_){+!{a? b?}}
+      +!{ {1 2 3}->map'(x:_){add!{x? 10}}!.? }
+    `),
+    '{36}',
   );
 });
 

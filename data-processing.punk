@@ -1,36 +1,35 @@
 
-# This example assumes some changes to the way punk currently works
+# This example assumes some changes to the way punk currently works #
 
-1. values no longer expand into their templates by default.
-1.1 there is a way of explicitly defingin a query of a thing that does expand into it's placeholder using the .? notation i.e. resolve the item and expand it in place (!including it's name)
-    Examples I have already updated in the README
-    > {Birthday person.birthday?}! ⏎ value by name
-    {Birthday {12 June 1997}}
+# 1. values no longer expand into their templates by default. #
+# 1.1 there is a way of explicitly defingin a query of a thing that does expand into it's placeholder using the .? notation i.e. resolve the item and expand it in place (!including it's name) #
+#     Examples I have already updated in the README #
+#     > {Birthday person.birthday?}! ⏎ value by name #
+#     {Birthday {12 June 1997}} #
 
-    > {Age person.2?}! ⏎ item value by index
-    {Age {42}}
+#     > {Age person.2?}! ⏎ item value by index #
+#     {Age {42}} #
 
-    > {Second Item Name person.2.:?}! ⏎ extract the name of the reference
-    {Second Item Name {42}}
+#     > {Second Item Name person.2.:?}! ⏎ extract the name of the reference #
+#     {Second Item Name {42}} #
 
-    > {Number of Person Attributes person.#?} ⏎ count of the things in reference
-    {Number of Person Attributes {3}}
+#     > {Number of Person Attributes person. count ?} ⏎ count of the things in reference #
+#     {Number of Person Attributes {3}} #
 
-    > {All date elements person.birthday.?} ⏎ expand out the full contents
-    {All date elements birthday{day:12 month:June year:1997}} 
+#     > {All date elements person.birthday.?} ⏎ expand out the full contents #
+#     {All date elements birthday{day:12 month:June year:1997}} #
 
-    > {All date elements person.birthday?.?} ⏎ expand out the full contents of a value
-    {All date elements day:12 month:June year:1997} 
+#     > {All date elements person.birthday?.?} ⏎ expand out the full contents of a value #
+#     {All date elements day:12 month:June year:1997} #
 
 
-2. maps don't need to map into names/keys as we can do this via queries on the items. And index should be optional
-    so the signature for map would be map:(fn:_ items:_)
-    where the fn can be simply (item:_){...} or (item:_ index:_){...} map needs to introspect to determine which signature to bind to.
+# 2. maps don't need to map into names/keys as we can do this via queries on the items. And index should be optional #
+#     so the signature for map would be map:(fn:_ items:_) #
+#     where the fn can be simply (item:_){...} or (item:_ index:_){...} map needs to introspect to determine which signature to bind to. #
 
-3. allow _? to resolve the single item of a function that only takes 1 thing. *? still resolves to that one thing in a list.
-    e.g. double:(_)+!{_? 2}
+# 3. allow _? to resolve the single item of a function that only takes 1 thing. *? still resolves to that one thing in a list. #
+#     e.g. double:(_)+!{_? 2} #
 
-#
 
 # Per month: tokens = tokens used, pizzas = pizzas eaten. #
 teams:{
@@ -57,37 +56,61 @@ teams:{
  
   # sum the values of a given attribute across the data items #
   sumByAttribute:(attribute:_ items:_){
-    +!{
-      items?->map'(item:_){
-        item.{attribute?}?
-      }!
-    }
+    +!{items?->map'(item:_){item.{attribute?}?}!.?}
   }
  
   # --- per-team processing --- #
  
   processTeam:(team:_){
+    months:team.#?
+    tTotal:sumByAttribute!{tokens team?}
+    pTotal:sumByAttribute!{pizzas team?}
     {
       name:team.:?
       tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
-      tokensTotal:sumByAttribute!{tokens team?}
-      tokensAverageMonth:/!{tokensTotal? team.#?}
+      tokensTotal:tTotal?
+      tokensAverageMonth:/!{tTotal? months?}
       pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
-      pizzasTotal:sumByAttribute!{pizzas team?}
-      pizzasAverageMonth:/!{pizzasTotal? team.#?}
-      tokensPerPizza:/!{tokensTotal? pizzasTotal?}
+      pizzasTotal:pTotal?
+      pizzasAverageMonth:/!{pTotal? months?}
+      tokensPerPizza:/!{tTotal? pTotal?}
     }
-  }
+  }~
  
   # --- pull data processing --- #
 
   processTeams:(teams:_){
-    teamSummary:teams?->map'(team:_)processTeam!team?
-    totals:{
-      totalTokens:sumByAttribute!{tokensTotal teamSummary?}
-      totalPizzas:sumByAttribute!{pizzasTotal teamSummary?}
-      tokensPerPizza:/!{totalTokens? totalPizzas?}
+    summary:teams?->map'(team:_){processTeam!team.?}!
+    totalTokens:sumByAttribute!{tokensTotal summary?}
+    totalPizzas:sumByAttribute!{pizzasTotal summary?}
+    tokensPerPizza:/!{totalTokens? totalPizzas?}
+    {
+      teamSummary:summary?
+      totals:{
+        totalTokens:totalTokens?
+        totalPizzas:totalPizzas?
+        tokensPerPizza:tokensPerPizza?
+      }!
     }
-  }
+  }~
 
-  processTeams!teams?
+  # --- rendering --- #
+
+  # one markdown table row for a team's processed summary #
+  renderRow:(t:_){
+    "| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {t.tokensPerPizza?} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"!
+  }~
+
+  # render a full report (rows + totals line) as a markdown table #
+  renderReport:(r:_){
+    rows:r.teamSummary?->map'(t:_){renderRow!t?}!.?
+    body:join!{"
+" rows?}
+    "| Team    | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
+|---------|-------:|-------:|------------------:|-------------|-------------|
+{body?}
+
+**Totals:** {r.totals.totalTokens?} tokens, {r.totals.totalPizzas?} pizzas, {r.totals.tokensPerPizza?} tokens/pizza"!
+  }~
+
+  renderReport!{processTeams!teams?}

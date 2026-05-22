@@ -1396,6 +1396,25 @@ const passArgsAttach = (xs) => {
     while (i < xs.length) {
       const next = xs[i];
       if (!next.glued) break;
+      // Special: a Query whose head is a glued Tmpl AND prev is an
+      // Exec/Partial-needing-args — the Tmpl is the args, and the
+      // Query's segments wrap the call (post-Exec query on result).
+      // Example: `f!{a b}.1.?` parses initially as Exec(f) + glued
+      // Query(head={a b}, segments=[.1,.?]). We want the Tmpl to
+      // become f's args and the Query to wrap f.
+      if (next.kind === 'Query'
+          && next.head && next.head.kind === 'Tmpl' && next.head.glued
+          && innermostNeedingArgs(cur)) {
+        const argTmpl = stripGlued(next.head);
+        const wasGlued = cur.glued;
+        cur = setInnerArgs(cur, argTmpl);
+        const wrapped = mkQuery(cur, next.segments, cur.line, cur.col);
+        if (next.spread) wrapped.spread = true;
+        if (wasGlued) wrapped.glued = true;
+        cur = wrapped;
+        i++;
+        continue;
+      }
       if (!isSingleArg(next) && next.kind !== 'Tmpl') break;
       const inner = innermostNeedingArgs(cur);
       if (!inner) break;
@@ -1490,12 +1509,23 @@ const passPipeline = (xs) => {
         stages.push(stage);
         j += 2;
       }
-      // Detect trailing bare `!` glued after the last stage.
+      // Detect trailing bare `!` glued after the last stage, OR a
+      // glued Query whose head is the bang Word (parseWords attaches
+      // a leading-dot path like `.?` to the preceding `!` Word). In
+      // the latter case the bang triggers execute and the query
+      // segments wrap the pipeline as a post-call query on the result.
       let execute = false;
+      let wrapQuery = null;
       const tail = xs[j];
       const lastStage = stages[stages.length - 1];
       if (tail && tail.kind === 'Word' && tail.text === '!' && tail.glued) {
         execute = true;
+        j++;
+      } else if (tail && tail.kind === 'Query' && tail.glued
+                 && tail.head && tail.head.kind === 'Word'
+                 && tail.head.subkind === 'bang') {
+        execute = true;
+        wrapQuery = tail;
         j++;
       } else if (lastStage.kind === 'Exec') {
         // `...->log!` — the Exec at the tail acts as the executor.
@@ -1503,7 +1533,14 @@ const passPipeline = (xs) => {
       }
       const pipe = mkPipeline(stages.map(stripGlued), execute, start.line, start.col);
       if (start.glued) pipe.glued = true;
-      out.push(pipe);
+      if (wrapQuery) {
+        const wrapped = mkQuery(pipe, wrapQuery.segments, pipe.line, pipe.col);
+        if (wrapQuery.spread) wrapped.spread = true;
+        if (start.glued) wrapped.glued = true;
+        out.push(wrapped);
+      } else {
+        out.push(pipe);
+      }
       i = j;
       continue;
     }
