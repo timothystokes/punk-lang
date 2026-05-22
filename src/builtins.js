@@ -25,7 +25,7 @@ const isNum = (v) =>
 
 // Coerce a value to a JS number. A singleton-Tmpl wrapping a number
 // counts as that number (this is how `x:5` then `x?` flows through
-// arithmetic — auto-wrap put it in a Tmpl).
+// arithmetic — short-form wrap put it in a Tmpl).
 function toNum(v, node) {
   if (v && v.kind === 'Named') return toNum(v.value, node);
   if (isNum(v)) return Number(v.text);
@@ -391,7 +391,7 @@ export const builtins = {
   'islist':  (args, _env, ctx) => {
     const v = singleArg(args);
     if (!isTmplV(v)) return FALSE;
-    // True for empty or multi-item; a singleton came from auto-wrap.
+    // True for empty or multi-item; a singleton came from short-form wrap.
     return boolValue(v.items.length !== 1);
   },
   'isfn':    (args) => boolValue(isFnV(singleArg(args))),

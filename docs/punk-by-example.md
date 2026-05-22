@@ -74,7 +74,7 @@ A few words have special meaning **in specific positions**:
 
 `TRUE`/`FALSE`/`NULL` are the only words that must be escaped (`\T\R\U\E`, etc.) to be used as literal text.
 
-### Bare-value bindings auto-wrap
+### Short-form bindings for bare values
 
 Bare Words and Numbers have no inherent delimiter, so when they appear on the value side of a binding they are wrapped in a singleton structured template:
 
@@ -86,7 +86,7 @@ age:{42}
 name:{Tim}
 ```
 
-So `age:42` is shorthand for `age:{42}`, and `name:Tim` is shorthand for `name:{Tim}`. This means a queried single value is always reached through a 1-item template:
+So `age:42` is short form for `age:{42}`, and `name:Tim` is short form for `name:{Tim}`. This means a queried single value is always reached through a 1-item template:
 
 ```punk
 > age:42  age?    ⏎    {42}
@@ -153,7 +153,7 @@ SYNTAX ERROR
 
 ### Reserved values
 
-Three bare names always resolve to fixed values. They behave like ordinary Words for the most part — they can be queried, passed around, named, matched in patterns — but they are reserved so the language and its builtins have a shared vocabulary for "true", "false", and "no value". Unlike other Words, they do **not** auto-wrap when they are the final value at the REPL: they print bare (`TRUE`, `FALSE`, `NULL`).
+Three bare names always resolve to fixed values. They behave like ordinary Words for the most part — they can be queried, passed around, named, matched in patterns — but they are reserved so the language and its builtins have a shared vocabulary for "true", "false", and "no value". Unlike other Words, they do **not** get the short-form wrap when they are the final value at the REPL: they print bare (`TRUE`, `FALSE`, `NULL`).
 
 | Name | Meaning |
 | --- | --- |
@@ -391,7 +391,7 @@ A query has two flavours. The terminator decides how the resolved value lands in
 
 Strings are simpler — there is no `.?` distinction in a string because text has no structure: the value is stringified (multi-item templates joined by a single space) however it was resolved.
 
-The same rules apply when the bound value is a single word — `name:Bob` auto-wraps to `{Bob}`, so `{hi name?}!` is `{hi {Bob}}` (nested singleton) and `{hi name?.?}!` is `{hi Bob}` (inlined). Inside a string they both render as `"hi Bob"`.
+The same rules apply when the bound value is a single word — `name:Bob` is short form for `name:{Bob}`, so `{hi name?}!` is `{hi {Bob}}` (nested singleton) and `{hi name?.?}!` is `{hi Bob}` (inlined). Inside a string they both render as `"hi Bob"`.
 
 Common idioms:
 

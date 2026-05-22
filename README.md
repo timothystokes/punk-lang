@@ -107,7 +107,7 @@ The whole idea of Template and Data in Punk is that there is structure that can 
 This query resolved the value attached to the nested 'age' name within the person template.
 
 ```punk
-> person.name.2 ⏎
+> person.name.2? ⏎
 {Jones} 
 ```
 
@@ -131,10 +131,10 @@ Here is a list of all the query types available using this example template:
 > {Second Item Name person.2.:?}! # extract the name of the reference # ⏎
 {Second Item Name {42}}
 
-> {Number of Person Attributes person.#?} # count of the things in reference # ⏎
-{Number of Person Attributes {3}}
+> {Number of Person Attributes person.#?}! # count of the things in reference # ⏎
+{Number of Person Attributes 3}
 
-> {All date elements person.birthday.?} # expand out the the full contents # ⏎
+> {All date elements person.birthday.?}! # expand out the the full contents # ⏎
 {All date elements day:12 month:June year:1997} 
 ```
 
@@ -144,10 +144,12 @@ Using what we have learned we could name a value and then create a template that
 
 ```punk
 > name:Paul ⏎
-{name:{Paul}}
+name:{Paul}
 > message:{Hello name?} ⏎
 message:{Hello name?}
 ```
+
+> NOTE: `name:Paul` is the short form for `name:{Paul}` — a bare Word or Number on the right of `:` is treated as if you'd written it inside `{}`. Things that already have their own delimiters (templates, texts, patterns, function calls) bind as-is.
 
 ### Evaluating a template
 
@@ -155,6 +157,14 @@ To evaluate the template so that the name query is replaced with the name value 
 
 ```punk
 > message! ⏎
+{Hello {Paul}}
+```
+
+The inner `{Paul}` is there because `name:Paul` is short for `name:{Paul}` (above). The plain `?` query is structure-preserving — it returns the value as it was bound, including the singleton wrap. To inline the items of the queried value into the surrounding template, query then spread with `?.?`:
+
+```punk
+> message2:{Hello name?.?} ⏎
+> message2! ⏎
 {Hello Paul}
 ```
 

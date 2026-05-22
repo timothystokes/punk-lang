@@ -136,11 +136,19 @@ const evalItem = (node, env) => {
       } else {
         value = evalItem(node.value, env);
       }
-      // Auto-wrap rule: a bare-value binding (`x:42`, `n:hello`) is
+      // Short-form rule: a bare-value binding (`x:42`, `n:hello`) is
       // shorthand for `x:{42}` / `n:{hello}`. Bare Words and Numbers
       // have no inherent delimiter, so binding wraps them in a
       // singleton Tmpl. Reserved values (TRUE/FALSE) and everything
       // with its own delimiters bind as-is.
+      //
+      // TODO: lift this short-form expansion to parse-time for bare
+      // Word/Number values only (Exec/Query/Tmpl/Text/Fn must stay
+      // untouched) so the AST really does read as if the `{}` were
+      // written. Today it's a runtime wrap inside evalItem.
+      // TODO: same idea for short-form single function param — when a
+      // fn takes one slot, `f!x` should parse as `f!{x}` so the slot
+      // binding is consistent with the multi-arg form.
       if (value && value.kind === 'Word'
           && (value.subkind === 'value' || value.subkind === 'number')) {
         value = mkTmpl([value]);
@@ -361,8 +369,8 @@ function walkSegment(cur, seg, node, env) {
       }
       const only = t.items[0];
       let r = (only && only.kind === 'Named') ? only.value : only;
-      // Unwrap auto-wrapped singleton tmpl (a bare-bound `n:1` evaluates
-      // to `{1}` under the auto-wrap rule).
+      // Unwrap short-form singleton tmpl (a bare-bound `n:1` evaluates
+      // to `{1}` under the short-form rule).
       if (r && r.kind === 'Tmpl' && r.items.length === 1) {
         const inner = r.items[0];
         r = (inner && inner.kind === 'Named') ? inner.value : inner;
@@ -829,7 +837,7 @@ function cascadeTmpl(tmpl, env) {
 
 // Evaluate the value side of a Named pair WITHOUT binding into env.
 // Used for data-Named items inside tmpl literals — they are tagged
-// pairs, not bindings. Applies the same auto-wrap as binding.
+// pairs, not bindings. Applies the same short-form wrap as binding.
 function evalDataValue(node, env) {
   if (!node || typeof node !== 'object') return node;
   let value;
