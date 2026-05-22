@@ -173,7 +173,7 @@ function valueToText(v) {
   if (!v) return '';
   switch (v.kind) {
     case 'Text':
-      return v.parts.map((p) => 'lit' in p ? p.lit : valueToText(p.embed)).join('');
+      return v.parts.map((p) => 'lit' in p ? resolveWordEscapes(p.lit) : valueToText(p.embed)).join('');
     case 'Word':
       return resolveWordEscapes(v.text);
     case 'Null':

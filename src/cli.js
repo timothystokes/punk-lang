@@ -45,14 +45,14 @@ if (process.argv.length > 2) {
     stdout.write(`cannot read ${file}: ${e.message}\n`);
     process.exit(1);
   }
-  try { stdout.write(evalToString(src) + '\n'); }
+  try { evalFile(src); }
   catch (e) { stdout.write(formatError(e) + '\n'); process.exit(1); }
 } else if (!stdin.isTTY) {
   let src = '';
   stdin.setEncoding('utf8');
   stdin.on('data', (d) => { src += d; });
   stdin.on('end', () => {
-    try { stdout.write(evalToString(src) + '\n'); }
+    try { evalFile(src); }
     catch (e) { stdout.write(formatError(e) + '\n'); process.exit(1); }
   });
 } else {
@@ -183,6 +183,14 @@ function evalToString(source) {
   );
   const value = evalProgramAsTmpl(tree, env);
   return formatRepl(value);
+}
+
+function evalFile(source) {
+  const tokens = tokenize(source);
+  const tree = parseValidate(
+    parseOperators(parseWords(parseTree(tokens))),
+  );
+  evalProgramAsTmpl(tree, env);
 }
 
 function formatError(e) {

@@ -310,57 +310,39 @@ Now let's summarise each team's year — peak month, average, and totals — for
   # --- per-team processing --- #
 
   processTeam:(team:_){
-    months:team.#?
-    tTotal:sumByAttribute!{tokens team?}
-    pTotal:sumByAttribute!{pizzas team?}
-    {
-      name:team.:?
-      tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
-      tokensTotal:tTotal?
-      tokensAverageMonth:/!{tTotal? months?}
-      pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
-      pizzasTotal:pTotal?
-      pizzasAverageMonth:/!{pTotal? months?}
-      tokensPerPizza:/!{tTotal? pTotal?}
-    }
-  }~
+    name:team.:?
+    tokensPeakMonth:sortByAttribute!{tokens team?}.1.?
+    tokensTotal:sumByAttribute!{tokens team?}
+    tokensAverageMonth:/!{tokensTotal? team.#?}
+    pizzasPeakMonth:sortByAttribute!{pizzas team?}.1.?
+    pizzasTotal:sumByAttribute!{pizzas team?}
+    pizzasAverageMonth:/!{pizzasTotal? team.#?}
+    tokensPerPizza:/!{tokensTotal? pizzasTotal?}
+  }
 
   # --- pull data processing --- #
 
   processTeams:(teams:_){
-    summary:teams?->map'(team:_){processTeam!team.?}!
-    totalTokens:sumByAttribute!{tokensTotal summary?}
-    totalPizzas:sumByAttribute!{pizzasTotal summary?}
+    teamSummary:teams?->map'(team:_){processTeam!team.?}!
+    totalTokens:sumByAttribute!{tokensTotal teamSummary?}
+    totalPizzas:sumByAttribute!{pizzasTotal teamSummary?}
     tokensPerPizza:/!{totalTokens? totalPizzas?}
-    {
-      teamSummary:summary?
-      totals:{
-        totalTokens:totalTokens?
-        totalPizzas:totalPizzas?
-        tokensPerPizza:tokensPerPizza?
-      }!
-    }
-  }~
+  }
 
   # --- rendering --- #
 
   # one markdown table row for a team's processed summary #
-  renderRow:(t:_){
-    "| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {t.tokensPerPizza?} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"!
-  }~
+  renderRow:(t:_)"| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {t.tokensPerPizza?} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"
 
   # render a full report (rows + totals line) as a markdown table #
-  renderReport:(r:_){
-    rows:r.teamSummary?->map'(t:_){renderRow!t?}!.?
-    body:join!{"
-" rows?}
-    "| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
+  renderReport:(r:_)print!"
+| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
 |-------------|-------:|-------:|------------------:|-------------|-------------|
-{body?}
-| **Totals**  | {r.totals.totalTokens?} | {r.totals.totalPizzas?} | {r.totals.tokensPerPizza?} | — | — |"!
-  }~
+{join!{"\n" r.teamSummary?->map'(t:_){renderRow!t?}!}}
+| **Totals**  | {r.totalTokens?} | {r.totalPizzas?} | {r.tokensPerPizza?} | — | — |
+"
 
-  renderReport!{processTeams!teams?}
+renderReport!{processTeams!teams?}
 
 ```
 

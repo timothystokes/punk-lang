@@ -32,6 +32,7 @@
 
 
 # Per month: tokens = tokens used, pizzas = pizzas eaten. #
+
 teams:{
   Phoenix:{
     Jan:{tokens:850 pizzas:6}  Feb:{tokens:870 pizzas:6}  Mar:{tokens:830 pizzas:7}  Apr:{tokens:860 pizzas:6}
@@ -76,8 +77,8 @@ teams:{
 
   processTeams:(teams:_){
     teamSummary:teams?->map'(team:_){processTeam!team.?}!
-    totalTokens:sumByAttribute!{tokensTotal summary?}
-    totalPizzas:sumByAttribute!{pizzasTotal summary?}
+    totalTokens:sumByAttribute!{tokensTotal teamSummary?}
+    totalPizzas:sumByAttribute!{pizzasTotal teamSummary?}
     tokensPerPizza:/!{totalTokens? totalPizzas?}
   }
 
@@ -87,10 +88,11 @@ teams:{
   renderRow:(t:_)"| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {t.tokensPerPizza?} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"
 
   # render a full report (rows + totals line) as a markdown table #
-  renderReport:(r:_)"
-    | Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
-    |-------------|-------:|-------:|------------------:|-------------|-------------|
-    {join!{"\n" r.teamSummary?->map'(t:_){renderRow!t?}!}}
-    | **Totals**  | {r.totals.totalTokens?} | {r.totals.totalPizzas?} | {r.totals.tokensPerPizza?} | — | — |
-  "
-  renderReport!{processTeams!teams?}
+renderReport:(r:_)print!"
+| Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
+|-------------|-------:|-------:|------------------:|-------------|-------------|
+{join!{"\n" r.teamSummary?->map'(t:_){renderRow!t?}!}}
+| **Totals**  | {r.totalTokens?} | {r.totalPizzas?} | {r.tokensPerPizza?} | — | — |
+"
+  
+renderReport!{processTeams!teams?}
