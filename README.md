@@ -332,14 +332,14 @@ Now let's summarise each team's year — peak month, average, and totals — for
   # --- rendering --- #
 
   # one markdown table row for a team's processed summary #
-  renderRow:(t:_)"| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {t.tokensPerPizza?} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"
+  renderRow:(t:_)"| {t.name?} | {t.tokensTotal?} | {t.pizzasTotal?} | {round!{t.tokensPerPizza? 2}} | {t.tokensPeakMonth.:?} ({t.tokensPeakMonth.tokens?}) | {t.pizzasPeakMonth.:?} ({t.pizzasPeakMonth.pizzas?}) |"
 
   # render a full report (rows + totals line) as a markdown table #
   renderReport:(r:_)print!"
 | Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
 |-------------|-------:|-------:|------------------:|-------------|-------------|
 {join!{"\n" r.teamSummary?->map'(t:_){renderRow!t?}!}}
-| **Totals**  | {r.totalTokens?} | {r.totalPizzas?} | {r.tokensPerPizza?} | — | — |
+| **Totals**  | {r.totalTokens?} | {r.totalPizzas?} | {round!{r.tokensPerPizza? 2}} | — | — |
 "
 
 renderReport!{processTeams!teams?}
@@ -350,9 +350,9 @@ Which produces:
 
 | Team        | Tokens | Pizzas | Tokens/Pizza      | Peak Tokens | Peak Pizzas |
 |-------------|-------:|-------:|------------------:|-------------|-------------|
-| Phoenix | 10355 | 81 | 127.83950617284 | Sep (890) | Sep (8) |
-| Legends | 16100 | 123 | 130.894308943089 | Dec (2640) | Dec (18) |
-| **Totals**  | 26455 | 204 | 129.68137254902 | — | — |
+| Phoenix | 10355 | 81 | 127.84 | Sep (890) | Sep (8) |
+| Legends | 16100 | 123 | 130.89 | Dec (2640) | Dec (18) |
+| **Totals**  | 26455 | 204 | 129.68 | — | — |
 
 
 

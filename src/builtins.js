@@ -290,7 +290,14 @@ export const builtins = {
   'neg':   (args, _env, ctx) => numWord(-toNum(argsItems(args)[0], ctx && ctx.node)),
   'floor': (args, _env, ctx) => numWord(Math.floor(toNum(argsItems(args)[0], ctx && ctx.node))),
   'ceil':  (args, _env, ctx) => numWord(Math.ceil(toNum(argsItems(args)[0], ctx && ctx.node))),
-  'round': (args, _env, ctx) => numWord(Math.round(toNum(argsItems(args)[0], ctx && ctx.node))),
+  'round': (args, _env, ctx) => {
+    const xs = argsItems(args);
+    const n = toNum(xs[0], ctx && ctx.node);
+    if (xs.length < 2) return numWord(Math.round(n));
+    const d = toNum(xs[1], ctx && ctx.node);
+    const f = Math.pow(10, d);
+    return numWord(Math.round(n * f) / f);
+  },
   'sqrt':  (args, _env, ctx) => numWord(Math.sqrt(toNum(argsItems(args)[0], ctx && ctx.node))),
   'rand':  () => {
     // Float in [0, 1] inclusive. 21+32 = 53 bits of randomness divided

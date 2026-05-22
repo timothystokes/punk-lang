@@ -28,6 +28,23 @@ test('split! — multi-character separator', () => {
   assert.equal(punk('split!{", " "a, b, c"}'), '{a b c}');
 });
 
+test('split! — splits on \\n escape (newline marker)', () => {
+  assert.equal(punk('split!{"\\n" "a\\nb\\nc"}'), '{a b c}');
+});
+
+test('split! — splits on \\t escape (tab marker)', () => {
+  assert.equal(punk('split!{"\\t" "x\\ty\\tz"}'), '{x y z}');
+});
+
+test('split! — \\n separator with no occurrences returns single-item template', () => {
+  assert.equal(punk('split!{"\\n" "single line"}'), '{single\\ line}');
+});
+
+test('split! — actual newline char in text is not split by \\n (2-char escape sep)', () => {
+  // Real newline in the target stays inside the single item (escaped on output)
+  assert.equal(punk('split!{"\\n" "a\nb\nc"}'), '{a\\\nb\\\nc}');
+});
+
 // ---- join! ------------------------------------------------------------
 
 test('join! — joins items with separator', () => {
