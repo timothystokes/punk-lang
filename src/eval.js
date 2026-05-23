@@ -340,8 +340,17 @@ function walkSegment(cur, seg, node, env) {
       return { value: mkWord(cur.name), name: null };
     }
     case 'pattern': {
-      if (v.kind !== 'Fn') return null;
-      return { value: mkTmpl(v.params.items), name: null };
+      const fn = (v && v.kind === 'Named') ? v.value : v;
+      if (!fn || fn.kind !== 'Fn') return null;
+      return { value: mkTmpl(fn.params.items), name: null };
+    }
+    case 'body': {
+      const fn = (v && v.kind === 'Named') ? v.value : v;
+      if (!fn || fn.kind !== 'Fn') return null;
+      const body = fn.body;
+      if (!body) return { value: mkTmpl([]), name: null };
+      if (body.kind === 'Tmpl') return { value: stripMeta(body), name: null };
+      return { value: mkTmpl([stripMeta(body)]), name: null };
     }
     case 'range': {
       const isNum  = v.kind === 'Word' && v.subkind === 'number';
@@ -803,15 +812,12 @@ function evalMatch(node, env) {
 //     drops its `{}` and its items spread inline; bare items are
 //     identity.
 function spreadFull(items, full, env) {
-  // `full` is { value, name } from evalQueryFull.
-  if (full.name != null) {
-    items.push({ kind: 'Named', name: full.name, value: full.value });
-    return;
-  }
+  // `.?` spread targets the VALUE only — names are dropped (use `.:?`
+  // to get a name). If the value is a Tmpl, its items spread inline
+  // (Exec/Query items get evaluated so referenced tmpls see fresh
+  // results). Otherwise the bare value lands as one item.
   const v = full.value;
   if (v && v.kind === 'Tmpl') {
-    // Spread items but evaluate each — a referenced tmpl may hold
-    // unresolved Exec/Query items that must run when used.
     for (const it of v.items) {
       if (env && it && (it.kind === 'Exec' || it.kind === 'Query' || it.kind === 'Pipeline')) {
         items.push(evalItem(it, env));

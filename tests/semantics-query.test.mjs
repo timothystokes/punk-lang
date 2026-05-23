@@ -63,12 +63,12 @@ test('`?` never spreads even when surrounded by other items', () => {
 
 // ---------- `.?` inlines the FULL thing (no `{}` wrapper) ----------
 
-test('`.?` on a Named keeps the inner name', () => {
-  // person.birthday is `birthday:{...}` (a Named). `.?` inlines it
-  // into the parent retaining its name.
+test('`.?` on a Named drops the name and spreads the value', () => {
+  // `.?` targets the VALUE; names are only reachable via `.:?`.
+  // p.birthday's value is a Tmpl, so its items spread inline.
   assert.equal(
     punk('p:{birthday:{day:12 month:June year:1997}}  {All date elements p.birthday.?}!'),
-    '{All date elements birthday:{day:12 month:June year:1997}}'
+    '{All date elements day:12 month:June year:1997}'
   );
 });
 
@@ -88,11 +88,11 @@ test('`.?` on a literal Tmpl spreads inline', () => {
   );
 });
 
-test('`.?` on a bare Word is identity (one item)', () => {
-  // r.a's full thing is the Named `a:1`. `.?` keeps the name.
+test('`.?` on a Named scalar drops the name and inlines the value', () => {
+  // r.a's value is the Word 1; the data-name `a` is dropped by `.?`.
   assert.equal(
     punk('r:{a:1 b:2}  {got r.a.?}!'),
-    '{got a:1}'
+    '{got 1}'
   );
 });
 

@@ -139,6 +139,15 @@ export function parseTree(tokens) {
     for (const it of merged) {
       if (
         it.kind === 'Word' && it._fromWordTok
+        && it.text.length > 2 && it.text.endsWith('???')
+      ) {
+        throw new PunkSyntaxError(
+          `'???' is not a valid operator (use '??' for dispatch; '??' already queries its subject)`,
+          it.line, it.col + it.text.length - 3,
+        );
+      }
+      if (
+        it.kind === 'Word' && it._fromWordTok
         && it.text.length > 2 && it.text.endsWith('??')
       ) {
         const head = { ...it, text: it.text.slice(0, -1) };
@@ -709,6 +718,11 @@ const decodeWord = (w) => {
       throw new PunkSyntaxError(
         `'${headRaw}' is not a valid path head`, line, col,
       );
+    } else if (RESERVED_NAMES.has(headRaw)) {
+      throw new PunkSyntaxError(
+        `'${text}' — '${headRaw}' is a literal value, not a name (cannot use '?'/'!'/' on a reserved word)`,
+        line, col,
+      );
     }
     const tail = decodeSegments(segs.slice(1), line, col);
     const make =
@@ -982,7 +996,19 @@ const collectDynPath = (items, i, headOverride) => {
     const rs = tail[k];
     const isLast = k === tail.length - 1;
     if (rs.tmpl) {
-      segs.push({ kind: 'dynamic', expr: walkNode(rs.tmpl) });
+      // Special: an empty `{}` segment is the "body" segment — gets a
+      // function's body items as a tmpl (queries/text-embeds evaluated
+      // in the function's captured env). Must be the final segment.
+      if (rs.tmpl.kind === 'Tmpl' && rs.tmpl.items.length === 0) {
+        if (!isLast) {
+          throw new PunkSyntaxError(
+            "'{}' must be the final path segment", lineRef, colRef,
+          );
+        }
+        segs.push({ kind: 'body' });
+      } else {
+        segs.push({ kind: 'dynamic', expr: walkNode(rs.tmpl) });
+      }
     } else {
       const s = rs.str;
       if (s === '#') {

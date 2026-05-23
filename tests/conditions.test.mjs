@@ -106,3 +106,41 @@ test('match template references pattern-bound name', () => {
     '{Number:"42"}'
   );
 });
+
+// --- Syntax rules for `??` and queries on literals ---------------------
+// `??` always queries its subject, so `???` is never needed and is rejected
+// at parse time. Likewise, `?` and `!` are name operators — applying them to
+// a reserved-word literal (TRUE/FALSE/NULL) is a syntax error.
+
+test('`???` is a syntax error', () => {
+  punkThrows('x:5  x???{(_){a}}!');
+});
+
+test('`???` standalone is a syntax error', () => {
+  punkThrows('???');
+});
+
+test('`?` on reserved FALSE is a syntax error', () => {
+  punkThrows('FALSE?');
+});
+
+test('`?` on reserved TRUE is a syntax error', () => {
+  punkThrows('TRUE?');
+});
+
+test('`?` on reserved NULL is a syntax error', () => {
+  punkThrows('NULL?');
+});
+
+test('`??` on a reserved literal is a syntax error', () => {
+  // `TRUE??{...}` would split into `TRUE?` + `?`; the `TRUE?` query is rejected.
+  punkThrows('TRUE??{(TRUE){t}}!');
+});
+
+test('`??` on a static template literal is valid', () => {
+  assert.equal(
+    punk('{hello}??{(hello){h}(_){o}}!'),
+    '{h}'
+  );
+});
+

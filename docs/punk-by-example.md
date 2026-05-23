@@ -752,6 +752,8 @@ Punk will find the first matching pattern and then query that template.
 > - `value??{ ... }!` — multi-branch. First match wins. With no matching branch it's a **runtime error**. To make a `??` total, give it a final catch-all branch — `(_){...}` for a single thing, `(*){...}` for any shape at all. The trailing `!` is required.
 >
 > Forgetting the `!` on a body-bearing conditional is a syntax error.
+>
+> **`??` always queries its subject.** Writing `x??{...}!` looks up `x` and dispatches on its value — there is no separate "look up x, then dispatch on the result" form, so `x???{...}!` is a syntax error. The subject must be something that produces a value: a query (`x?`, `x.y?`), a call (`f!...`), a template (`{...}`), a text, a pattern, or a chain of these. Applying `??` (or `?`, or `!`) to a reserved-word literal like `TRUE`, `FALSE`, or `NULL` is also a syntax error — those are values, not names you can query or call.
 
 ### Truthiness
 
