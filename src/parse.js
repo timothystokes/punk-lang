@@ -1156,9 +1156,9 @@ const mergeSiblings = (items) => {
   let xs = items;
   xs = passArgsAttach(xs);
   xs = passFnFormation(xs);
+  xs = passReturnRange(xs);
   xs = passArgsAttach(xs);
   xs = passMatch(xs);
-  xs = passReturnRange(xs);
   xs = passPostfixBang(xs);
   xs = passPipeline(xs);
   xs = passResolveNamed(xs);

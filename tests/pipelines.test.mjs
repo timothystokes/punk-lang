@@ -109,7 +109,7 @@ test('pipeline into a 1-remaining partial — slot receives the tmpl, hof iterat
   assert.equal(
     punk(`
       xs:{10 20 30}
-      grow:map'{(s:_){+!{s? 1}}~}
+      grow:map'(s:_){+!{s? 1}}~
       xs?->grow!
     `),
     '{11 21 31}',
@@ -120,12 +120,12 @@ test('pipeline into a 1-remaining partial matches direct call', () => {
   // Direct and pipeline forms must produce the same value.
   const direct = punk(`
     xs:{10 20 30}
-    grow:map'{(s:_){+!{s? 1}}~}
+    grow:map'(s:_){+!{s? 1}}~
     grow!{xs?}
   `);
   const piped = punk(`
     xs:{10 20 30}
-    grow:map'{(s:_){+!{s? 1}}~}
+    grow:map'(s:_){+!{s? 1}}~
     xs?->grow!
   `);
   assert.equal(piped, direct);

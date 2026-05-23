@@ -101,13 +101,13 @@ test('each! — 3-slot callback is an arity error', () => {
 // ---------- partial form `map'fn` ----------
 
 test("partial — `map'(item:_){...}` is a unary list transformer", () => {
-  const src = `double:map'{(n:_){X!{n? 2}}~}
+  const src = `double:map'(n:_){X!{n? 2}}~
 double!{1 2 3}`;
   assert.equal(punk(src), '{2 4 6}');
 });
 
 test("partial — `map'(item:_ index:_){...}` works with index", () => {
-  const src = `tag:map'{(v:_ i:_){{i? v?}}~}
+  const src = `tag:map'(v:_ i:_){{i? v?}}~
 tag!{a b c}`;
   assert.equal(punk(src), '{{1 a} {2 b} {3 c}}');
 });

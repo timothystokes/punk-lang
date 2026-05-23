@@ -162,7 +162,7 @@ test('contains! — FALSE when absent', () => {
 // ---- partial-friendly arg order ---------------------------------------
 
 test("partial — `map'fn` is a unary list transformer", () => {
-  const src = `double:map'{(n:_){X!{n? 2}}~}
+  const src = `double:map'(n:_){X!{n? 2}}~
     double!{1 2 3}`;
   assert.equal(punk(src), '{2 4 6}');
 });
