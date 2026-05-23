@@ -268,6 +268,15 @@ export function tokenize(src) {
         continue;
       }
 
+      // `|` inside a pattern is the such-that separator. Emit as its
+      // own WORD token so the parser can recognise it. Outside
+      // patterns it stays part of words (no change).
+      if (c === '|' && patternDepth > 0) {
+        advance();
+        push(TOKEN_TYPES.WORD, '|', startLine, startCol);
+        continue;
+      }
+
       // `/` is special in Punk: reserved for regex literals (only inside
       // `(...)`) and the division builtin (`/!`). A bare `/` anywhere
       // else is a syntax error — use `\/` for a literal slash or wrap
@@ -355,6 +364,9 @@ export function tokenize(src) {
         // `/` terminates the word too — outside `(...)` the outer loop
         // will either emit `/!` (division) or throw a syntax error.
         if (ch === '/') break;
+        // `|` inside a pattern is structural (such-that separator);
+        // break out so the outer loop can emit it on its own.
+        if (ch === '|' && patternDepth > 0) break;
         text += ch;
         advance();
         // `:` immediately following a name char ends the word AFTER

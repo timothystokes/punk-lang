@@ -182,3 +182,81 @@ test('a label rebinds the value — incoming name is dropped', () => {
   // incoming name — a plain literal arg also binds x to its value.
   assert.equal(punk('f:([x]){x?}  f!{7}'), '{7}');
 });
+
+// --- Such-that patterns (the `|` modifier) ---
+//
+// Within a pattern, ` | ` (space-padded) switches the remainder into
+// order-independent name-context matching. Each RHS clause is strictly
+// `name:slot`. Both sides see the full input value at this level.
+
+test('pure such-that: empty LHS only matches `{}`', () => {
+  // LHS is empty, so it still requires zero items strictly.
+  assert.equal(punk('{}?(| a:_)'), 'FALSE');
+  assert.equal(punk('{}?(|)'), 'TRUE'); // empty such-that, empty input
+});
+
+test('such-that with `*` LHS pulls a Named entry by name regardless of position', () => {
+  assert.equal(punk('{a:1 b:2 c:3}?(* | b:_)'), 'TRUE');
+  assert.equal(punk('{a:1 b:2 c:3}?(* | missing:_)'), 'FALSE');
+});
+
+test('such-that extracts via `[label]` into the body', () => {
+  assert.equal(
+    punk('f:(* | b:[y]){y?}  f!{a:1 b:2 c:3}'),
+    '{2}',
+  );
+  // Order-independent — `b` can appear anywhere.
+  assert.equal(
+    punk('f:(* | b:[y]){y?}  f!{b:99 a:1}'),
+    '{99}',
+  );
+});
+
+test('such-that hybrid: LHS positional + RHS context, both see full input', () => {
+  // `[x]` binds the first item by position; `b:[y]` finds `b` anywhere.
+  assert.equal(
+    punk('f:([x] * | b:[y]){x? y?}  f!{first a:1 b:42}'),
+    '{first 42}',
+  );
+});
+
+test('such-that literal value: enforces equality', () => {
+  assert.equal(punk('{a:1 x:11 b:2}?(* | x:11)'), 'TRUE');
+  assert.equal(punk('{a:1 x:10 b:2}?(* | x:11)'), 'FALSE');
+});
+
+test('such-that RHS clause can carry a nested pattern', () => {
+  assert.equal(
+    punk('{a:1 b:2 c:{green blue}}?(* | c:([m] [n]))'),
+    'TRUE',
+  );
+  assert.equal(
+    punk('f:(* | c:([m] [n])){m? n?}  f!{a:1 b:2 c:{green blue}}'),
+    '{green blue}',
+  );
+});
+
+test('such-that RHS clause can carry another `|` for deeper context-only match', () => {
+  assert.equal(
+    punk(
+      'f:(* | c:(* | inner:[v])){v?}  f!{a:1 c:{x:9 inner:42 y:7}}',
+    ),
+    '{42}',
+  );
+});
+
+test('such-that requires strict LHS — extras without `*` fail', () => {
+  // No `*` to absorb the extras → LHS demands exactly two items.
+  assert.equal(punk('{a:1 b:2 c:3}?([x] [y] | a:_)'), 'FALSE');
+  // With `*`, LHS is lax, RHS finds `a`.
+  assert.equal(punk('{a:1 b:2 c:3}?([x] [y] * | a:_)'), 'TRUE');
+});
+
+test('such-that labels share the same flat scope; duplicates are a parse error', () => {
+  // Duplicate label between LHS and RHS.
+  punkThrows('f:([x] * | a:[x]){x?}');
+  // Duplicate within RHS clauses.
+  punkThrows('f:(* | a:[x] b:[x]){x?}');
+  // Duplicate between RHS and a deeper such-that.
+  punkThrows('f:(* | a:[x] c:(* | inner:[x])){x?}');
+});

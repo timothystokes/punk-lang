@@ -130,6 +130,45 @@ Rules:
   not a context match. To context-match without extracting use
   `name:_`.
 
+### Such-that patterns — `|` modifier
+
+A pattern can include a `|` separator (space-padded on both sides).
+The LHS of `|` is a standard positional pattern (everything described
+above). The RHS is one or more `name:value` clauses that are matched
+**order-independently** against the input by name.
+
+```
+> (LHS | name1:slot name2:slot ...) ⏎
+```
+
+Semantics:
+- **Both sides see the full input** at this level. The LHS still
+  matches positionally and must strictly account for every item (use
+  `_`/`*` for laxness, just like a normal pattern); the RHS then
+  scans the same full input for the named entries it asks for.
+- **RHS clauses are strictly `name:value`.** `value` accepts any slot
+  form — `_`, `[label]`, literal, regex, `[label/regex/f]`, or a
+  nested `(...)` pattern (which may itself contain a `|`).
+- **Order-independent on RHS**: each clause finds the Named entry
+  with its name anywhere at this level. Missing → match fails.
+- **Flat label scope across both sides** and any nesting, same as
+  before; duplicate labels are a parse-time error.
+- Each nesting level needs its **own** `|` if it wants such-that
+  matching at that level.
+
+```
+> (* | b:[y])             # any input, extract value of `b` as y #
+> ([x] * | b:[y])         # x = item 1, y = value of named `b` anywhere #
+> (* | c:([a] [b]))       # c's value must shape-match (_ _); a,b bound #
+> (* | x:11)              # input must contain a Named `x` with value 11 #
+```
+
+Notes:
+- Pure such-that (`(| ...)`) has an empty LHS and so only matches the
+  empty template `{}`. To work on any input, prefix `*` on the LHS.
+- A nested pattern on the RHS can carry its own `|`:
+  `(* | c:(* | a:[x]))`.
+
 ### Named patterns
 
 Patterns are first-class values; they can be bound to a name and reused.

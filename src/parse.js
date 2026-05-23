@@ -1126,6 +1126,9 @@ const walkNode = (node) => {
       const items = walkSiblings(node.items);
       const out = mkPattern(items, node.line, node.col);
       if (node.glued) out.glued = true;
+      if (node.suchThat) {
+        out.suchThat = node.suchThat.map((c) => walkNode(c));
+      }
       return out;
     }
     case 'Atom': {
@@ -1200,7 +1203,56 @@ const opsWalk = (node) => {
     case 'Pattern': {
       const items = node.items.map(opsWalk);
       const merged = mergeSiblings(items);
-      return { ...node, items: merged };
+      let outItems = merged;
+      let suchThat = null;
+      if (node.kind === 'Pattern') {
+        const barIdx = merged.findIndex(
+          (n) => n && n.kind === 'Word' && n.text === '|',
+        );
+        if (barIdx !== -1) {
+          const bar = merged[barIdx];
+          if (bar.glued) {
+            throw new PunkSyntaxError(
+              "'|' must be space-padded inside a pattern",
+              bar.line, bar.col,
+            );
+          }
+          const next = merged[barIdx + 1];
+          if (next && next.glued) {
+            throw new PunkSyntaxError(
+              "'|' must be space-padded inside a pattern",
+              bar.line, bar.col,
+            );
+          }
+          const second = merged.findIndex(
+            (n, k) => k > barIdx && n && n.kind === 'Word' && n.text === '|',
+          );
+          if (second !== -1) {
+            throw new PunkSyntaxError(
+              "a pattern level can have at most one '|'",
+              merged[second].line, merged[second].col,
+            );
+          }
+          outItems = merged.slice(0, barIdx);
+          const rhsRaw = merged.slice(barIdx + 1);
+          suchThat = [];
+          for (const item of rhsRaw) {
+            if (!item || item.kind !== 'Named' || item._label === true) {
+              throw new PunkSyntaxError(
+                "such-that clauses (right of '|') must be `name:value`",
+                item && item.line, item && item.col,
+              );
+            }
+            suchThat.push(item);
+          }
+        }
+      }
+      const out = { ...node, items: outItems };
+      if (node.kind === 'Pattern') {
+        if (suchThat) out.suchThat = suchThat;
+        else if (node.suchThat) out.suchThat = node.suchThat.map(opsWalk);
+      }
+      return out;
     }
     case 'Atom':
       return node;
@@ -1717,7 +1769,11 @@ const wrapWalk = (node, isBindingTmpl) => {
       return node;
     case 'Pattern': {
       const items = node.items.map((it) => wrapWalk(it, false));
-      return { ...node, items };
+      const out = { ...node, items };
+      if (node.suchThat) {
+        out.suchThat = node.suchThat.map((c) => wrapWalk(c, false));
+      }
+      return out;
     }
     case 'Fn': {
       const params = wrapWalk(node.params, false);
@@ -1968,6 +2024,9 @@ const validateNode = (node, stack) => {
             }
             if (n.kind === 'Pattern' || n.kind === 'Tmpl') {
               for (const it of n.items) collect(it);
+              if (n.kind === 'Pattern' && n.suchThat) {
+                for (const it of n.suchThat) collect(it);
+              }
               return;
             }
             if (n.kind === 'Named') {
@@ -1975,10 +2034,14 @@ const validateNode = (node, stack) => {
             }
           };
           for (const item of node.items) collect(item);
+          if (node.suchThat) for (const it of node.suchThat) collect(it);
         }
       }
       const childStack = [...stack, node];
       for (const item of node.items) validateNode(item, childStack);
+      if (node.kind === 'Pattern' && node.suchThat) {
+        for (const it of node.suchThat) validateNode(it, childStack);
+      }
       return;
     }
 

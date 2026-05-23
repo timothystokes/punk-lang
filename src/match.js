@@ -133,7 +133,11 @@ function matchSlot(item, slot, bindings) {
   }
   if (info.inner.kind === 'Pattern') {
     if (!unwrapped || unwrapped.kind !== 'Tmpl') return false;
-    return matchPatternItems(unwrapped.items, info.inner.items, bindings);
+    if (!matchPatternItems(unwrapped.items, info.inner.items, bindings)) return false;
+    if (info.inner.suchThat) {
+      if (!matchSuchThat(unwrapped.items, info.inner.suchThat, bindings)) return false;
+    }
+    return true;
   }
   // Bare literal — exact value equality. Auto-wrap means runtime values
   // are often a singleton Tmpl (e.g. `{GET}` for `method:GET`); unwrap
@@ -202,5 +206,27 @@ export function match(value, pattern) {
   if (!value || value.kind !== 'Tmpl') return null;
   const bindings = new Map();
   if (!matchPatternItems(value.items, pattern.items, bindings)) return null;
+  if (pattern.suchThat) {
+    if (!matchSuchThat(value.items, pattern.suchThat, bindings)) return null;
+  }
   return bindings;
+}
+
+// Such-that clauses are matched against the full input items at this
+// level. Each clause is a Named (`name:slot`); we look for a Named
+// entry in the input with the same name and run matchSlot on its
+// value. Order-independent; a missing name (or a slot mismatch) means
+// the whole pattern fails.
+function matchSuchThat(items, clauses, bindings) {
+  for (const clause of clauses) {
+    if (!clause || clause.kind !== 'Named' || clause._label === true) {
+      return false; // shouldn't happen — parse-time guard
+    }
+    const found = items.find(
+      (it) => it && it.kind === 'Named' && it.name === clause.name,
+    );
+    if (!found) return false;
+    if (!matchSlot(found.value, clause.value, bindings)) return false;
+  }
+  return true;
 }

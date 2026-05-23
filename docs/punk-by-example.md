@@ -561,6 +561,43 @@ Inside a nested pattern every slot form is available — `_`, `*`, `[n]`, `*[n]`
 **Labels are a flat scope.** All labels collected across a pattern — at every depth — are exposed to the function body as one flat map. So a label must be **unique within the whole outer pattern**; re-using the same label name anywhere in a nested pattern is a parse-time error.
 
 
+### Such-that patterns — the `|` modifier
+
+A pattern can include a `|` separator (borrowed from set-theory notation "such that"). Anything to the **right** of `|` is matched against the input by **name** rather than by position, order-independently. The bar must be space-padded on both sides for readability.
+
+```punk
+> (LHS | name1:slot name2:slot ...) ⏎
+```
+
+Semantics:
+
+- **Both sides see the full input** at this level. The LHS continues to match positionally exactly as it does today — strict accounting, so use `_` and `*` to absorb things the LHS doesn't explicitly bind. The RHS independently scans the same full input for the named entries it asks for.
+- **RHS clauses are strictly `name:value`.** The `value` accepts any slot form — `_`, `[label]`, a literal, a regex `/.../`, a labelled regex `[label/regex/f]`, or a nested `(...)` pattern (which may itself contain a `|`).
+- The RHS is **order-independent**: a clause `b:[y]` finds the Named entry called `b` wherever it appears at this level.
+- A missing Named name on the RHS (or a literal/shape mismatch on its value) makes the whole pattern fail.
+- All labels — LHS, RHS, nested — share the same flat scope and must be unique.
+- Each nesting level needs its **own** `|` to enable such-that matching at that level.
+
+Common forms:
+
+```punk
+> (* | b:[y]) ⏎              # any input, extract value of `b` as y         #
+> ([x] * | b:[y]) ⏎          # x = first item; y = value of `b` anywhere.   #
+> (* | c:([a] [b])) ⏎        # c's value must shape-match (_ _); a,b bound  #
+> (* | x:11) ⏎               # input must contain a Named `x` with value 11 #
+```
+
+Given `data:{a:1 b:2 c:{green blue}}`:
+
+```punk
+> data?(* | c:([a] [b])) ⏎        # TRUE; binds a=green b=blue               #
+> data?(* | a:[x] c:([m] [n])) ⏎  # TRUE; binds x=1 m=green n=blue           #
+> data?(* | missing:_) ⏎          # FALSE — no Named `missing` in data       #
+```
+
+> NOTE: A pure such-that pattern `(| ...)` has an empty LHS, so by the LHS's strict-accounting rule it only matches the empty template `{}`. To work on any input, prefix `*` on the LHS: `(* | ...)`. A nested such-that pattern carries its own `|`: `(* | c:(* | a:[x]))`.
+
+
 ### Regex slots
 
 A pattern slot can also be a regex literal written between forward slashes `/.../`. It matches a single thing whose text satisfies the regex.
@@ -1539,6 +1576,7 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | `/` `/` | Regex literal delimiters | Reserved — `/` outside `(...)` or `"..."` is a syntax error. Inside a pattern `(...)` a `/`-delimited literal is a regex pattern slot. `\/` escapes a literal slash; `/!` is the division builtin (a complete word, not a bare `/`). |
 | `_` | Single wildcard | Only inside patterns |
 | `*` | Variadic wildcard (zero or more) | Only inside patterns |
+| `|` | Such-that separator inside a pattern | Only inside patterns; must be space-padded; switches the remainder of the pattern to order-independent context-only matching |
 | `\` | Escape character — makes the next character literal | Anywhere a special character needs to appear as text |
 | space | Item separator inside a template or inside a pattern | Between things inside `{ ... }` and `( ... )` |
 

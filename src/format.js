@@ -19,8 +19,14 @@ export function format(value) {
       return value.text;
     case 'Tmpl':
       return '{' + value.items.map(format).join(' ') + '}';
-    case 'Pattern':
-      return '(' + value.items.map(format).join(' ') + ')';
+    case 'Pattern': {
+      const lhs = value.items.map(format).join(' ');
+      if (value.suchThat && value.suchThat.length) {
+        const rhs = value.suchThat.map(format).join(' ');
+        return '(' + (lhs ? lhs + ' ' : '') + '| ' + rhs + ')';
+      }
+      return '(' + lhs + ')';
+    }
     case 'Text': {
       let out = '"';
       for (const part of value.parts) {
