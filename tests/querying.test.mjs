@@ -143,9 +143,11 @@ test('`.:?` works off any segment of a path', () => {
 
 // ---------- Pattern segment `.()?` ----------
 
-test('`.()?` of a function returns its pattern bare', () => {
+test('`.()?` of a function returns its pattern items as a tmpl', () => {
+  // The pattern's items are returned as a tmpl so callers can `map!`
+  // or otherwise iterate them like any structured template.
   assert.equal(punk('add:([a] [b]){+!{a? b?}}  add.()?'),
-                    '([a] [b])');
+                    '{[a] [b]}');
 });
 
 test('`.()?` of a non-function returns NULL', () => {

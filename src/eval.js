@@ -341,7 +341,7 @@ function walkSegment(cur, seg, node, env) {
     }
     case 'pattern': {
       if (v.kind !== 'Fn') return null;
-      return { value: v.params, name: null };
+      return { value: mkTmpl(v.params.items), name: null };
     }
     case 'range': {
       const isNum  = v.kind === 'Word' && v.subkind === 'number';

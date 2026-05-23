@@ -256,7 +256,7 @@ Here are some other ways of querying:
 | `people.3.fullname.~5?` | `"Ben J"` | `~n` | Range: from the beginning up to the item at position `n`. Works on characters of an unstructured template too. |
 | `people.1.2~3?` | `{42 black}` | `n~n` | Range: items from position `n` through position `m` inclusive. |
 | `people.1.fullname.:?` | `{fullname}` | `:` | Name: the name of the referenced thing as a Word, or `NULL` if it has no name. |
-| `add.()?` | `([a] [b])` | `()` | Pattern: the pattern of a function, or `NULL` if the referenced thing is not a function. |
+| `add.()?` | `{[a] [b]}` | `()` | Pattern: the pattern items of a function as a tmpl (so callers can `map!`/iterate them like any structured template), or `NULL` if the referenced thing is not a function. |
 | `people.1.?` | `fullname:"John Smith" age:42 hair:black ...` | `.?` | Spread: the full thing at the end of the path, inlined into the parent (Named names preserved; plain `{}` boundary dropped). See *How values splice into their surroundings* below. |
 
 > NOTE: Querying a built-in function name with `?` gives you the function itself (e.g. `+?` is the `+!` function as a value). This is how you alias a built-in under a new name: `add:+?` — bare `+` on its own would be the literal Word `+`, but `+?` looks it up and returns the function.
@@ -1569,7 +1569,7 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | `'` | Partial application — like `!` but returns a new function with the leftmost parameters pre-filled | Suffix of a function name where `!` would otherwise execute it |
 | `.` | Path segment separator | Only inside a path token that ends in `?` or `!` |
 | `.:?` | Name segment — resolves to the name of the referenced thing, or `NULL` if it has no name | At the end of a path |
-| `.()?` | Pattern segment — resolves to the pattern of a function, or `NULL` if the referenced thing is not a function | At the end of a path |
+| `.()?` | Pattern segment — resolves to the pattern items of a function as a tmpl, or `NULL` if the referenced thing is not a function | At the end of a path |
 | `~` | Range / last-item | Inside paths (`.~`, `.N~M`), as a value constructor (`5~15`), and as a function-return constraint (`{…}~`) |
 | `#` | Comment delimiter / length-of segment | `#` is a paired comment delimiter anywhere outside of escapes — `# ... #`. Comments vanish entirely (zero-width); unclosed `#` is a syntax error. The one exception is `.#?` at the end of a path, where `#` is the length-of segment. |
 | `->` | Pipeline operator | Joins two sides with no whitespace; left flows into right when the chain ends in `!`, otherwise the chain is a composed function |
