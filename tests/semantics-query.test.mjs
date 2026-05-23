@@ -103,7 +103,7 @@ test('path step on a call result — `(f!arg).x?` precedence', () => {
   // call returns the bare arg (a tmpl), and `.1?` indexes into it.
   assert.equal(
     punk(`
-      id:(x:_){x?}~
+      id:([x]){x?}~
       id!{{a b c}}.1?
     `),
     '{a}',
@@ -114,7 +114,7 @@ test('path step on a call result without parens — call binds tighter', () => {
   // `id!{{a:1 b:2 c:3}}.b?` ≡ `(id!{...}).b?`
   assert.equal(
     punk(`
-      id:(x:_){x?}~
+      id:([x]){x?}~
       id!{{a:1 b:2 c:3}}.b?
     `),
     '{2}',
@@ -136,7 +136,7 @@ test('`.?` spread on a call result expands the value inline', () => {
   // items into the outer template.
   assert.equal(
     punk(`
-      pair:(x:_ y:_){{a:x? b:y?}}~
+      pair:([x] [y]){{a:x? b:y?}}~
       {got pair!{1 2}.?}!
     `),
     '{got a:1 b:2}',
@@ -148,8 +148,8 @@ test('pipeline result accepts a `.path?` query via `!.path?`', () => {
   // trigger `!` becomes a wrapping Query on the pipeline result.
   assert.equal(
     punk(`
-      add:(a:_ b:_){+!{a? b?}}
-      +!{ {1 2 3}->map'(x:_){add!{x? 10}}!.? }
+      add:([a] [b]){+!{a? b?}}
+      +!{ {1 2 3}->map'([x]){add!{x? 10}}!.? }
     `),
     '{36}',
   );

@@ -13,10 +13,10 @@ import assert from 'node:assert/strict';
 import { punk } from './_punk.mjs';
 
 test('arity dispatch — one arg', () => {
-  const src = `greet:(args:*){
+  const src = `greet:(*[args]){
       args??{
-        (n:_){Hello n?}
-        (n:_ t:_){Hello t? n?}
+        ([n]){Hello n?}
+        ([n] [t]){Hello t? n?}
       }!
     }
     greet!Tim`;
@@ -24,10 +24,10 @@ test('arity dispatch — one arg', () => {
 });
 
 test('arity dispatch — two args', () => {
-  const src = `greet:(args:*){
+  const src = `greet:(*[args]){
       args??{
-        (n:_){Hello n?}
-        (n:_ t:_){Hello t? n?}
+        ([n]){Hello n?}
+        ([n] [t]){Hello t? n?}
       }!
     }
     greet!{Tim Dr\\.}`;
@@ -35,11 +35,11 @@ test('arity dispatch — two args', () => {
 });
 
 test('shape dispatch — area of a rect', () => {
-  const src = `area:(shape:*){
+  const src = `area:(*[shape]){
       shape??{
-        (circle r:_){X!{X!{3.141 r?} r?}}
-        (rect w:_ h:_){X!{w? h?}}
-        (tri b:_ h:_){/!{X!{b? h?} 2}}
+        (circle [r]){X!{X!{3.141 r?} r?}}
+        (rect [w] [h]){X!{w? h?}}
+        (tri [b] [h]){/!{X!{b? h?} 2}}
       }!
     }
     area!{rect w:4 h:3}`;
@@ -47,11 +47,11 @@ test('shape dispatch — area of a rect', () => {
 });
 
 test('shape dispatch — area of a circle', () => {
-  const src = `area:(shape:*){
+  const src = `area:(*[shape]){
       shape??{
-        (circle r:_){X!{X!{3.141 r?} r?}}
-        (rect w:_ h:_){X!{w? h?}}
-        (tri b:_ h:_){/!{X!{b? h?} 2}}
+        (circle [r]){X!{X!{3.141 r?} r?}}
+        (rect [w] [h]){X!{w? h?}}
+        (tri [b] [h]){/!{X!{b? h?} 2}}
       }!
     }
     area!{circle r:5}`;
@@ -59,7 +59,7 @@ test('shape dispatch — area of a circle', () => {
 });
 
 test('value dispatch — literal slots', () => {
-  const src = `route:(req:_){
+  const src = `route:([req]){
       req??{
         (method:GET path:\\/      *){home}
         (method:GET path:\\/about *){about}
@@ -71,7 +71,7 @@ test('value dispatch — literal slots', () => {
 });
 
 test('value dispatch — falls through to catch-all', () => {
-  const src = `route:(req:_){
+  const src = `route:([req]){
       req??{
         (method:GET path:\\/      *){home}
         (method:GET path:\\/about *){about}
@@ -83,10 +83,10 @@ test('value dispatch — falls through to catch-all', () => {
 });
 
 test('regex dispatch — integer text', () => {
-  const src = `classify:(s:_){
+  const src = `classify:([s]){
       s??{
-        (n:/^\\d+$/         ){integer}
-        (h:/^#[0-9a-f]{6}$/){color}
+        ([n/^\\d+$/]         ){integer}
+        ([h/^#[0-9a-f]{6}$/]){color}
         (_                 ){other}
       }!
     }
@@ -95,10 +95,10 @@ test('regex dispatch — integer text', () => {
 });
 
 test('regex dispatch — color text', () => {
-  const src = `classify:(s:_){
+  const src = `classify:([s]){
       s??{
-        (n:/^\\d+$/         ){integer}
-        (h:/^#[0-9a-f]{6}$/){color}
+        ([n/^\\d+$/]         ){integer}
+        ([h/^#[0-9a-f]{6}$/]){color}
         (_                 ){other}
       }!
     }
@@ -108,12 +108,12 @@ test('regex dispatch — color text', () => {
 
 test('method-style dispatch — same call site, different object', () => {
   const src = `printer:{
-      print:(msg:_){upper!{msg?}}
+      print:([msg]){upper!{msg?}}
     }
     silent-printer:{
-      print:(msg:_){}
+      print:([msg]){}
     }
-    log-it:(p:_ m:_){p?.print!{m?}}
+    log-it:([p] [m]){p?.print!{m?}}
     log-it!{printer hello}`;
   assert.equal(punk(src), '{{"HELLO"}}');
 });

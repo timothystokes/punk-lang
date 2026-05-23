@@ -61,8 +61,8 @@ test('`age: 42` (space after colon) is a syntax error', () => {
 test('a function literal is just PDN — inert until called', () => {
   // Holding the function in source as a value; querying gives it back.
   assert.equal(
-    punk('f:(x:_){+!{x? 1}}  f?'),
-    '(x:_){+!{x? 1}}'
+    punk('f:([x]){+!{x? 1}}  f?'),
+    '([x]){+!{x? 1}}'
   );
 });
 

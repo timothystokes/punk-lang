@@ -10,7 +10,7 @@
 //     sense at the **end** of a pattern — anywhere else there is no way
 //     to decide how many items it should swallow. At most one per pattern.
 //   - Patterns nest: `((_ _) _)`.
-//   - Slots can be named: `(x:_ y:_)`.
+//   - Slots can be named: `([x] [y])`.
 //   - Patterns can have regex slots `/.../`; capture groups bind by index;
 //     named groups `(?<name>...)` also reachable by name.
 //   - Unmatched optional group binds to NULL.
@@ -88,7 +88,7 @@ test('variadic must be the last slot — non-trailing `*` is a syntax error', ()
   punkThrows('{a b}?(* end)');
   punkThrows('{a b c}?(start * end)');
   punkThrows('{a b c}?(* TRUE *)');
-  punkThrows('{a b}?(first:_ middle:* last:_)');
+  punkThrows('{a b}?([first] *[middle] [last])');
 });
 
 test('two variadics in one pattern is a syntax error', () => {
@@ -107,8 +107,8 @@ test('nested pattern with literal slot inside', () => {
 });
 
 test('named slots do not affect what is matched — only shape and order', () => {
-  assert.equal(punk('{1 2}?(x:_ y:_)'), 'TRUE');
-  assert.equal(punk('{1 2 3}?(x:_ y:_)'), 'FALSE');
+  assert.equal(punk('{1 2}?([x] [y])'), 'TRUE');
+  assert.equal(punk('{1 2 3}?([x] [y])'), 'FALSE');
 });
 
 test('regex slot — only digits', () => {

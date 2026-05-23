@@ -72,15 +72,15 @@ test('islist! — FALSE for unstructured text', () => {
 // ---- isfn! ------------------------------------------------------------
 
 test('isfn! — TRUE for a function literal', () => {
-  assert.equal(punk('isfn!(x:_){x?}'), 'TRUE');
+  assert.equal(punk('isfn!([x]){x?}'), 'TRUE');
 });
 
 test('isfn! — TRUE for a named function (resolved with `?`)', () => {
-  assert.equal(punk('f:(x:_){x?}  isfn!{f?}'), 'TRUE');
+  assert.equal(punk('f:([x]){x?}  isfn!{f?}'), 'TRUE');
 });
 
 test('isfn! — FALSE for a pattern without a body', () => {
-  assert.equal(punk('isfn!(x:_)'), 'FALSE');
+  assert.equal(punk('isfn!([x])'), 'FALSE');
 });
 
 test('isfn! — FALSE for a plain template', () => {

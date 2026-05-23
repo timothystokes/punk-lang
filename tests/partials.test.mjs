@@ -13,21 +13,21 @@ import { punk } from './_punk.mjs';
 
 test('partial application pre-fills the leftmost parameter', () => {
   assert.equal(
-    punk('add:(a:_ b:_){+!{a? b?}}  add5:add\'5  add5!3'),
+    punk('add:([a] [b]){+!{a? b?}}  add5:add\'5  add5!3'),
     '{8}'
   );
 });
 
 test('partial application with multiple args fills left-to-right', () => {
   assert.equal(
-    punk('add:(a:_ b:_){+!{a? b?}}  add37:add\'{3 7}  add37!'),
+    punk('add:([a] [b]){+!{a? b?}}  add37:add\'{3 7}  add37!'),
     '{10}'
   );
 });
 
 test('full pre-fill produces a zero-arg function', () => {
   assert.equal(
-    punk('greet:(g:_ n:_){g? n?}  hello-tim:greet\'{Hello Tim}  hello-tim!'),
+    punk('greet:([g] [n]){g? n?}  hello-tim:greet\'{Hello Tim}  hello-tim!'),
     '{Hello Tim}'
   );
 });
@@ -46,7 +46,7 @@ test('partial result is a value — can be queried back', () => {
   // The partial is a function; querying it shows it as a function value.
   // We just check it can be bound and called.
   assert.equal(
-    punk('add:(a:_ b:_){+!{a? b?}}  add5:add\'5  add5!3'),
+    punk('add:([a] [b]){+!{a? b?}}  add5:add\'5  add5!3'),
     '{8}'
   );
 });

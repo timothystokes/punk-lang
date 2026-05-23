@@ -29,11 +29,11 @@ test('binding a named Number wraps the inner Number', () => {
 });
 
 test('binding a named pattern echoes bare (no inner wrap)', () => {
-  assert.equal(punk('pair:(a:_ b:_)'), 'pair:(a:_ b:_)');
+  assert.equal(punk('pair:([a] [b])'), 'pair:([a] [b])');
 });
 
 test('binding a named function echoes bare', () => {
-  assert.equal(punk('id:(x:_){x?}'), 'id:(x:_){x?}');
+  assert.equal(punk('id:([x]){x?}'), 'id:([x]){x?}');
 });
 
 test('binding a reserved value wraps it on the value side', () => {

@@ -23,8 +23,8 @@ Punk doesn't have data *types* in the usual sense — instead it has a small set
 | Unstructured Template | `" ... "` — a run of characters, possibly with embedded `{...}` placeholders | `"Hello Robert"` |
 | Word | any run of characters that contains no space | `Hello`, `red-green-blue`, `&` |
 | Number | a Word that follows the numeric formatting rules | `42`, `0.5`, `-5`, `3.141` |
-| Pattern | `( ... )` — a shape used for matching, binding and dispatching | `(name:_ age:_)` |
-| Function | a Pattern attached directly to a Template | `(name:_){Hello name?}` or `(name:_)"Hello {name?}"` |
+| Pattern | `( ... )` — a shape used for matching, binding and dispatching | `([name] [age])` |
+| Function | a Pattern attached directly to a Template | `([name]){Hello name?}` or `([name])"Hello {name?}"` |
 | Atom | `@name` — the one mutable cell in the language | `@counter` |
 | Regex literal | `/ ... /` — a regular expression usable as a pattern slot | `/^\d+$/` |
 
@@ -256,7 +256,7 @@ Here are some other ways of querying:
 | `people.3.fullname.~5?` | `"Ben J"` | `~n` | Range: from the beginning up to the item at position `n`. Works on characters of an unstructured template too. |
 | `people.1.2~3?` | `{42 black}` | `n~n` | Range: items from position `n` through position `m` inclusive. |
 | `people.1.fullname.:?` | `{fullname}` | `:` | Name: the name of the referenced thing as a Word, or `NULL` if it has no name. |
-| `add.()?` | `(a:_ b:_)` | `()` | Pattern: the pattern of a function, or `NULL` if the referenced thing is not a function. |
+| `add.()?` | `([a] [b])` | `()` | Pattern: the pattern of a function, or `NULL` if the referenced thing is not a function. |
 | `people.1.?` | `fullname:"John Smith" age:42 hair:black ...` | `.?` | Spread: the full thing at the end of the path, inlined into the parent (Named names preserved; plain `{}` boundary dropped). See *How values splice into their surroundings* below. |
 
 > NOTE: Querying a built-in function name with `?` gives you the function itself (e.g. `+?` is the `+!` function as a value). This is how you alias a built-in under a new name: `add:+?` — bare `+` on its own would be the literal Word `+`, but `+?` looks it up and returns the function.
@@ -337,7 +337,7 @@ When an unstructured template is evaluated, Punk looks at each placeholder defin
 In the same way templates can contain queries, they can also contain functions. A function is a value (introduced fully in the *Functions* section) and like any value it can sit inside a template — as a top-level item, as a placeholder inside an unstructured template, or named with `:`.
 
 ```punk
-> shout:(s:_){upper!s?}
+> shout:([s]){upper!s?}
 > "I said {shout!hi}"!
 "I said HI"
 ```
@@ -497,30 +497,42 @@ The variadic wildcard `*` consumes any number of things — zero or more. It mus
 
 > NOTE: Only one variadic `*` slot is allowed in a pattern, and it must be the last slot.
 
-Patterns nest. A slot in a pattern can itself be a pattern, which constrains the shape of the *thing* at that position.
+### Labelling pattern slots
+
+You can label any positional slot to extract its matched value for use in the attached template. Labels go inside `[...]`. The label is purely for extraction — it does **not** affect matching.
 
 ```punk
-> ((_ _) _) ⏎ # a pair followed by a single thing #
-> ((John _) _) ⏎ # first item is a pair starting with {John}, then anything #
-> point:(x:_ y:_) ⏎ # a named pair-shape #
-> (point point) ⏎ # two points — uses point's shape as the slot constraint #
+> ([head] *[tail]) ⏎ # first thing extracted as head; rest extracted as tail #
+> ([first] [second] *[rest]) ⏎ # at least two; first two labelled, rest captured #
+> (John [age]) ⏎ # first must be {John} (literal positional match); second extracted as age #
 ```
 
-### Naming pattern segments
+| Form              | What it does                                                       |
+|-------------------|--------------------------------------------------------------------|
+| `[label]`         | one item, any shape, extracted as `label`                          |
+| `*[label]`        | rest (must be last positional slot), extracted as `label` (a Tmpl) |
+| `[label/regex/f]` | one item whose text matches `regex`; extracted as `label`          |
 
-You can give the slots in a pattern names. The name is just a local binding — it doesn't affect what gets matched, but it lets the template attached to that pattern refer to the matched value.
+> NOTE: Labels are local to the pattern's template — they aren't names in any enclosing scope, and don't participate in the matching contract. `([n])` and `(_)` match identically; only the body of the attached template can tell them apart.
+
+### Context matching with `:` in a pattern
+
+`:` inside a pattern means **match a Named entry by name and value** at this position. Each context-match clause consumes one positional slot, just like any other slot.
 
 ```punk
-> (head:_ tail:*) ⏎ # first thing bound to head; rest bound to tail #
-> (first:_ second:_ rest:*) ⏎ # at least two; first two named, rest captured #
-> (name:John age:_) ⏎ # first must be {John}, second is bound to age #
+> (name:John) ⏎    # one item, must be the Named entry name:John #
+> (name:_) ⏎      # one item, must be a Named entry called name, any value #
+> (name:[v]) ⏎    # one item, must be a Named entry called name, value extracted as v #
+> (_ name:John _) ⏎ # three items; the middle one must be name:John #
 ```
 
-A slot can be both named and shape-constrained — the name goes on the left of the `:`, the shape on the right is what's actually matched.
+The RHS of `:` in a pattern can currently be: `_`, a word/number literal, or `[label]`. Nested patterns and regex on the RHS are not yet supported.
 
-> NOTE: Names do not impact matching — matching is done purely on shape and order. A name introduced by a pattern is only visible inside that pattern's template — it is a local binding for the duration of that one match, not a name in any enclosing scope.
+Two clean principles are at work here:
+- **`name:value`** in a pattern matches a Named entry — it lines up with how Named entries appear elsewhere in PDN.
+- **`[label]`** in a pattern extracts the matched value to a local name in the attached template.
 
-
+These compose: `name:[v]` matches a Named entry called `name` and extracts the value as `v`.
 
 
 ### Regex slots
@@ -537,24 +549,24 @@ Regex literals exist **only inside patterns** (`( ... )`). A bare `/` outside a 
 
 Trailing flags after the closing `/` are passed through to the underlying regex engine (e.g. `/foo/i` for case-insensitive matching).
 
-Like any slot, a regex slot can be named — the name binds to the matched thing for use in the attached template.
+Like any slot, a regex slot can be labelled — the label binds the matched value for use in the attached template. The labelled form is written `[label/regex/flags]` (label and regex glued together inside one `[...]`).
 
 ```punk
-> tagger:(n:/^\d+$/){
+> tagger:([n/^\d+$/]){
     Number:n.1?
   } ⏎
 > tagger!"42" ⏎
 Number:"42"
 ```
 
-A regex match always binds the named slot to a *structured value* whose first item is the full match (as Text) followed by each capture group. Use `n.1?` for the whole match.
+A regex match always binds the labelled slot to a *structured value* whose first item is the full match (as Text) followed by each capture group. Use `n.1?` for the whole match.
 
 #### Capture groups
 
-A regex with capture groups binds the named slot to a structure: the full match at position 1, then each capture group in the order it appears. Each piece is bound as Text (string) so it round-trips literally.
+A regex with capture groups binds the labelled slot to a structure: the full match at position 1, then each capture group in the order it appears. Each piece is bound as Text (string) so it round-trips literally.
 
 ```punk
-> halve:(p:/^(\w+)-(\w+)$/){
+> halve:([p/^(\w+)-(\w+)$/]){
     left:p.2? right:p.3?
   } ⏎
 > halve!"red-blue" ⏎
@@ -565,10 +577,10 @@ A regex with capture groups binds the named slot to a structure: the full match 
 
 #### Named capture groups
 
-Named groups `(?<name>...)` are bound the usual positional way **and** are also reachable by their name on the slot.
+Named groups `(?<name>...)` are bound positionally as usual **and** are also reachable by their name on the labelled slot.
 
 ```punk
-> parseDate:(s:/^(?<y>\d{4})-(?<m>\d{2})-(?<d>\d{2})$/){
+> parseDate:([s/^(?<y>\d{4})-(?<m>\d{2})-(?<d>\d{2})$/]){
     s.y? s.m? s.d?
   } ⏎
 > parseDate!"2024-01-15" ⏎
@@ -580,7 +592,7 @@ Named groups `(?<name>...)` are bound the usual positional way **and** are also 
 A group that didn't participate in the match (for example, an alternative branch that wasn't taken, or an optional `(...)?`) is bound as `NULL` rather than missing or causing a failure.
 
 ```punk
-> classify:(p:/^(?<sign>[+-])?(?<n>\d+)$/){
+> classify:([p/^(?<sign>[+-])?(?<n>\d+)$/]){
     p.sign??{
       (NULL){unsigned p.n?}
       (_){signed p.n?}
@@ -602,14 +614,14 @@ Patterns are first-class values; bind one to a name and reuse it like any other 
 
 ```punk
 > isFive:(5) ⏎                  # a pattern that matches a single {5} #
-> point:(x:_ y:_) ⏎             # a pattern with two named slots #
+> point:([x] [y]) ⏎             # a pattern with two named slots #
 > nonEmpty:(_ *) ⏎              # one or more things #
 ```
 
 Use a named pattern as the pattern part of a function by writing `(name?)` where the pattern would normally go. The named pattern's slots are **spliced** into the call-site pattern — i.e. you get the original slots and their names, not a nested pattern.
 
 ```punk
-> point:(x:_ y:_) ⏎
+> point:([x] [y]) ⏎
 > distance:(point?){
     +!{x?*x? y?*y?}->sqrt!
   } ⏎
@@ -620,7 +632,7 @@ Use a named pattern as the pattern part of a function by writing `(name?)` where
 The same named pattern can be reused across multiple functions:
 
 ```punk
-> point:(x:_ y:_) ⏎
+> point:([x] [y]) ⏎
 > show:(point?){"point at x?,y?"} ⏎
 > origin:(point?){and!{x?==0 y?==0}} ⏎
 ```
@@ -701,12 +713,12 @@ You have already seen functions because in Punk a function is just a pattern con
 It's not that useful outside of matching in a condition so here is a more useful function. Here is a independent and named function that takes one parameter, name, and returns a personalised welcome message.
 
 ```punk
-> welcome:(name:_){Hello name?}
+> welcome:([name]){Hello name?}
 ```
 
-> NOTE: The pattern `(...)` and the template `{...}` must be **attached** — no whitespace between the closing `)` and the opening `{`. The moment you write `(name:_) {Hello name?}` with a space in there it is no longer one thing; it is a pattern followed by an unrelated template, not a function. Whitespace *inside* the pattern or *inside* the template is free — you can use it to align code — but the bridge between them is sacred.
+> NOTE: The pattern `(...)` and the template `{...}` must be **attached** — no whitespace between the closing `)` and the opening `{`. The moment you write `([name]) {Hello name?}` with a space in there it is no longer one thing; it is a pattern followed by an unrelated template, not a function. Whitespace *inside* the pattern or *inside* the template is free — you can use it to align code — but the bridge between them is sacred.
 
-> SHORTCUT: When the body is a single expression, the outer `{ }` are optional. So `mylogger:(m:_)log!{m?}` is the same as `mylogger:(m:_){log!{m?}}`. This matches the existing `(p)"..."` form where the body is a single unstructured template.
+> SHORTCUT: When the body is a single expression, the outer `{ }` are optional. So `mylogger:([m])log!{m?}` is the same as `mylogger:([m]){log!{m?}}`. This matches the existing `(p)"..."` form where the body is a single unstructured template.
 
 > SHORTCUT: When a call or partial application passes exactly one thing and that thing is a single name or a single integer, you can drop the `{ }` and write the argument directly against the `!`/`'`. So `sizer!7` is the same as `sizer!{7}`, `times'2` is the same as `times'{2}`, and `+'1` is the same as `+'{1}`. Only a bare name or a bare integer is accepted on the right of mid-call `!`/`'`: anything else (decimals like `1.2`, paths like `foo.bar`, templates) must use the full `f!{...}` form.
 
@@ -727,7 +739,7 @@ Any template can have nested functions just like it can have nested queries, and
 An example function that calculates circumference using the `X` multiply built-in (which multiplies its numeric arguments). Here we multiply PI by radius, then multiply that answer by 2.
 
 ```punk
-> circumference:(radius:_){
+> circumference:([radius]){
     X!{
       X!{
         3.141
@@ -757,7 +769,7 @@ Inside a function body, `*?` queries the whole template of arguments that the fu
 For functions that work like data templates, getting the whole resulting template back is useful. But for templates that contain a number of intermediate steps, it's often just the last item that matters. Here is an example that also uses the `<` less-than built-in function.
 
 ```punk
-> sizer:(radius:_){
+> sizer:([radius]){
 
     circumference:X!{
       X!{
@@ -785,7 +797,7 @@ We can execute this function as follows with the result shown.
 This is because the template is calculating a circumference and storing it in a name, then evaluating whether the value constitutes a large circle or not. The ideal result of this function is to just show the final answer and not expose our inner workings. We can use the range notation as part of our function definition to specify which part of the template should be included in the response. Here is the function again with a simple `~` on the end — i.e. just the last item, please.
 
 ```punk
-> sizer:(radius:_){
+> sizer:([radius]){
 
     # caclulate the circumference #
     circumference:X!{
@@ -823,7 +835,7 @@ If you want the whole template back, leave the return-range off — that's the d
 Once a name is bound, it's bound — including for the body of the function being defined. A function can refer to itself by name, so straightforward recursion works without any special form:
 
 ```punk
-> factorial:(n:_){
+> factorial:([n]){
     <=!{n? 1}??{
       (TRUE){1}
       (FALSE){X!{n? factorial!{-!{n? 1}}}}
@@ -838,8 +850,8 @@ Once a name is bound, it's bound — including for the body of the function bein
 A function carries the scope it was defined in. Names that were visible at the point of definition stay visible to its body, no matter where the function is later called from. This is what makes module functions, pipeline composition, and partial application all behave the way they read on the page — the captured names travel with the function as part of its value.
 
 ```punk
-> make-adder:(n:_){
-    (x:_){+!{x? n?}}
+> make-adder:([n]){
+    ([x]){+!{x? n?}}
   }
 > add10:make-adder!10
 > add10!5
@@ -898,7 +910,7 @@ Because a composed pipeline is just another function, it can sit anywhere a func
 A function can be **partially applied** by writing `'` in place of `!`. Where `!` runs the function, `'` pre-fills its leftmost parameters with the arguments you give and returns a new function that expects the rest.
 
 ```punk
-> add:(a:_ b:_){+!{a? b?}} ⏎
+> add:([a] [b]){+!{a? b?}} ⏎
 > add5:add'5 ⏎ # pre-fills a as 5, leaves b open #
 > add5!3 ⏎
 {8}
@@ -917,7 +929,7 @@ Arguments are consumed **left to right** against the function's pattern. Anythin
 This is the natural way to make a multi-parameter function fit into a pipeline, where each stage receives exactly one thing (see *Pipelines* above). Pre-fill every parameter except the one that should receive the piped value.
 
 ```punk
-> times:(a:_ b:_){X!{a? b?}} ⏎
+> times:([a] [b]){X!{a? b?}} ⏎
 > double:times'2 ⏎ # first param locked to 2, second one open #
 > 5->double->log! ⏎ # pipes 5 in as the remaining param, then logs #
 {10}
@@ -996,10 +1008,10 @@ Punk doesn't bake in a single polymorphism mechanism — no classes, no multimet
 `??` matches against any shape, so a function can fan out on the shape of its own argument list. This is how you write the equivalent of arity overloading.
 
 ```punk
-> greet:(args:*){
+> greet:(*[args]){
     args??{
-      (n:_    ){Hello n?   }
-      (n:_ t:_){Hello t? n?}
+      ([n]    ){Hello n?   }
+      ([n] [t]){Hello t? n?}
     }!
   }
 > greet!Tim
@@ -1013,11 +1025,11 @@ Punk doesn't bake in a single polymorphism mechanism — no classes, no multimet
 Because pattern slots are structural, the same `??` block dispatches on tag-style shapes just as easily. This is the spot in your code where another language would reach for a `cond`, an `instanceof` check, or a multimethod dispatched on a discriminator.
 
 ```punk
-> area:(shape:_){
+> area:([shape]){
     shape??{
-      (circle r:_   ){X!{X!{3.141 r?} r?} }
-      (rect w:_ h:_ ){X!{w? h?}           }
-      (tri b:_ h:_  ){/!{X!{b? h?} 2}     }
+      (circle [r]   ){X!{X!{3.141 r?} r?} }
+      (rect [w] [h] ){X!{w? h?}           }
+      (tri [b] [h]  ){/!{X!{b? h?} 2}     }
     }!
   }
 > area!{circle r:5}
@@ -1033,7 +1045,7 @@ The "tag" (`circle`, `rect`, `tri`) is just the bareword in the first slot — t
 Slots can be literal values, so dispatch by exact value falls out of the same mechanism. This is how routing works in the server example.
 
 ```punk
-> route:(req:_){
+> route:([req]){
     req??{
       (method:GET  path:\/      *){index!req?    }
       (method:GET  path:\/about *){about!req?    }
@@ -1050,11 +1062,11 @@ Note `\/` — `/` is a reserved character outside patterns and strings, so a lit
 Regex slots dispatch on the *kind* of text, which covers the cases another language might handle with type predicates on strings.
 
 ```punk
-> classify:(s:_){
+> classify:([s]){
     s??{
-      (n:/^\d+$/         ){integer}
-      (h:/^#[0-9a-f]{6}$/){color  }
-      (_                 ){other  }
+      ([n/^\d+$/]         ){integer}
+      ([h/^#[0-9a-f]{6}$/]){color  }
+      (_                  ){other  }
     }!
   }
 ```
@@ -1078,15 +1090,15 @@ This is the shape Punk reaches for with an atom. An atom lets us append things t
   # get the current list of greeters, 
     add a new greeter 
     and put that new combined list as the new contents of the atom #
-  register-greeter:(lang:_ msg:_){
-    @greeters->(g:_){g? {lang:lang? msg:msg?}}->@greeters! 
+  register-greeter:([lang] [msg]){
+    @greeters->([g]){g? {lang:lang? msg:msg?}}->@greeters! 
   }
 
   register-greeter!{en Hello}
   register-greeter!{fr Bonjour}
 
-  greet:(lang:_ name:_){
-    @greeters->(g:_)"{find!{(i:_ *)=!{i.lang? lang?} g?}.msg?} {name?}"!
+  greet:([lang] [name]){
+    @greeters->([g])"{find!{([i] *)=!{i.lang? lang?} g?}.msg?} {name?}"!
   }
 ```
 
@@ -1107,14 +1119,14 @@ The trick when the receiver is itself bound to a name is the `?.` query-chain he
 
 ```punk
 > printer:{
-    print:(msg:_){upper!{msg?}}
+    print:([msg]){upper!{msg?}}
   }
 
 > silent-printer:{
-    print:(msg:_){}
+    print:([msg]){}
   }
 
-> log-it:(p:_ m:_){ p?.print!{m?} }
+> log-it:([p] [m]){ p?.print!{m?} }
 
 > log-it!{printer hello}
 "HELLO"
@@ -1133,7 +1145,7 @@ The trick when the receiver is itself bound to a name is the `?.` query-chain he
 | Open multimethod / extensible dispatch | an atom holding a handler template, plus a `register` function and a dispatcher |
 | Protocols / interfaces | objects-as-namespaces: a template carrying named functions, called via name-path query |
 | `instanceof` / type tag checks | shape patterns and regex slots |
-| Records / structs with required fields | named slots in a pattern: `(name:_ age:_)` |
+| Records / structs with required fields | named slots in a pattern: `([name] [age])` |
 
 All of these are assembled from four primitives — patterns, `??`, name-path queries, and atoms — none of which exist solely for polymorphism.
 
@@ -1230,7 +1242,7 @@ The collection built-ins operate on a template as a sequence of things. They nev
 > - `item` — the value at this position, with its name preserved if it was Named (use `item.:?` to read the name, `item?` for the value).
 > - `index` — its 1-based position in the source. Optional: leave this slot off if you don't need it.
 >
-> The HOF introspects the callback's arity and binds accordingly — `(v:_)` receives just the item, `(v:_ i:_)` receives item and index.
+> The HOF introspects the callback's arity and binds accordingly — `([v])` receives just the item, `([v] [i])` receives item and index.
 >
 > `reduce!` is the exception — its callback is a fold and receives `(acc value)`. Accumulator first so a partial like `step:reduce'fn` is meaningful with the seed and collection still open.
 
@@ -1249,11 +1261,11 @@ The collection built-ins operate on a template as a sequence of things. They nev
 | `contains!{item t}` | `TRUE` if `item` appears in `t` |
 
 ```punk
-> map!{(n:_)X!{n? 10} {1 2 3}} ⏎
+> map!{([n])X!{n? 10} {1 2 3}} ⏎
 {10 20 30}
-> filter!{(n:_)>!{n? 2} {1 2 3 4 5}} ⏎
+> filter!{([n])>!{n? 2} {1 2 3 4 5}} ⏎
 {3 4 5}
-> reduce!{(a:_ b:_)+!{a? b?} 0 {1 2 3 4}} ⏎
+> reduce!{([a] [b])+!{a? b?} 0 {1 2 3 4}} ⏎
 {10}
 > sort!{3 1 4 1 5 9 2 6} ⏎
 {1 1 2 3 4 5 6 9}
@@ -1381,9 +1393,9 @@ By convention, a module file wraps everything it wants to expose in a single un-
 ```punk
 # http.punk #
 {
-  serve:(port:_ handler:_){ ... }
-  serveStatic:(root:_){ ... }
-  parsePost:(body:_){ ... }
+  serve:([port] [handler]){ ... }
+  serveStatic:([root]){ ... }
+  parsePost:([body]){ ... }
 }
 ```
 
@@ -1449,7 +1461,7 @@ keystore:import!punk.keystore
 
 keystore.open!todo->[db]!
 
-dispatch:(req:_){
+dispatch:([req]){
   req??{
     (method:GET  path:\/      *){index!req?     }
     (method:POST path:\/todo  *){createTodo!req? }
@@ -1473,6 +1485,7 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | --- | --- | --- |
 | `{` `}` | Template delimiters | Anywhere outside an escape |
 | `(` `)` | Pattern delimiters | Anywhere outside an escape |
+| `[` `]` | Slot-label delimiters — `[name]` (single) or `*[name]` (rest) inside a pattern; reserved (parse error) elsewhere | Only meaningful inside `( ... )` |
 | `@` | Atom marker — `@name` refers to an atom; the `@` *is* the atom. Atoms come into existence on first write: `value->@name!` | Anywhere outside an escape |
 | `:` | Names a thing — `name:value` | Anywhere outside an escape |
 | `?` | Query — resolves nested queries in a template | Suffix of a path token; `?(pattern){...}!` is the single-condition form (trailing `!` required when a template body is attached); `??{(p1){...}(p2){...}}!` is the multi-condition form (same rule); `head?.seg.seg` is the query-chain head — a `?` glued to the first segment dereferences a bareword binding once before walking the rest of the path |

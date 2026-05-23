@@ -392,19 +392,19 @@ test('words inside Tmpl are decoded (PendingNamed + value)', () => {
   assert.equal(tmpl.items[2].kind, 'Query');
 });
 
-test('words inside Pattern are decoded (PendingNamed + wildcard pairs)', () => {
-  const pat = items('(x:_ y:_)')[0];
+test('words inside Pattern are decoded as labelled Named slots', () => {
+  const pat = items('([x] [y])')[0];
   assert.equal(pat.kind, 'Pattern');
-  assert.equal(pat.items.length, 4);
+  assert.equal(pat.items.length, 2);
   assert.equal(pat.items[0].kind, 'Named');
   assert.equal(pat.items[0].name, 'x');
-  assert.equal(pat.items[0].value, null);
-  assert.equal(pat.items[1].kind, 'Word');
-  assert.equal(pat.items[1].subkind, 'wildcard');
-  assert.equal(pat.items[1].glued, true);
-  assert.equal(pat.items[2].kind, 'Named');
-  assert.equal(pat.items[2].name, 'y');
-  assert.equal(pat.items[3].subkind, 'wildcard');
+  assert.equal(pat.items[0]._label, true);
+  assert.equal(pat.items[0].value.kind, 'Word');
+  assert.equal(pat.items[0].value.subkind, 'wildcard');
+  assert.equal(pat.items[1].kind, 'Named');
+  assert.equal(pat.items[1].name, 'y');
+  assert.equal(pat.items[1]._label, true);
+  assert.equal(pat.items[1].value.subkind, 'wildcard');
 });
 
 test('@-marker parses as an Atom node with its name', () => {

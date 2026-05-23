@@ -151,10 +151,26 @@ function matchPatternItems(items, slots, bindings) {
   const lastIdx = slots.length - 1;
   const hasVariadic = slots.length > 0 && slotIsRest(slots[lastIdx]);
 
+  // Helper: dispatch slot match — context-match (Named without _label)
+  // or normal positional slot.
+  const matchOne = (item, slot) => {
+    if (slot && slot.kind === 'Named' && !slot._label) {
+      // Context match: `name:value` requires the item to be a Named
+      // entry with the same name; recursively match the entry's value
+      // against the slot's RHS shape.
+      if (!item || item.kind !== 'Named' || item.name !== slot.name) return false;
+      // Build a transient positional slot from the RHS and match the
+      // Named entry's value through it. Bindings produced by the RHS
+      // (e.g. `name:[v]` → binds `v`) flow into the outer bindings.
+      return matchSlot(item.value, slot.value, bindings);
+    }
+    return matchSlot(item, slot, bindings);
+  };
+
   if (!hasVariadic) {
     if (items.length !== slots.length) return false;
     for (let i = 0; i < items.length; i++) {
-      if (!matchSlot(items[i], slots[i], bindings)) return false;
+      if (!matchOne(items[i], slots[i])) return false;
     }
     // Single-slot raw wildcard `(_)` also binds `_` so `_?` can resolve it.
     if (slots.length === 1 && isPureWildcard(slots[0]) && slotName(slots[0]) === null) {
@@ -167,7 +183,7 @@ function matchPatternItems(items, slots, bindings) {
   if (items.length < head.length) return false;
 
   for (let i = 0; i < head.length; i++) {
-    if (!matchSlot(items[i], head[i], bindings)) return false;
+    if (!matchOne(items[i], head[i])) return false;
   }
   // Trailing variadic captures everything left over. Bind to a Tmpl of
   // those items if named.

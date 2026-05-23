@@ -46,14 +46,14 @@ test('reserved values TRUE / FALSE / NULL print bare (no auto-wrap)', () => {
 });
 
 test('a pattern prints bare', () => {
-  assert.equal(punk('(a:_ b:_)'), '(a:_ b:_)');
+  assert.equal(punk('([a] [b])'), '([a] [b])');
   assert.equal(punk('(_)'),       '(_)');
   assert.equal(punk('(*)'),     '(*)');
 });
 
 test('a function literal prints bare', () => {
-  assert.equal(punk('(n:_){n?}'),       '(n:_){n?}');
-  assert.equal(punk('(s:_)"hello {s?}"'), '(s:_)"hello {s?}"');
+  assert.equal(punk('([n]){n?}'),       '([n]){n?}');
+  assert.equal(punk('([s])"hello {s?}"'), '([s])"hello {s?}"');
 });
 
 test('multiple top-level entries: REPL returns only the final value', () => {

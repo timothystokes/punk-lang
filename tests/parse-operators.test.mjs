@@ -27,8 +27,8 @@ test('(){body} → Fn with empty Pattern', () => {
   assert.equal(fn.body.items.length, 1);
 });
 
-test('(x:_){x?} → unary identity fn', () => {
-  const [fn] = items('(x:_){x?}');
+test('([x]){x?} → unary identity fn', () => {
+  const [fn] = items('([x]){x?}');
   assert.equal(fn.kind, 'Fn');
   assert.equal(fn.params.items.length, 1);
   assert.equal(fn.params.items[0].kind, 'Named');
@@ -36,7 +36,7 @@ test('(x:_){x?} → unary identity fn', () => {
 });
 
 test('braceless body wraps single node in 1-item Tmpl', () => {
-  const [fn] = items('(x:_)x?');
+  const [fn] = items('([x])x?');
   assert.equal(fn.kind, 'Fn');
   assert.equal(fn.body.kind, 'Tmpl');
   assert.equal(fn.body.items.length, 1);
@@ -45,7 +45,7 @@ test('braceless body wraps single node in 1-item Tmpl', () => {
 
 test('Pattern with a space before {body} does NOT form a Fn', () => {
   // glue is required.
-  const its = items('(x:_) {x?}');
+  const its = items('([x]) {x?}');
   assert.equal(its.length, 2);
   assert.equal(its[0].kind, 'Pattern');
   assert.equal(its[1].kind, 'Tmpl');
@@ -55,18 +55,18 @@ test('Pattern with a space before {body} does NOT form a Fn', () => {
 // Return-range on Fn
 
 test("(p){body}~ → Fn with returnRange null/null", () => {
-  const [fn] = items('(x:_){x?}~');
+  const [fn] = items('([x]){x?}~');
   assert.equal(fn.kind, 'Fn');
   assert.deepEqual(fn.returnRange, { from: null, to: null });
 });
 
 test("(p){body}~5 → Fn with returnRange 0..5", () => {
-  const [fn] = items('(x:_){x?}~5');
+  const [fn] = items('([x]){x?}~5');
   assert.deepEqual(fn.returnRange, { from: null, to: 5 });
 });
 
 test("(p){body} ~ (with space) does NOT attach range", () => {
-  const its = items('(x:_){x?} ~');
+  const its = items('([x]){x?} ~');
   assert.equal(its.length, 2);
   assert.equal(its[0].kind, 'Fn');
   assert.equal(its[0].returnRange, undefined);
@@ -116,8 +116,8 @@ test('xs:{1 2 3} → Named with Tmpl', () => {
   assert.equal(n.value.kind, 'Tmpl');
 });
 
-test('add:(a:_ b:_){body} → Named containing Fn', () => {
-  const [n] = items('add:(a:_ b:_){+!{a? b?}}');
+test('add:([a] [b]){body} → Named containing Fn', () => {
+  const [n] = items('add:([a] [b]){+!{a? b?}}');
   assert.equal(n.kind, 'Named');
   assert.equal(n.name, 'add');
   assert.equal(n.value.kind, 'Fn');
@@ -193,7 +193,7 @@ test("5->double->log! with partial → Pipeline of 3 stages", () => {
 // Recursion / nested cases
 
 test('Fn body is recursed into (Pattern + Tmpl inside another Tmpl)', () => {
-  const tmpl = items('{add:(a:_ b:_){+!{a? b?}}}')[0];
+  const tmpl = items('{add:([a] [b]){+!{a? b?}}}')[0];
   const named = tmpl.items[0];
   assert.equal(named.kind, 'Named');
   assert.equal(named.value.kind, 'Fn');

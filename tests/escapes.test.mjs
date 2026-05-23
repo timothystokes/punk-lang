@@ -33,7 +33,7 @@ test('`\\!` keeps `!` literal — no execution is fired', () => {
   // `Hello f\!` is a single word with an escaped `!`; in a tmpl
   // context nothing fires and the escape stays in storage.
   assert.equal(
-    punk('f:(x:_){GONE}  {Hello f\\!}'),
+    punk('f:([x]){GONE}  {Hello f\\!}'),
     '{Hello f\\!}'
   );
 });

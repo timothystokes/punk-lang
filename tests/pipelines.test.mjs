@@ -67,7 +67,7 @@ test('pipeline a multi-item tmpl into a 1-arg fn — slot receives the tmpl', ()
   // Piping xs (a 3-item tmpl) must deliver xs as that single arg.
   assert.equal(
     punk(`
-      len:(t:_){t.#?}
+      len:([t]){t.#?}
       xs:{1 2 3}
       xs?->len!
     `),
@@ -82,7 +82,7 @@ test('pipeline seed: tmpl literal pipes the WHOLE tmpl as one arg', () => {
   // `t.#?` is 1. To spread xs into the seed instead, use `{xs?.?}`.
   assert.equal(
     punk(`
-      len:(t:_){t.#?}
+      len:([t]){t.#?}
       xs:{1 2 3}
       {xs?}->len!
     `),
@@ -93,7 +93,7 @@ test('pipeline seed: tmpl literal pipes the WHOLE tmpl as one arg', () => {
 test('pipeline seed: `.?` spreads inside seed to recover length-3 behaviour', () => {
   assert.equal(
     punk(`
-      len:(t:_){t.#?}
+      len:([t]){t.#?}
       xs:{1 2 3}
       {xs?.?}->len!
     `),
@@ -109,7 +109,7 @@ test('pipeline into a 1-remaining partial — slot receives the tmpl, hof iterat
   assert.equal(
     punk(`
       xs:{10 20 30}
-      grow:map'(s:_){+!{s? 1}}~
+      grow:map'([s]){+!{s? 1}}~
       xs?->grow!
     `),
     '{11 21 31}',
@@ -120,12 +120,12 @@ test('pipeline into a 1-remaining partial matches direct call', () => {
   // Direct and pipeline forms must produce the same value.
   const direct = punk(`
     xs:{10 20 30}
-    grow:map'(s:_){+!{s? 1}}~
+    grow:map'([s]){+!{s? 1}}~
     grow!{xs?}
   `);
   const piped = punk(`
     xs:{10 20 30}
-    grow:map'(s:_){+!{s? 1}}~
+    grow:map'([s]){+!{s? 1}}~
     xs?->grow!
   `);
   assert.equal(piped, direct);

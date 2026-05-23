@@ -3,7 +3,7 @@
 // pattern's slots into the call-site pattern.
 //
 // From doc § "Named patterns":
-//   - Patterns are first-class values. `point:(x:_ y:_)` binds the
+//   - Patterns are first-class values. `point:([x] [y])` binds the
 //     pattern under `point`. Querying `point?` returns the pattern.
 //   - `(point?){body}` resolves `point` at function-build time, expects
 //     a Pattern, and splices its slots in. The slot names from the
@@ -21,7 +21,7 @@ import { punk, punkThrows } from './_punk.mjs';
 test('a named pattern is stored as the pattern itself (no wrap)', () => {
   // The pattern binds directly under the name — querying it returns the
   // pattern, NOT a singleton template containing the pattern.
-  assert.equal(punk('point:(x:_ y:_)  point?'), '(x:_ y:_)');
+  assert.equal(punk('point:([x] [y])  point?'), '([x] [y])');
 });
 
 test('a named pattern with a literal slot retains the literal', () => {
@@ -33,9 +33,9 @@ test('a named pattern with a rest slot retains it', () => {
 });
 
 test('(p?){body} splices the named pattern into a function pattern', () => {
-  // distance over a 2-d point: same as writing (x:_ y:_){...} inline.
+  // distance over a 2-d point: same as writing ([x] [y]){...} inline.
   const src = `
-    point:(x:_ y:_)
+    point:([x] [y])
     sumXY:(point?){+!{x? y?}}
     sumXY!{3 4}
   `;
@@ -44,7 +44,7 @@ test('(p?){body} splices the named pattern into a function pattern', () => {
 
 test('the same named pattern can be reused across multiple functions', () => {
   const src = `
-    point:(x:_ y:_)
+    point:([x] [y])
     showX:(point?){x?}
     showY:(point?){y?}
     {showX!{10 20} showY!{10 20}}!
@@ -55,7 +55,7 @@ test('the same named pattern can be reused across multiple functions', () => {
 test('a named pattern with a rest slot splices into a function', () => {
   // first item bound to head, rest bound to tail (a tmpl of the rest).
   const src = `
-    cons:(head:_ tail:*)
+    cons:([head] *[tail])
     headOf:(cons?){head?}
     headOf!{a b c}
   `;
@@ -84,5 +84,5 @@ test('a named pattern composed of a single literal still splices', () => {
 test('a named pattern can be passed around as a value', () => {
   // patterns are first-class values; assigning to a new name preserves
   // the pattern unchanged.
-  assert.equal(punk('p:(x:_ y:_)  q:p?  q?'), '(x:_ y:_)');
+  assert.equal(punk('p:([x] [y])  q:p?  q?'), '([x] [y])');
 });

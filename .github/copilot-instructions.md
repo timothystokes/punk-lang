@@ -33,7 +33,7 @@ directly.
 | Word reserved (`TRUE` `NULL`) | **YES** | `ok:TRUE` ≡ `ok:{TRUE}` |
 | Fn `(p){b}` | NO | `name:(p){b}` is *naming a function* — binds the Fn directly. To put a Fn into a template, the user wraps it explicitly. |
 | PartialFn `fn'x` | NO | callable, same reason as Fn |
-| Pattern `(...)` | NO | first-class; `p:(x:_)` names a pattern (see [Named patterns](#named-patterns)) |
+| Pattern `(...)` | NO | first-class; `p:([x] [y])` names a pattern (see [Named patterns](#named-patterns)) |
 | Tmpl `{...}` | NO | already a template |
 | Text `"..."` | NO | already a template (joined-with-space form) |
 | Atom `@name` | error on `:` RHS | atoms don't bind via `:` |
@@ -44,19 +44,18 @@ directly.
 
 ### Slots are NOT named bindings — never wrap
 
-Pattern slots are **labeled shape checks**, not Named bindings. The
-RHS of a slot (after `:`) is one of: `_` (one thing), `*` (rest — must
-be last), a literal to value-match, or a `ref?` query. **It is never
-short-form wrapped.** A slot named `(n:_)` says "this position is one
-thing of any shape; label that one thing `n`". Compare:
+Pattern slots are **labelled shape checks**, not Named bindings. A
+labelled slot `[n]` says "this position is one thing of any shape;
+extract that thing as `n`". Slot labels are written `[name]` (single)
+or `*[name]` (rest); the label name is for extraction only — names
+are NOT part of the contract.
 
-- `(n:_)` vs `{Tim}` → match. `n` binds to `Word{Tim}` (whatever
-  matched the `_`, no wrap).
-- `(n:{_})` vs `{Tim}` → **no match**. The slot now requires a
-  singleton-tmpl shape, but `{Tim}` is a 1-item tmpl containing a
-  Word, not a tmpl-containing-a-tmpl.
+- `([n])` vs `{Tim}` → match. `n` binds to `Word{Tim}` (whatever
+  matched the slot, no wrap).
+- `([n])` vs `{{Tim}}` → match too; `n` binds to the inner Tmpl
+  `{Tim}`. The slot accepts one item of any shape.
 
-So `welcome:(n:_){Hello n?}` then `welcome!{Tim}`:
+So `welcome:([n]){Hello n?}` then `welcome!{Tim}`:
 
 - args is `{Tim}` (a 1-item Tmpl).
 - slot `n` binds the matched item `Tim` (Word value) — **no wrap**.
@@ -66,33 +65,59 @@ So `welcome:(n:_){Hello n?}` then `welcome!{Tim}`:
 
 ### Patterns
 
-- Patterns describe **value shape**. Names in a pattern bind only; they
-  are NOT part of the contract. `(name:_)` binds a wildcard slot;
-  `(_)` matches the same shape without binding.
-- Slot syntax: the value-position marker is either `_` (exactly one
-  thing) or `*` (zero or more, **must be last**). Both can appear bare
-  or after `name:`.
-  - `_` — anonymous single slot
-  - `name:_` — named single slot
-  - `*` — anonymous rest (last slot only)
-  - `name:*` — named rest (last slot only)
-- `_:_` is meaningless (wildcard name binding wildcard value) and is a
-  syntax error. Same for `_:*`.
-- At most one `*` per pattern, and it must be the last slot.
+Patterns describe **value shape**. They extract information; templates
+transform and embed it. Two orthogonal mechanisms live inside `(...)`:
+
+**1. Positional slots** — each consumes one position in the params.
+
+| Form              | Meaning                                                          |
+|-------------------|------------------------------------------------------------------|
+| `_`               | one item, any shape, not extracted                               |
+| `*`               | rest (zero or more, **must be last positional slot**)            |
+| `[label]`         | one item, extracted as `label`                                   |
+| `*[label]`        | rest, extracted as `label` (a Tmpl)                              |
+| `/regex/f`        | one item; its text must match the regex; not extracted           |
+| `[label/regex/f]` | one item matching the regex; extracted as `label` — a Tmpl where |
+|                   | `label.1?` is the whole match, `label.2?` etc. are capture       |
+|                   | groups in source order; named groups also reachable by name      |
+| literal `John`/`5`| matches exactly that value at this position (positional context) |
+
+**2. Context match** — `name:value` matches a **Named entry** at this
+position. The params item at that slot must be `Named{name, value}`.
+Like positional slots, each context-match clause consumes one position
+(for now — out-of-band named matching is a later phase).
+
+- `name:John` — Named entry `name` with value `{John}`
+- `name:42`   — Named entry `name` with value `{42}`
+- `name:_`    — Named entry `name` with any value, not extracted
+- `name:[v]`  — Named entry `name`, value extracted to `v`
+
+RHS of `:` in pattern context is restricted to: `_`, a word/number
+literal, or `[label]`. Nested patterns and regex on the RHS are
+deferred.
+
+Rules:
+- At most one `*` (or `*[label]`) per pattern; it must come after
+  every other positional slot.
+- Labels (`[n]`) are for extraction; they do not participate in the
+  shape contract. `([n])` and `(_)` match identically.
+- A `name:` clause WITHOUT `:` (just `name`) is a literal Word match,
+  not a context match. To context-match without extracting use
+  `name:_`.
 
 ### Named patterns
 
 Patterns are first-class values; they can be bound to a name and reused.
 
 ```
-person:(name:_ age:_)            -- name a pattern
-greet:(person?){Hi name?, age?}  -- use the named pattern via (p?){body}
-greet!{Sally 32}                 -- {Hi {Sally}, {32}}
+person:([name] [age])             -- name a pattern
+greet:(person?){Hi name?, age?}   -- use the named pattern via (p?){body}
+greet!{Sally 32}                  -- {Hi {Sally}, {32}}
 ```
 
 The `(p?){body}` form looks up `p` in the env, expects it to be a
 Pattern, and **splices the named pattern's slots** into this call-site
-pattern (i.e. you get the named slots `name:_ age:_` directly, not a
+pattern (i.e. you get the slots `[name] [age]` directly, not a
 nested pattern). The same named pattern can be used in multiple
 functions.
 
@@ -102,7 +127,7 @@ yet defined.
 
 ### Function call / pipe canonical table
 
-For `welcome:(n:_){Hello n?}`:
+For `welcome:([n]){Hello n?}`:
 
 | Form | Result |
 |---|---|
@@ -134,7 +159,7 @@ when the trailing `!` fires) and are **not** wrapped. Arity mismatch
 
 - Inside `"..."` (unstructured text): each `{expr}` embed is evaluated,
   then **joined-with-space** to a string. A singleton-Tmpl value
-  stringifies as its inner item (join of one). So `(n:_)"Hi {n?}"!Bob`
+  stringifies as its inner item (join of one). So `([n])"Hi {n?}"!Bob`
   → `"Hi Bob"` — the singleton form is invisible to text rendering.
 - Inside `{...}` (structured template): embeds are NOT stringified;
   the resolved value lands as one item, preserving its shape.
@@ -217,7 +242,7 @@ want the seed-as-bare-value.
 ## Open / pending design work
 
 - **Pattern slot-kinds refactor (in scope now):** `Pattern.items`
-  become uniform `Slot {name: string|null, rest: bool}` nodes,
+  become uniform `Slot {label: string|null, rest: bool, body}` nodes,
   replacing today's `Word{subkind:'wildcard'|'variadic'}` and
   `Named{value:Word{...}}` shapes. Removes subkind-sniffing across
   `parse.js`, `match.js`, `eval.js`, `builtins.js`.

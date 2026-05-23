@@ -80,8 +80,8 @@ test('nested braces', () => {
 });
 
 test('parens hold patterns', () => {
-  assert.deepEqual(shape('(a:_)'), [
-    [T.LPAREN, '('], [T.WORD, 'a:'], [T.WORD, '_'], [T.RPAREN, ')'],
+  assert.deepEqual(shape('([a])'), [
+    [T.LPAREN, '('], [T.LBRACK, '['], [T.WORD, 'a'], [T.RBRACK, ']'], [T.RPAREN, ')'],
   ]);
 });
 
@@ -96,7 +96,7 @@ test('@ requires a following name character', () => {
   assert.throws(() => tokenize('@ x'), PunkSyntaxError);
 });
 
-test('`[` and `]` are no longer Punk delimiters', () => {
+test('`[` and `]` are only valid inside a pattern', () => {
   assert.throws(() => tokenize('[name]'), PunkSyntaxError);
 });
 

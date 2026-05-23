@@ -28,11 +28,11 @@ test('lone * outside a Pattern is a normal Word', () => {
 });
 
 test('_ inside a Pattern is fine', () => {
-  run('(x:_)x?');
+  run('([x])x?');
 });
 
 test('* inside a Pattern is fine', () => {
-  run('(args:*){args?}');
+  run('(*[args]){args?}');
 });
 
 test('_ inside a nested Pattern is fine', () => {
@@ -115,7 +115,7 @@ test('()~ (empty body, return-range) is a syntax error', () => {
 });
 
 test('(){body}~ (non-empty body) is fine', () => {
-  run('(x:_){x?}~');
+  run('([x]){x?}~');
 });
 
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ test('(){body}~ (non-empty body) is fine', () => {
 
 test('error inside a Fn body is caught', () => {
   // The validator recurses through Fn bodies — a stray '!' here proves it.
-  assert.throws(() => run('(x:_){!}'), /stray '!'/);
+  assert.throws(() => run('([x]){!}'), /stray '!'/);
 });
 
 test('error inside a Tmpl inside a Pattern slot is caught', () => {

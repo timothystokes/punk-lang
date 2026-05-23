@@ -188,6 +188,7 @@ export function parseTree(tokens) {
     switch (tok.type) {
       case T.LBRACE:    return parseBraces();
       case T.LPAREN:    return parseParens();
+      case T.LBRACK:    return parseBrackets();
       case T.AT:        return parseAt();
       case T.QUOTE_OPEN: return parseText();
       case T.WORD: {
@@ -244,18 +245,94 @@ export function parseTree(tokens) {
       throw new PunkSyntaxError("unclosed '('", open.line, open.col);
     }
     i++;
-    return mkPattern(items, open.line, open.col);
+    // Merge `*[label]` — a variadic Word `*` immediately followed (no
+    // space) by a labelled wildcard Named — into a single labelled
+    // variadic slot Named{name, value:variadicWord, _label:true}.
+    const merged = [];
+    for (let k = 0; k < items.length; k++) {
+      const cur = items[k];
+      const next = items[k + 1];
+      const isVariadicMark =
+        cur && cur.kind === 'Word' && cur.text === '*';
+      const isLabelledWildcard =
+        next && next.kind === 'Named' && next._label === true
+        && next.value && next.value.kind === 'Word'
+        && next.value.subkind === 'wildcard';
+      if (isVariadicMark && isLabelledWildcard && next.glued) {
+        const variadic = mkWord('*', cur.line, cur.col);
+        variadic.subkind = 'variadic';
+        const mergedNode = mkNamed(next.name, variadic, cur.line, cur.col);
+        mergedNode._label = true;
+        mergedNode.glued = cur.glued;
+        merged.push(mergedNode);
+        k++; // skip the consumed Named
+        continue;
+      }
+      merged.push(cur);
+    }
+    return mkPattern(merged, open.line, open.col);
   };
 
   const parseBrackets = () => {
-    // Brackets are no longer Punk delimiters — kept here only because
-    // it would be reached if a stray `[`/`]` token slipped through. The
-    // tokenizer now rejects `[`/`]` directly so this should be dead.
-    const tok = at();
-    throw new PunkSyntaxError(
-      "'[' is not a Punk delimiter — use '@name' for atoms",
-      tok.line, tok.col,
-    );
+    // `[label]` or `[label/regex/flags]` — a labelled pattern slot.
+    // Tokenizer only emits LBRACK/RBRACK inside a `(...)` pattern, so we
+    // can assume Pattern context here.
+    const open = at();
+    i++; // consume LBRACK
+    // Skip leading SPACE inside brackets (tolerant — `[ n ]` is fine).
+    while (at()?.type === T.SPACE) i++;
+    const labelTok = at();
+    if (!labelTok || labelTok.type !== T.WORD) {
+      throw new PunkSyntaxError(
+        "expected a label name after '['",
+        open.line, open.col,
+      );
+    }
+    if (labelTok.text === '_' || labelTok.text === '*') {
+      throw new PunkSyntaxError(
+        `'[${labelTok.text}]' is not valid — use bare '${labelTok.text}' for an unlabelled slot`,
+        open.line, open.col,
+      );
+    }
+    if (!isName(labelTok.text)) {
+      throw new PunkSyntaxError(
+        `'${labelTok.text}' is not a valid slot label`,
+        labelTok.line, labelTok.col,
+      );
+    }
+    if (RESERVED_NAMES && RESERVED_NAMES.has && RESERVED_NAMES.has(labelTok.text)) {
+      throw new PunkSyntaxError(
+        `cannot bind to reserved name '${labelTok.text}'`,
+        labelTok.line, labelTok.col,
+      );
+    }
+    i++; // consume label word
+    while (at()?.type === T.SPACE) i++;
+    // Optional REGEX after the label.
+    let body;
+    if (at()?.type === T.REGEX) {
+      const rtok = at();
+      i++;
+      body = {
+        kind: 'Regex', body: rtok.body, flags: rtok.flags,
+        text: rtok.text, line: rtok.line, col: rtok.col,
+      };
+      while (at()?.type === T.SPACE) i++;
+    } else {
+      // No body — wildcard slot. Synthesize a wildcard Word.
+      body = mkWord('_', open.line, open.col);
+      body.subkind = 'wildcard';
+    }
+    if (at()?.type !== T.RBRACK) {
+      throw new PunkSyntaxError(
+        "unclosed '['",
+        open.line, open.col,
+      );
+    }
+    i++; // consume RBRACK
+    const node = mkNamed(labelTok.text, body, open.line, open.col);
+    node._label = true; // distinguishes `[n]` form from `name:value` context-match
+    return node;
   };
 
   const parseAt = () => {

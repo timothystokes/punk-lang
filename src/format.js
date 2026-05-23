@@ -34,6 +34,21 @@ export function format(value) {
     case 'Regex':
       return '/' + value.body + '/' + (value.flags || '');
     case 'Named':
+      if (value._label) {
+        // `[label]`, `*[label]`, `[label/re/f]` — labelled pattern slot.
+        const v = value.value;
+        if (v && v.kind === 'Word' && v.subkind === 'variadic') {
+          return '*[' + value.name + ']';
+        }
+        if (v && v.kind === 'Word' && v.subkind === 'wildcard') {
+          return '[' + value.name + ']';
+        }
+        if (v && v.kind === 'Regex') {
+          return '[' + value.name + '/' + v.body + '/' + (v.flags || '') + ']';
+        }
+        // Fallback (shouldn't occur — only the above forms are produced).
+        return '[' + value.name + ']';
+      }
       return value.name + ':' + format(value.value);
     case 'Query':
       return formatPath(value) + '?';
@@ -106,6 +121,7 @@ export function formatRepl(value) {
     return format(mkTmpl([value]));
   }
   if (value.kind === 'Named') {
+    if (value._label) return format(value);
     return value.name + ':' + formatRepl(value.value);
   }
   return format(value);

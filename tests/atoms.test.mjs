@@ -18,14 +18,14 @@ test('write then read an atom', () => {
   // atom and calling a 1-slot fn produces `{{42}}` — the body has one
   // item (`v?`) and a fn body is always returned as a template.
   assert.equal(
-    punk('42->@n!  @n->(v:_){v?}!'),
+    punk('42->@n!  @n->([v]){v?}!'),
     '{{42}}'
   );
 });
 
 test('overwriting an atom replaces its contents', () => {
   assert.equal(
-    punk('1->@n!  2->@n!  @n->(v:_){v?}!'),
+    punk('1->@n!  2->@n!  @n->([v]){v?}!'),
     '{{2}}'
   );
 });
@@ -35,7 +35,7 @@ test('read-transform-write — counter increment', () => {
   const src = `0->@c!
     @c->+'1->@c!
     @c->+'1->@c!
-    @c->(v:_){v?}!`;
+    @c->([v]){v?}!`;
   assert.equal(punk(src), '{2}');
 });
 
@@ -45,7 +45,7 @@ test('an atom can hold any value, including a template', () => {
   // is `{{a b c}}`, slot binds the inner template, body returns
   // `{ {a b c} }`.
   assert.equal(
-    punk('{a b c}->@xs!  @xs->(v:_){v?}!'),
+    punk('{a b c}->@xs!  @xs->([v]){v?}!'),
     '{{a b c}}'
   );
 });
@@ -56,7 +56,7 @@ test('atoms and ordinary names do not interact', () => {
   // inlines that tmpl's items — landing `1` bare in the parent.
   // The atom read goes through a 1-slot fn, picking up a uniform wrap.
   assert.equal(
-    punk('n:1  2->@n!  {n?.? @n->(v:_){v?}!}!'),
+    punk('n:1  2->@n!  {n?.? @n->([v]){v?}!}!'),
     '{1 {{2}}}'
   );
 });

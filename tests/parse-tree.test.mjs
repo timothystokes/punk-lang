@@ -99,15 +99,13 @@ test('nested templates', () => {
 });
 
 test('pattern around words', () => {
-  assert.deepEqual(top('(a:_ b:_)'), {
+  assert.deepEqual(top('([a] [b])'), {
     kind: 'Tmpl',
     items: [{
       kind: 'Pattern',
       items: [
-        { kind: 'Word', text: 'a:' },
-        { kind: 'Word', text: '_', glued: true },
-        { kind: 'Word', text: 'b:' },
-        { kind: 'Word', text: '_', glued: true },
+        { kind: 'Named', name: 'a' },
+        { kind: 'Named', name: 'b' },
       ],
     }],
   });

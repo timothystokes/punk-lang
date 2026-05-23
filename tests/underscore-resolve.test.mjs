@@ -6,7 +6,7 @@
 //
 // `_?` is ONLY legal inside a function whose pattern is exactly `(_)`
 // (a single anonymous slot). Anywhere else — including `(_ _)`,
-// `(x:_)`, top-level, inside `(*)` — it is a syntax/runtime error.
+// `([x])`, top-level, inside `(*)` — it is a syntax/runtime error.
 //
 // `*?` (resolve the variadic) is unchanged.
 
@@ -26,11 +26,11 @@ test('`_?` works as a single-expression body for (_)', () => {
 });
 
 test('`_?` works inside a nested `(_)` partial', () => {
-  // outer (x:_) closes over x; inner (_) uses _? for its own arg.
+  // outer ([x]) closes over x; inner (_) uses _? for its own arg.
   // `~` slices the outer body so `inc` binds to the inner fn directly.
   assert.equal(
     punk(`
-      add:(x:_){(_)+!{x? _?}}~
+      add:([x]){(_)+!{x? _?}}~
       inc:add!10
       inc!5
     `),
@@ -45,7 +45,7 @@ test('`_?` outside any function is a syntax/runtime error', () => {
 });
 
 test('`_?` in a named-slot function is an error', () => {
-  punkThrows('f:(x:_)_?  f!1');
+  punkThrows('f:([x])_?  f!1');
 });
 
 test('`_?` in a multi-slot function is an error', () => {

@@ -144,8 +144,8 @@ test('`.:?` works off any segment of a path', () => {
 // ---------- Pattern segment `.()?` ----------
 
 test('`.()?` of a function returns its pattern bare', () => {
-  assert.equal(punk('add:(a:_ b:_){+!{a? b?}}  add.()?'),
-                    '(a:_ b:_)');
+  assert.equal(punk('add:([a] [b]){+!{a? b?}}  add.()?'),
+                    '([a] [b])');
 });
 
 test('`.()?` of a non-function returns NULL', () => {
@@ -165,8 +165,8 @@ test('a path without `?` is just bare characters at the top level', () => {
 
 test('querying does not evaluate functions inside the value', () => {
   assert.equal(
-    punk('xs:{(n:_){+!{n? 1}} 2}  xs.1?'),
-    '(n:_){+!{n? 1}}'
+    punk('xs:{([n]){+!{n? 1}} 2}  xs.1?'),
+    '([n]){+!{n? 1}}'
   );
 });
 
@@ -237,7 +237,7 @@ test('dynamic step — closes over an outer name', () => {
   // name against the enclosing scope at call time, just like any other
   // query inside that body.
   assert.equal(
-    punk('f:(attribute:_){(a:_){a.{attribute?}?}}~  g:f!b  g!{{a:1 b:2 c:3}}'),
+    punk('f:([attribute]){([a]){a.{attribute?}?}}~  g:f!b  g!{{a:1 b:2 c:3}}'),
     '{2}',
   );
 });
@@ -248,8 +248,8 @@ test('dynamic step — closes over an outer name through a higher-order builtin'
   // uses `~` so each value lands bare in the map result.
   assert.equal(
     punk(`
-      pick:(attribute:_ items:_){
-        map!{(item:_){item.{attribute?}?}~ items?}
+      pick:([attribute] [items]){
+        map!{([item]){item.{attribute?}?}~ items?}
       }~
       ms:{Jan:{tokens:850} Feb:{tokens:870}}
       pick!{tokens ms?}

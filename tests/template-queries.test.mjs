@@ -46,14 +46,14 @@ test('function inside a template is inert until the template is executed', () =>
   // nothing runs. The embed round-trips through its canonical form: the
   // shorthand `shout!hi` is parsed and re-displayed as `shout!{hi}`.
   assert.equal(
-    punk('shout:(s:_){upper!{s?}}  "I said {shout!hi}"'),
+    punk('shout:([s]){upper!{s?}}  "I said {shout!hi}"'),
     '"I said {shout!{hi}}"'
   );
 });
 
 test('function inside an unstructured template runs when the template is executed', () => {
   assert.equal(
-    punk('shout:(s:_){upper!{s?}}  "I said {shout!hi}"!'),
+    punk('shout:([s]){upper!{s?}}  "I said {shout!hi}"!'),
     '"I said HI"'
   );
 });
