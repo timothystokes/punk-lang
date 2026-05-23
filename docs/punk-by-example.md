@@ -791,7 +791,7 @@ Inside a function body, `*?` queries the whole template of arguments that the fu
 {a b c}
 ```
 
-`*` from inside a function body is a reference to the whole argument template, so paths apply to it like any other value. `*.1?` is the first argument, `*.2?` the second, `*.name?` the Named entry called `name`, and so on. This is independent of how the pattern matched — the pattern only decides whether the function runs at all; once it's running, `*` is the **as-passed** input.
+For convenience, every function body's env gets an auto-injected binding `*:<args>` where `<args>` is the as-passed argument template. From that point `*` is a name like any other — `*?` resolves it, and `*.1?`, `*.2?`, `*.name?`, `*.#?` are just normal path access on a normal binding. There's no `*`-specific resolution rule in the body; the convenience is purely that the binding is always there for you.
 
 ```punk
 > first:(_ *){*.1?}  first!{a b c} ⏎
@@ -800,7 +800,9 @@ Inside a function body, `*?` queries the whole template of arguments that the fu
 {Sally}
 ```
 
-> NOTE: `*` has two distinct meanings depending on where it appears. **In a pattern**, `*` (or `*[label]`) is the variadic slot that swallows the remaining positional items. **In a function body**, `*` is the reference to the whole argument template that was passed in. The two uses never collide because patterns and bodies are different contexts.
+This is useful for specialised functions that need to introspect the full parameter shape — reflectors, wrappers that forward args verbatim, or helpers that want the original Named names the pattern didn't extract.
+
+> NOTE: `*` has two distinct meanings depending on where it appears. **In a pattern**, `*` (or `*[label]`) is the variadic slot that swallows the remaining positional items. **In a function body**, `*` is just an auto-injected name binding. The two uses never collide because patterns and bodies are different contexts.
 
 
 For functions that work like data templates, getting the whole resulting template back is useful. But for templates that contain a number of intermediate steps, it's often just the last item that matters. Here is an example that also uses the `<` less-than built-in function.

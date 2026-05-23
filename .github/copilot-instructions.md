@@ -152,20 +152,26 @@ yet defined.
 
 ### Whole-arguments reference — `*` in a body
 
-Inside a function body, `*` is a reference to the **whole argument
-template** that was passed to the call, as-passed. The pattern only
-decides whether the function runs at all; once it's running, `*` is
-the original args.
+For convenience, every function body's env is given an auto-injected
+binding `*:<args>` where `<args>` is the whole argument template that
+was passed to the call, as-passed. From that point `*` is a name like
+any other — no special resolution rules. Path access (`*.1?`,
+`*.name?`, `*.#?`, …) is just normal path semantics on a normal
+binding.
 
-- `*?` resolves to the whole args template.
-- `*.1?`, `*.2?` index into it positionally.
-- `*.name?` reads a Named entry by name.
-- `*.#?` is its length, `*.~?` is its last item, etc. — all standard
-  path semantics apply.
+```punk
+> introspect:(_){*.#? items: *?} ⏎
+> introspect!{a b c}            # → {3 items: {a b c}} #
+```
 
-This is distinct from `*` inside a pattern (which is the variadic
-slot). The two never collide: patterns and bodies are different
-contexts.
+Useful when a specialised function needs to introspect the full
+parameter shape (e.g. a reflector, a wrapper that forwards args, or a
+helper that wants the original Named names that the pattern didn't
+extract).
+
+This is distinct from `*` inside a *pattern* (the variadic slot). The
+two never collide: patterns and bodies are different contexts, and the
+body's `*` is purely a name binding.
 
 ### Function call / pipe canonical table
 
