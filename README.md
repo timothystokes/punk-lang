@@ -1,6 +1,6 @@
 # Punk
 
-Punk is a functional programming language designed for concise and expressive data processing. It features a unique syntax that emphasizes readability and composability, with a focus on functional programming patterns and data transformation.
+Punk is a Fun-ctional imutable interpreted programming language. It has unique concept and syntax. It's named after it's creator who is a self confessed punk! This implementation uses JavaScript as it's runtime.
 
 ## Getting Started
 
@@ -22,7 +22,7 @@ Here are the key concepts used in the Punk language.
 
 ### Things
 
-Punk is not a strongly typed language but it does have function that can do math and all sorts of other things. All fucntions work on the premice that if the value feels like the kind of thing that the function can usefully process at runtime then it does. e.g. adding thos things where those things seem like numbers will add them together as number and return a new thing.
+Punk is not a strongly typed language but it does have specific contracts including Word & Number kind of things, Templates, Patterns, and of cause Functions.
 
 ### Numbers
 
@@ -71,7 +71,7 @@ In this example we have one named template which itself contains two things.
 {message:{Hello world}}
 ```
 
-> NOTE: Punk treats names as imutable. Once you have attached a name to one thing then it sticks. You can't remove the name or attached that name to another thing within the same namespace.
+> NOTE: Punk treats names as imutable. Once you have attached a name to one thing then it sticks. You can't remove the name or attached that name to another thing (within the same namespace).
 
 ### Querying Named Things
 

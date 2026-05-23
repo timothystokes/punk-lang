@@ -25,7 +25,7 @@ import { punk, punkThrows } from './_punk.mjs';
 
 test('map! — applies fn to each item', () => {
   assert.equal(
-    punk('map!{(n:_){X!{n? 10}} {1 2 3}}'),
+    punk('map!{(n:_){X!{n? 10}}~ {1 2 3}}'),
     '{10 20 30}'
   );
 });
@@ -41,14 +41,14 @@ test('map! — empty template maps to empty', () => {
 
 test('filter! — keeps items where predicate is TRUE', () => {
   assert.equal(
-    punk('filter!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('filter!{(n:_){>!{n? 2}}~ {1 2 3 4 5}}'),
     '{3 4 5}'
   );
 });
 
 test('filter! — empty result when no item passes', () => {
   assert.equal(
-    punk('filter!{(n:_){>!{n? 100}} {1 2 3}}'),
+    punk('filter!{(n:_){>!{n? 100}}~ {1 2 3}}'),
     '{}'
   );
 });
@@ -58,14 +58,14 @@ test('filter! — empty result when no item passes', () => {
 test('reduce! — folds left-to-right with seed', () => {
   // Callback is (acc value); acc first so `reduce'fn` partials cleanly.
   assert.equal(
-    punk('reduce!{(a:_ b:_){+!{a? b?}} 0 {1 2 3 4}}'),
+    punk('reduce!{(a:_ b:_){+!{a? b?}}~ 0 {1 2 3 4}}'),
     '{10}'
   );
 });
 
 test('reduce! — seed is returned for empty collection', () => {
   assert.equal(
-    punk('reduce!{(a:_ b:_){+!{a? b?}} 99 {}}'),
+    punk('reduce!{(a:_ b:_){+!{a? b?}}~ 99 {}}'),
     '{99}'
   );
 });
@@ -74,14 +74,14 @@ test('reduce! — seed is returned for empty collection', () => {
 
 test('find! — first item matching predicate', () => {
   assert.equal(
-    punk('find!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('find!{(n:_){>!{n? 2}}~ {1 2 3 4 5}}'),
     '{3}'
   );
 });
 
 test('find! — NULL when nothing matches', () => {
   assert.equal(
-    punk('find!{(n:_){>!{n? 100}} {1 2 3}}'),
+    punk('find!{(n:_){>!{n? 100}}~ {1 2 3}}'),
     'NULL'
   );
 });
@@ -100,14 +100,14 @@ test('each! — returns NULL', () => {
 
 test('count! — number of items matching predicate', () => {
   assert.equal(
-    punk('count!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('count!{(n:_){>!{n? 2}}~ {1 2 3 4 5}}'),
     '{3}'
   );
 });
 
 test('count! — zero when no item matches', () => {
   assert.equal(
-    punk('count!{(n:_){>!{n? 100}} {1 2 3}}'),
+    punk('count!{(n:_){>!{n? 100}}~ {1 2 3}}'),
     '{0}'
   );
 });
@@ -124,7 +124,7 @@ test('sort! — unary form, ascending', () => {
 test('sort! — with comparator (TRUE if a should come before b)', () => {
   // Descending: a comes before b when a > b.
   assert.equal(
-    punk('sort!{(a:_ b:_){>!{a? b?}} {3 1 4 1 5}}'),
+    punk('sort!{(a:_ b:_){>!{a? b?}}~ {3 1 4 1 5}}'),
     '{5 4 3 1 1}'
   );
 });
@@ -162,13 +162,13 @@ test('contains! — FALSE when absent', () => {
 // ---- partial-friendly arg order ---------------------------------------
 
 test("partial — `map'fn` is a unary list transformer", () => {
-  const src = `double:map'(n:_){X!{n? 2}}
+  const src = `double:map'{(n:_){X!{n? 2}}~}
     double!{1 2 3}`;
   assert.equal(punk(src), '{2 4 6}');
 });
 
 test("partial — `reduce'{fn 0}` is a list summer", () => {
-  const src = `sum:reduce'{(a:_ b:_){+!{a? b?}} 0}
+  const src = `sum:reduce'{(a:_ b:_){+!{a? b?}}~ 0}
     sum!{1 2 3 4}`;
   assert.equal(punk(src), '{10}');
 });

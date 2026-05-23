@@ -27,9 +27,10 @@ test('`_?` works as a single-expression body for (_)', () => {
 
 test('`_?` works inside a nested `(_)` partial', () => {
   // outer (x:_) closes over x; inner (_) uses _? for its own arg.
+  // `~` slices the outer body so `inc` binds to the inner fn directly.
   assert.equal(
     punk(`
-      add:(x:_){(_)+!{x? _?}}
+      add:(x:_){(_)+!{x? _?}}~
       inc:add!10
       inc!5
     `),

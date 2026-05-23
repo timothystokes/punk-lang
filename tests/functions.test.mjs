@@ -8,8 +8,13 @@
 //     optional — `(p)expr` is the same as `(p){expr}`.
 //   - Call with `!`: `welcome!{Tim}` -> `{Hello Tim}`.
 //   - A single-thing arg can be passed without braces: `f!x` ≡ `f!{x}`.
-//   - Return rule: 1-item body returns that item directly; multi-item body
-//     returns the whole template. Use `~` to slice a multi-item body.
+//   - Return rule: the body IS a template. Calling the function returns
+//     that body as a template — always. A 1-item body returns `{thing}`;
+//     a 3-item body returns `{a b c}`. There is no implicit unwrap.
+//   - Use `~` on the closing `}` (a return-range) to slice the body and
+//     return its last item directly. This is the idiom for "give me back
+//     just this one value, bare" — e.g. for callbacks that feed bare
+//     TRUE/FALSE/numbers into HOFs and arithmetic.
 //   - Recursion: a function may reference itself by name once bound.
 //   - Closures: a function carries the scope it was defined in.
 
@@ -70,9 +75,9 @@ test('return range `~` returns only the last item of the template', () => {
   assert.equal(punk(src), '{Large Circle}');
 });
 
-test('simple nested function call — 1-item body returns the value directly', () => {
-  // No `~` needed: body is a single arithmetic call, so the function
-  // returns the resulting number. REPL wraps a bare number for display.
+test('simple nested function call — body returns a singleton template', () => {
+  // Body is a single arithmetic call producing a Word; the body is one
+  // item and the function returns it as `{Word}`. REPL displays `{43.974}`.
   assert.equal(
     punk('circ:(r:_){X!{X!{3.141 r?} 2}}  circ!7'),
     '{43.974}'
@@ -80,23 +85,24 @@ test('simple nested function call — 1-item body returns the value directly', (
 });
 
 test('recursion — function references itself by name', () => {
-  // Body is one `??` expression, so no `~` is needed.
+  // `~` slices the body to its last item (bare), so the recursive call
+  // gets a bare number to multiply against rather than a wrapped tmpl.
   const src = `factorial:(n:_){
       <=!{n? 1}??{
         (TRUE){1}
         (FALSE){X!{n? factorial!{-!{n? 1}}}}
       }!
-    }
+    }~
     factorial!5`;
   assert.equal(punk(src), '{120}');
 });
 
 test('closure — inner function captures outer name', () => {
-  // Body is a single function literal; under the 1-item rule, make-adder
-  // returns the inner function directly so add10 is callable.
+  // make-adder returns its inner fn literal. `~` peels the wrap so
+  // add10 binds to the fn (not to a `{fn}` template wrapping it).
   const src = `make-adder:(n:_){
       (x:_){+!{x? n?}}
-    }
+    }~
     add10:make-adder!10
     add10!5`;
   assert.equal(punk(src), '{15}');
@@ -104,11 +110,11 @@ test('closure — inner function captures outer name', () => {
 
 test('closure — captured name is not affected by later rebinding in another scope', () => {
   // The closure keeps the value captured at its point of creation.
-  const src = `make-adder:(n:_){(x:_){+!{x? n?}}}
+  const src = `make-adder:(n:_){(x:_){+!{x? n?}}}~
     add10:make-adder!10
     add20:make-adder!20
     {add10!5 add20!5}!`;
-  assert.equal(punk(src), '{15 25}');
+  assert.equal(punk(src), '{{15} {25}}');
 });
 
 test('function with unstructured-template body', () => {
@@ -127,12 +133,14 @@ test('shortcut — outer braces are optional when body is a single expression', 
   );
 });
 
-test('shortcut — braceless body still follows the 1-item return rule', () => {
-  // Body is a single fn literal, returned directly.
+test('shortcut — braceless body returns a singleton template', () => {
+  // Body is a single fn literal; the function returns `{fn}` (a 1-item
+  // template). Calling `make-adder!3` produces `{(x:_){...}}`, which is
+  // not callable directly — to bind a usable adder, use the braced
+  // form with `~` (see closure tests).
   const src = `make-adder:(n:_)(x:_){+!{x? n?}}
-    add3:make-adder!3
-    add3!10`;
-  assert.equal(punk(src), '{13}');
+    make-adder!3`;
+  assert.equal(punk(src), '{(x:_){+!{x? n?}}}');
 });
 
 test('return range `~` on braceless body — allowed and a no-op', () => {

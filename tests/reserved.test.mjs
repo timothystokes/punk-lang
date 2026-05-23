@@ -36,9 +36,11 @@ test('reserved values inside a structured template appear as-is', () => {
 // ---------- Naming ----------
 
 test('reserved values can be bound to names', () => {
-  assert.equal(punk('ok:TRUE       ok?'),   'TRUE');
-  assert.equal(punk('done:FALSE    done?'), 'FALSE');
-  assert.equal(punk('absent:NULL   absent?'),'NULL');
+  // Reserved words wrap like any value Word, so `ok:TRUE` ≡ `ok:{TRUE}`
+  // and the query returns the wrapped singleton.
+  assert.equal(punk('ok:TRUE       ok?'),   '{TRUE}');
+  assert.equal(punk('done:FALSE    done?'), '{FALSE}');
+  assert.equal(punk('absent:NULL   absent?'),'{NULL}');
 });
 
 // ---------- NULL is produced by invalid paths ----------

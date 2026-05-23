@@ -36,10 +36,11 @@ test('binding a named function echoes bare', () => {
   assert.equal(punk('id:(x:_){x?}'), 'id:(x:_){x?}');
 });
 
-test('binding a reserved value echoes bare on the value side', () => {
-  assert.equal(punk('ok:TRUE'),    'ok:TRUE');
-  assert.equal(punk('done:FALSE'), 'done:FALSE');
-  assert.equal(punk('miss:NULL'),  'miss:NULL');
+test('binding a reserved value wraps it on the value side', () => {
+  // Reserved words wrap like any value Word: `ok:TRUE` ≡ `ok:{TRUE}`.
+  assert.equal(punk('ok:TRUE'),    'ok:{TRUE}');
+  assert.equal(punk('done:FALSE'), 'done:{FALSE}');
+  assert.equal(punk('miss:NULL'),  'miss:{NULL}');
 });
 
 test('a name attached with a space between `:` and value is a syntax error', () => {

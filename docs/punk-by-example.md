@@ -94,7 +94,7 @@ So `age:42` is short form for `age:{42}`, and `name:Tim` is short form for `name
 > age:42  age.2?  ⏎    NULL
 ```
 
-Everything that already has its own delimiters (templates, patterns, functions, texts, boxes, reserved values like `TRUE`/`FALSE`/`NULL`) binds bare — no extra wrapping.
+Everything that already has its own delimiters — templates `{...}`, patterns `(...)`, functions `(p){body}`, texts `"..."`, boxes `[name]` — binds bare, no extra wrapping. Bare Words (including `TRUE`, `FALSE`, `NULL`) and bare Numbers all wrap into a singleton template the same way `name:Tim` does.
 
 ## Templates
 
@@ -153,7 +153,7 @@ SYNTAX ERROR
 
 ### Reserved values
 
-Three bare names always resolve to fixed values. They behave like ordinary Words for the most part — they can be queried, passed around, named, matched in patterns — but they are reserved so the language and its builtins have a shared vocabulary for "true", "false", and "no value". Unlike other Words, they do **not** get the short-form wrap when they are the final value at the REPL: they print bare (`TRUE`, `FALSE`, `NULL`).
+Three bare names always resolve to fixed values. They behave like ordinary Words for the most part — they can be queried, passed around, named, matched in patterns — but they are reserved so the language and its builtins have a shared vocabulary for "true", "false", and "no value". Like other bare value-words, they get the short-form wrap when bound (`ok:TRUE` ≡ `ok:{TRUE}`), so a queried reserved value through a named binding lands as `{TRUE}`.
 
 | Name | Meaning |
 | --- | --- |
@@ -591,11 +591,38 @@ A group that didn't participate in the match (for example, an alternative branch
 
 The slot itself only binds at all when the whole regex matches; if the regex doesn't match the input, the *pattern* doesn't match and the next pattern in a dispatch is tried. `NULL` is reserved for groups that didn't capture — it's a value the function can inspect and handle, not a failure mode.
 
-Patterns can also be named.
+Patterns can also be named — see the next section.
+
+### Named patterns
+
+Patterns are first-class values; bind one to a name and reuse it like any other value.
 
 ```punk
-> isFive:(5) ⏎
+> isFive:(5) ⏎                  # a pattern that matches a single {5} #
+> point:(x:_ y:_) ⏎             # a pattern with two named slots #
+> nonEmpty:(_ *) ⏎              # one or more things #
 ```
+
+Use a named pattern as the pattern part of a function by writing `(name?)` where the pattern would normally go. The named pattern's slots are **spliced** into the call-site pattern — i.e. you get the original slots and their names, not a nested pattern.
+
+```punk
+> point:(x:_ y:_) ⏎
+> distance:(point?){
+    +!{x?*x? y?*y?}->sqrt!
+  } ⏎
+> distance!{3 4} ⏎
+5
+```
+
+The same named pattern can be reused across multiple functions:
+
+```punk
+> point:(x:_ y:_) ⏎
+> show:(point?){"point at x?,y?"} ⏎
+> origin:(point?){and!{x?==0 y?==0}} ⏎
+```
+
+`(p?){body}` looks up `p` in the env at function-build time, expects it to be a Pattern, and splices its slot list in. Resolving `p` to anything other than a Pattern is an error.
 
 ### Using Patterns
 
@@ -710,11 +737,11 @@ An example function that calculates circumference using the `X` multiply built-i
 
 ### Function Return values
 
-A function's body is a template. What comes back when you call it follows the same rule as anything else in Punk — you get the content, not extra wrapping:
+A function's body is a template. Calling the function evaluates the body's items in scope and returns **that template** — always. There is no implicit unwrap, no special case for a one-item body, no magic.
 
-- If the body has **one top-level item**, the function returns *that item directly*. A function whose body is a single function literal returns the function itself; a body that is a single arithmetic call returns the number; a body that is a single dispatch (`x??{...}!`) returns whatever branch matched.
-- If the body has **multiple top-level items**, the function returns the whole template containing them in order.
-- A return-range constraint (`}~`) on the function lets you slice the body before it goes back to the caller — useful when intermediate steps live in the body but you only want the final answer to escape.
+- The body's top-level items become the result template's items. A one-item body returns `{thing}`; a three-item body returns `{a b c}`.
+- If the one item itself evaluates to a template (e.g. a single `x??{...}!` dispatch), the result naturally nests: the body has one item, and that item is itself a template. So a body like `{x??{...}!}` returns `{ {whatever-the-branch-returned} }`. If you want to flatten that into the parent template, use `.?` on the inner call: `{x??{...}!.?}` spreads the items into the body.
+- A return-range constraint (`}~`) on the function lets you slice the body before it goes back to the caller — useful when intermediate steps live in the body but you only want the final answer to escape. With no range, `}~` returns the last item directly (as-is, no extra wrap); use it as the explicit "give me just this thing" marker.
 
 Inside a function body, `*?` queries the whole template of arguments that the function was called with — useful when you want to forward, inspect, or fall back to the raw input regardless of what your pattern bound.
 
@@ -832,6 +859,8 @@ When the chain ends with `!`, it runs: the thing on the left flows through each 
 ```
 
 Each stage on the right of an `->` is expected to be a function. The input becomes that function's argument, so each stage must be able to accept one thing.
+
+> NOTE: A bare value-word at the **start** of an executing pipeline auto-wraps the same way it does on the RHS of `:`, `!`, or `'`. So `Hello->upper!` is shorthand for `{Hello}->upper!`, which is equivalent to `upper!{Hello}`. Numbers and reserved words (`TRUE`, `FALSE`, `NULL`) wrap the same way. This applies uniformly — including pipes that only write to a box (`42->[n]!` stores `{42}`, not bare `42`). Intermediate stages are callable references, not values, and are not wrapped.
 
 ### Composing a pipeline
 

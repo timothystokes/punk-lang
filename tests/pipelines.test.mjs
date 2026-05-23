@@ -104,11 +104,12 @@ test('pipeline seed: `.?` spreads inside seed to recover length-3 behaviour', ()
 test('pipeline into a 1-remaining partial — slot receives the tmpl, hof iterates', () => {
   // map takes (fn coll); pre-fill fn, then deliver coll via pipeline.
   // The piped tmpl must reach the coll slot intact so map iterates over
-  // its items and produces a 3-item tmpl of results.
+  // its items and produces a 3-item tmpl of results. Callback uses `~`
+  // so each transformed item is bare, not `{n}`-wrapped.
   assert.equal(
     punk(`
       xs:{10 20 30}
-      grow:map'(s:_){+!{s? 1}}
+      grow:map'{(s:_){+!{s? 1}}~}
       xs?->grow!
     `),
     '{11 21 31}',
@@ -119,12 +120,12 @@ test('pipeline into a 1-remaining partial matches direct call', () => {
   // Direct and pipeline forms must produce the same value.
   const direct = punk(`
     xs:{10 20 30}
-    grow:map'(s:_){+!{s? 1}}
+    grow:map'{(s:_){+!{s? 1}}~}
     grow!{xs?}
   `);
   const piped = punk(`
     xs:{10 20 30}
-    grow:map'(s:_){+!{s? 1}}
+    grow:map'{(s:_){+!{s? 1}}~}
     xs?->grow!
   `);
   assert.equal(piped, direct);

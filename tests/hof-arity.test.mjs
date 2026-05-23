@@ -24,21 +24,21 @@ import { punk, punkThrows } from './_punk.mjs';
 
 test('map! — single-arg `(item:_)` callback', () => {
   assert.equal(
-    punk('map!{(n:_){X!{n? 10}} {1 2 3}}'),
+    punk('map!{(n:_){X!{n? 10}}~ {1 2 3}}'),
     '{10 20 30}'
   );
 });
 
 test('map! — two-arg `(item:_ index:_)` callback uses index', () => {
   assert.equal(
-    punk('map!{(v:_ i:_){{i? v?}} {a b c}}'),
+    punk('map!{(v:_ i:_){{i? v?}}~ {a b c}}'),
     '{{1 a} {2 b} {3 c}}'
   );
 });
 
 test('map! — item arg preserves Named, so item.:? gets the name', () => {
   assert.equal(
-    punk('map!{(item:_){item.:?} {x:1 y:2 z:3}}'),
+    punk('map!{(item:_){item.:?}~ {x:1 y:2 z:3}}'),
     '{x y z}'
   );
 });
@@ -47,7 +47,7 @@ test('map! — item arg preserves Named, so item.field? works', () => {
   assert.equal(
     punk(`
       ms:{Jan:{tokens:850} Feb:{tokens:870} Mar:{tokens:830}}
-      map!{(m:_){m.tokens?} ms?}
+      map!{(m:_){m.tokens?}~ ms?}
     `),
     '{850 870 830}'
   );
@@ -65,7 +65,7 @@ test('map! — 0-slot callback is an arity error', () => {
 
 test('filter! — single-arg predicate', () => {
   assert.equal(
-    punk('filter!{(n:_){>!{n? 2}} {1 2 3 4 5}}'),
+    punk('filter!{(n:_){>!{n? 2}}~ {1 2 3 4 5}}'),
     '{3 4 5}'
   );
 });
@@ -74,8 +74,8 @@ test('filter! — two-arg predicate with index', () => {
   // keep odd-indexed (1, 3, 5)
   assert.equal(
     punk(`
-      odd:(n:_){=!{%!{n? 2} 1}}
-      filter!{(v:_ i:_){odd!i?} {a b c d e}}
+      odd:(n:_){=!{%!{n? 2} 1}}~
+      filter!{(v:_ i:_){odd!i?}~ {a b c d e}}
     `),
     '{a c e}'
   );
@@ -101,13 +101,13 @@ test('each! — 3-slot callback is an arity error', () => {
 // ---------- partial form `map'fn` ----------
 
 test("partial — `map'(item:_){...}` is a unary list transformer", () => {
-  const src = `double:map'(n:_){X!{n? 2}}
+  const src = `double:map'{(n:_){X!{n? 2}}~}
 double!{1 2 3}`;
   assert.equal(punk(src), '{2 4 6}');
 });
 
 test("partial — `map'(item:_ index:_){...}` works with index", () => {
-  const src = `tag:map'(v:_ i:_){{i? v?}}
+  const src = `tag:map'{(v:_ i:_){{i? v?}}~}
 tag!{a b c}`;
   assert.equal(punk(src), '{{1 a} {2 b} {3 c}}');
 });

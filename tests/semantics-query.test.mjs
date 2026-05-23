@@ -99,12 +99,11 @@ test('`.?` on a bare Word is identity (one item)', () => {
 // ---------- Path terminators on arbitrary expressions ----------
 
 test('path step on a call result — `(f!arg).x?` precedence', () => {
-  // id returns its single arg unchanged. `.1?` on its result should
-  // yield the first item of the returned tmpl. The call must bind
-  // tighter than `.1?` (post-Exec query attaches to call RESULT).
+  // id returns its single arg unchanged. `~` slices the body so the
+  // call returns the bare arg (a tmpl), and `.1?` indexes into it.
   assert.equal(
     punk(`
-      id:(x:_){x?}
+      id:(x:_){x?}~
       id!{{a b c}}.1?
     `),
     '{a}',
@@ -115,7 +114,7 @@ test('path step on a call result without parens — call binds tighter', () => {
   // `id!{{a:1 b:2 c:3}}.b?` ≡ `(id!{...}).b?`
   assert.equal(
     punk(`
-      id:(x:_){x?}
+      id:(x:_){x?}~
       id!{{a:1 b:2 c:3}}.b?
     `),
     '{2}',
@@ -133,12 +132,14 @@ test('path terminator on a literal Tmpl head', () => {
 test('`.?` spread on a call result expands the value inline', () => {
   // `f!{...}.?` ≡ `(f!{...}).?` — the post-Exec query rule routes
   // the leading-dot path to the call RESULT, not into the args.
+  // pair returns its body via `~` so `.?` spreads the inner tmpl's
+  // items into the outer template.
   assert.equal(
     punk(`
-      pair:(x:_ y:_){{a:x? b:y?}}
+      pair:(x:_ y:_){{a:x? b:y?}}~
       {got pair!{1 2}.?}!
     `),
-    '{got a:{1} b:{2}}',
+    '{got a:1 b:2}',
   );
 });
 

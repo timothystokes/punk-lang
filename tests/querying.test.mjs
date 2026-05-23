@@ -244,11 +244,12 @@ test('dynamic step — closes over an outer name', () => {
 
 test('dynamic step — closes over an outer name through a higher-order builtin', () => {
   // The callback passed to `map!` runs in the helper's scope; a dynamic
-  // step inside it must see the helper's parameters.
+  // step inside it must see the helper's parameters. The inner callback
+  // uses `~` so each value lands bare in the map result.
   assert.equal(
     punk(`
       pick:(attribute:_ items:_){
-        map!{(item:_){item.{attribute?}?} items?}
+        map!{(item:_){item.{attribute?}?}~ items?}
       }~
       ms:{Jan:{tokens:850} Feb:{tokens:870}}
       pick!{tokens ms?}

@@ -1,7 +1,9 @@
 {
   "name": "punk",
   "version": "0.2.1",
-  "description": "Punk is a functional programming language designed for concise and expressive data manipulation. It features a unique syntax that emphasizes readability and composability, with a focus on functional programming patterns and data transformation.",
+  "description": "Punk is a Fun-ctional imutable interpreted programming language.",
+  "author": "Timothy Stokes",
+  "license": "LGPL-3.0",
   "type": "module",
   "main": "src/cli.js",
   "bin": {
@@ -11,7 +13,10 @@
     "start": "node src/cli.js",
     "test": "node --test tests"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "keywords": [
+    "programming language",
+    "interpreted language",
+    "functional programming",
+    "immutable data"
+  ]
 }

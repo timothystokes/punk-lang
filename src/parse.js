@@ -565,6 +565,9 @@ const decodeWord = (w) => {
         return copy(mkNamed(namePart, null, line, col));
       }
       const valueNode = decodeWord(mkWord(valuePart, line, col));
+      // Note: short-form wrap for `name:val` happens later in
+      // parseOperators (see passResolveNamed), where we know
+      // whether we're inside a Pattern vs a Tmpl context.
       return copy(mkNamed(namePart, valueNode, line, col));
     }
     // The text has a colon but the prefix is not a valid name. The
@@ -1110,12 +1113,11 @@ const mkPipeline = (stages, execute, line, col) =>
 const opsWalk = (node) => {
   switch (node.kind) {
     case 'Tmpl':
-    case 'Pattern':
-    case 'Box': {
+    case 'Box':
+    case 'Pattern': {
       const items = node.items.map(opsWalk);
       const merged = mergeSiblings(items);
-      const out = { ...node, items: merged };
-      return out;
+      return { ...node, items: merged };
     }
     case 'Text': {
       const parts = node.parts.map((p) =>
@@ -1131,11 +1133,6 @@ const opsWalk = (node) => {
     case 'Query':
     case 'Exec':
     case 'Partial': {
-      // The head may be a node (when attached from a leading-dot path)
-      // — recurse into it. Also recurse into embedded args (rare;
-      // arg tmpls from mid-`!` short forms contain only a single
-      // primitive value, but be safe). Dynamic segments hold a
-      // sub-expression that needs operator passes too.
       const out = { ...node };
       if (node.head && typeof node.head === 'object') {
         out.head = opsWalk(node.head);
@@ -1153,7 +1150,8 @@ const opsWalk = (node) => {
   }
 };
 
-// The five-pass merge on one sibling list.
+// The five-pass merge on one sibling list. Short-form wrap is applied
+// separately by wrapWalk after all merges complete (context-aware).
 const mergeSiblings = (items) => {
   let xs = items;
   xs = passArgsAttach(xs);
@@ -1531,7 +1529,20 @@ const passPipeline = (xs) => {
         // `...->log!` — the Exec at the tail acts as the executor.
         execute = true;
       }
-      const pipe = mkPipeline(stages.map(stripGlued), execute, start.line, start.col);
+      const cleanStages = stages.map(stripGlued);
+      // Short-form wrap on the pipe SEED: only for EXECUTING pipes
+      // (`Hello->upper!`). A non-executing pipe is a composed-function
+      // value where the seed is itself a callable reference — no wrap.
+      if (execute) {
+        const seed = cleanStages[0];
+        if (seed && seed.kind === 'Word'
+            && (seed.subkind === 'value'
+                || seed.subkind === 'number'
+                || seed.subkind === 'reserved')) {
+          cleanStages[0] = mkTmpl([seed], seed.line, seed.col);
+        }
+      }
+      const pipe = mkPipeline(cleanStages, execute, start.line, start.col);
       if (start.glued) pipe.glued = true;
       if (wrapQuery) {
         const wrapped = mkQuery(pipe, wrapQuery.segments, pipe.line, pipe.col);
@@ -1551,6 +1562,10 @@ const passPipeline = (xs) => {
 };
 
 // Pass 5 — resolve `Named { value: null }` by absorbing the next glued sibling.
+// Short-form wrap is applied as a separate post-pass (see
+// passShortFormWrap below) which is context-aware: only Named items in
+// BINDING contexts (root Tmpl, Fn.body) get wrapped, not those inside
+// data Tmpls or Pattern slot decls.
 const passResolveNamed = (xs) => {
   const out = [];
   for (let i = 0; i < xs.length; i++) {
@@ -1562,14 +1577,119 @@ const passResolveNamed = (xs) => {
           `'${cur.name}:' has no value`, cur.line, cur.col,
         );
       }
-      const resolved = { ...cur, value: stripGlued(next) };
-      out.push(resolved);
+      out.push({ ...cur, value: stripGlued(next) });
       i++;
       continue;
     }
     out.push(cur);
   }
   return out;
+};
+
+// Short-form wrap: in BINDING contexts (root Tmpl items, Fn body items,
+// Match branch body items), a Named whose value is a bare Word
+// value/number/reserved is wrapped in a singleton Tmpl. In DATA
+// contexts (items inside a `{...}` tmpl literal that is not a fn/match
+// body, items inside a Box, items inside a Pattern) the wrap is NOT
+// applied — those are data pairs / slot decls.
+//
+// Per copilot-instructions § "Short-form sugar": `n:5` ≡ `n:{5}` and
+// `ok:TRUE` ≡ `ok:{TRUE}` ONLY where Named is a binding. Inside a
+// data tmpl `{colour:blue}`, Named is a pair and round-trips as
+// written.
+const wrapBareWord = (v) => {
+  if (v && v.kind === 'Word'
+      && (v.subkind === 'value'
+          || v.subkind === 'number'
+          || v.subkind === 'reserved')) {
+    return mkTmpl([v], v.line, v.col);
+  }
+  return v;
+};
+
+// Walk the final AST, applying short-form wrap. `isBindingTmpl` is the
+// flag for the CURRENT node: when true and node is a Tmpl, its Named
+// items get wrap applied. Children Tmpls/Boxes inside a Tmpl's items
+// are data — recurse with isBindingTmpl=false. Fn.body and Match
+// branch bodies, when they are Tmpls, recurse with isBindingTmpl=true.
+const wrapWalk = (node, isBindingTmpl) => {
+  if (!node || typeof node !== 'object') return node;
+  switch (node.kind) {
+    case 'Tmpl': {
+      const items = node.items.map((it) => {
+        if (it && it.kind === 'Named') {
+          const value = wrapWalk(it.value, false);
+          return {
+            ...it,
+            value: isBindingTmpl ? wrapBareWord(value) : value,
+          };
+        }
+        return wrapWalk(it, false);
+      });
+      return { ...node, items };
+    }
+    case 'Box': {
+      const items = node.items.map((it) => wrapWalk(it, false));
+      return { ...node, items };
+    }
+    case 'Pattern': {
+      const items = node.items.map((it) => wrapWalk(it, false));
+      return { ...node, items };
+    }
+    case 'Fn': {
+      const params = wrapWalk(node.params, false);
+      const body = node.body && node.body.kind === 'Tmpl'
+        ? wrapWalk(node.body, true)
+        : wrapWalk(node.body, false);
+      return { ...node, params, body };
+    }
+    case 'Named': {
+      // Reached only when a Named appears outside the Tmpl-items path
+      // (e.g. embedded somewhere as the head of a Query). Treat value
+      // recursion as data — no wrap.
+      return { ...node, value: wrapWalk(node.value, false) };
+    }
+    case 'Text': {
+      const parts = node.parts.map((p) =>
+        'embed' in p ? { embed: wrapWalk(p.embed, false) } : p,
+      );
+      return { ...node, parts };
+    }
+    case 'Query':
+    case 'Exec':
+    case 'Partial': {
+      const out = { ...node };
+      if (node.head && typeof node.head === 'object') {
+        out.head = wrapWalk(node.head, false);
+      }
+      if (node.segments && node.segments.some((s) => s.kind === 'dynamic')) {
+        out.segments = node.segments.map((s) =>
+          s.kind === 'dynamic' ? { ...s, expr: wrapWalk(s.expr, false) } : s,
+        );
+      }
+      if (node.args) out.args = wrapWalk(node.args, false);
+      return out;
+    }
+    case 'Pipeline': {
+      const stages = node.stages.map((s) => wrapWalk(s, false));
+      return { ...node, stages };
+    }
+    case 'Match': {
+      return {
+        ...node,
+        subject: wrapWalk(node.subject, false),
+        branches: node.branches.map((br) => ({
+          ...br,
+          pattern: wrapWalk(br.pattern, false),
+          body: br.body && br.body.kind === 'Tmpl'
+            ? wrapWalk(br.body, true)
+            : wrapWalk(br.body, false),
+        })),
+      };
+    }
+    default:
+      return node;
+  }
 };
 
 // Return a shallow copy of `node` with its `glued` flag removed.
@@ -1585,7 +1705,10 @@ export function parseOperators(tree) {
   if (!tree || tree.kind !== 'Tmpl') {
     throw new TypeError('parseOperators: expected a Tmpl root');
   }
-  return opsWalk(tree);
+  const merged = opsWalk(tree);
+  // Apply context-aware short-form wrap on the final AST. The root
+  // Tmpl is a binding context (top-level Named items bind into env).
+  return wrapWalk(merged, true);
 }
 
 // ---------------------------------------------------------------------------

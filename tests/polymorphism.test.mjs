@@ -20,7 +20,7 @@ test('arity dispatch — one arg', () => {
       }!
     }
     greet!Tim`;
-  assert.equal(punk(src), '{Hello Tim}');
+  assert.equal(punk(src), '{{Hello Tim}}');
 });
 
 test('arity dispatch — two args', () => {
@@ -31,7 +31,7 @@ test('arity dispatch — two args', () => {
       }!
     }
     greet!{Tim Dr\\.}`;
-  assert.equal(punk(src), '{Hello Dr\\. Tim}');
+  assert.equal(punk(src), '{{Hello Dr\\. Tim}}');
 });
 
 test('shape dispatch — area of a rect', () => {
@@ -43,7 +43,7 @@ test('shape dispatch — area of a rect', () => {
       }!
     }
     area!{rect w:4 h:3}`;
-  assert.equal(punk(src), '{12}');
+  assert.equal(punk(src), '{{12}}');
 });
 
 test('shape dispatch — area of a circle', () => {
@@ -55,7 +55,7 @@ test('shape dispatch — area of a circle', () => {
       }!
     }
     area!{circle r:5}`;
-  assert.equal(punk(src), '{78.525}');
+  assert.equal(punk(src), '{{78.525}}');
 });
 
 test('value dispatch — literal slots', () => {
@@ -67,7 +67,7 @@ test('value dispatch — literal slots', () => {
       }!
     }
     route!{{method:GET path:\\/about extra:1}}`;
-  assert.equal(punk(src), '{about}');
+  assert.equal(punk(src), '{{about}}');
 });
 
 test('value dispatch — falls through to catch-all', () => {
@@ -79,7 +79,7 @@ test('value dispatch — falls through to catch-all', () => {
       }!
     }
     route!{{method:POST path:\\/x}}`;
-  assert.equal(punk(src), '{notFound}');
+  assert.equal(punk(src), '{{notFound}}');
 });
 
 test('regex dispatch — integer text', () => {
@@ -91,7 +91,7 @@ test('regex dispatch — integer text', () => {
       }!
     }
     classify!42`;
-  assert.equal(punk(src), '{integer}');
+  assert.equal(punk(src), '{{integer}}');
 });
 
 test('regex dispatch — color text', () => {
@@ -103,7 +103,7 @@ test('regex dispatch — color text', () => {
       }!
     }
     classify!"#aabbcc"`;
-  assert.equal(punk(src), '{color}');
+  assert.equal(punk(src), '{{color}}');
 });
 
 test('method-style dispatch — same call site, different object', () => {
@@ -115,5 +115,5 @@ test('method-style dispatch — same call site, different object', () => {
     }
     log-it:(p:_ m:_){p?.print!{m?}}
     log-it!{printer hello}`;
-  assert.equal(punk(src), '"HELLO"');
+  assert.equal(punk(src), '{{"HELLO"}}');
 });

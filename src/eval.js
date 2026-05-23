@@ -136,21 +136,15 @@ const evalItem = (node, env) => {
       } else {
         value = evalItem(node.value, env);
       }
-      // Short-form rule: a bare-value binding (`x:42`, `n:hello`) is
-      // shorthand for `x:{42}` / `n:{hello}`. Bare Words and Numbers
-      // have no inherent delimiter, so binding wraps them in a
-      // singleton Tmpl. Reserved values (TRUE/FALSE) and everything
-      // with its own delimiters bind as-is.
-      //
-      // TODO: lift this short-form expansion to parse-time for bare
-      // Word/Number values only (Exec/Query/Tmpl/Text/Fn must stay
-      // untouched) so the AST really does read as if the `{}` were
-      // written. Today it's a runtime wrap inside evalItem.
-      // TODO: same idea for short-form single function param — when a
-      // fn takes one slot, `f!x` should parse as `f!{x}` so the slot
-      // binding is consistent with the multi-arg form.
+      // Short-form wrap: parse-time wrapWalk already wrapped syntactic
+      // bare-Word values (`n:5` → `n:{5}`). Here we catch the dynamic
+      // case: `c:X!{2 3}` where the value evaluates to a Word at
+      // runtime. The same Word kinds (value/number/reserved) wrap to
+      // a singleton Tmpl so queries through the name are uniform.
       if (value && value.kind === 'Word'
-          && (value.subkind === 'value' || value.subkind === 'number')) {
+          && (value.subkind === 'value'
+              || value.subkind === 'number'
+              || value.subkind === 'reserved')) {
         value = mkTmpl([value]);
       }
       env.bind(node.name, value, node);
@@ -735,6 +729,9 @@ function callFn(fn, args, node) {
   const fnEnv = fn.env.child();
   // `_?` inside a fn body resolves to the whole args Tmpl passed in.
   fnEnv.bind('*', args, node);
+  // Pattern slots are shape-checks, not Named bindings: the RHS of a
+  // slot is `_`/`*`/literal/ref? and is NEVER short-form wrapped.
+  // Bind whatever value matched the slot directly.
   for (const [k, v] of bindings) fnEnv.bind(k, v, node);
   return cascadeBody(fn.body, fn.returnRange, fnEnv);
 }
@@ -764,6 +761,8 @@ function evalMatch(node, env) {
     if (bindings === null) continue;
     if (br.body == null) return TRUE;
     const m = env.child();
+    // Pattern slots are shape-checks, not Named bindings — RHS is
+    // never wrapped. Bind matched values directly.
     for (const [k, v] of bindings) m.bind(k, v, node);
     return cascadeBody(br.body, null, m);
   }
@@ -837,24 +836,19 @@ function cascadeTmpl(tmpl, env) {
 
 // Evaluate the value side of a Named pair WITHOUT binding into env.
 // Used for data-Named items inside tmpl literals — they are tagged
-// pairs, not bindings. Applies the same short-form wrap as binding.
+// pairs, not bindings. Short-form wrapping is done at parse-time
+// (see parse.js passResolveNamed); nothing extra to do here.
 function evalDataValue(node, env) {
   if (!node || typeof node !== 'object') return node;
-  let value;
-  if (node.kind === 'Tmpl') value = cascadeTmpl(node, env);
-  else if (node.kind === 'Text') value = cascadeText(node, env);
-  else if (node.kind === 'Query' && node.spread) {
+  if (node.kind === 'Tmpl') return cascadeTmpl(node, env);
+  if (node.kind === 'Text') return cascadeText(node, env);
+  if (node.kind === 'Query' && node.spread) {
     const full = evalQueryFull(node, env);
-    if (full === null) value = NULL;
-    else if (full.name != null) value = { kind: 'Named', name: full.name, value: full.value };
-    else value = full.value;
+    if (full === null) return NULL;
+    if (full.name != null) return { kind: 'Named', name: full.name, value: full.value };
+    return full.value;
   }
-  else value = evalItem(node, env);
-  if (value && value.kind === 'Word'
-      && (value.subkind === 'value' || value.subkind === 'number')) {
-    value = mkTmpl([value]);
-  }
-  return value;
+  return evalItem(node, env);
 }
 
 function cascadeOne(node, env) {
@@ -963,7 +957,10 @@ function cascadeBody(body, returnRange, env) {
     return mkTmpl(items.slice(lo1 - 1, hi1));
   }
 
-  if (items.length === 1) return items[0];
+  // A function's body IS a template. Calling the function evaluates
+  // the body's items and returns the result template — no unwrap,
+  // even for a 1-item body. Callers inline with `.?` if they want
+  // the items spliced into the surrounding template.
   return mkTmpl(items);
 }
 
