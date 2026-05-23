@@ -109,13 +109,30 @@ const evalItem = (node, env) => {
       if (node.execute) return runPipeline(node, env, /*seed*/ null);
       return stripMeta(node);
 
-    case 'Fn':
+    case 'Fn': {
+      // Named-pattern splice: when the Fn's params Pattern contains a
+      // single Query item (e.g. `(point?){body}`), resolve the query
+      // and splice the resolved Pattern's slots in place. The named
+      // pattern's slot names become visible in the body.
+      let params = stripMeta(node.params);
+      if (params && params.kind === 'Pattern'
+          && params.items.length === 1
+          && params.items[0] && params.items[0].kind === 'Query') {
+        const resolved = evalItem(params.items[0], env);
+        if (!resolved || resolved.kind !== 'Pattern') {
+          throw new Error(
+            `named-pattern reference must resolve to a Pattern, got ${resolved && resolved.kind}`,
+          );
+        }
+        params = stripMeta(resolved);
+      }
       return mkFn(
-        stripMeta(node.params),
+        params,
         stripMeta(node.body),
         env,
         node.returnRange || null,
       );
+    }
 
     case 'Range':
       return expandRange(node);

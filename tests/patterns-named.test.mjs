@@ -47,7 +47,7 @@ test('the same named pattern can be reused across multiple functions', () => {
     point:(x:_ y:_)
     showX:(point?){x?}
     showY:(point?){y?}
-    {showX!{10 20} showY!{10 20}}
+    {showX!{10 20} showY!{10 20}}!
   `;
   assert.equal(punk(src), '{{10} {20}}');
 });
