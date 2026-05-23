@@ -85,10 +85,19 @@ test('parens hold patterns', () => {
   ]);
 });
 
-test('brackets are box delimiters', () => {
-  assert.deepEqual(shape('[name]'), [
-    [T.LBRACK, '['], [T.WORD, 'name'], [T.RBRACK, ']'],
+test('@-prefix tokenizes as an Atom marker', () => {
+  assert.deepEqual(shape('@name'), [
+    [T.AT, '@name'],
   ]);
+});
+
+test('@ requires a following name character', () => {
+  assert.throws(() => tokenize('@'), PunkSyntaxError);
+  assert.throws(() => tokenize('@ x'), PunkSyntaxError);
+});
+
+test('`[` and `]` are no longer Punk delimiters', () => {
+  assert.throws(() => tokenize('[name]'), PunkSyntaxError);
 });
 
 test('quoted text — simple', () => {

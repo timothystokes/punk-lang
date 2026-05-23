@@ -29,8 +29,8 @@ export function format(value) {
       }
       return out + '"';
     }
-    case 'Box':
-      return '[' + value.name + ']';
+    case 'Atom':
+      return '@' + value.name;
     case 'Regex':
       return '/' + value.body + '/' + (value.flags || '');
     case 'Named':
@@ -53,7 +53,7 @@ export function format(value) {
       if (bodyNode && bodyNode.kind === 'Tmpl' && bodyNode.items.length === 1) {
         const only = bodyNode.items[0];
         if (only && (only.kind === 'Text' || only.kind === 'Pattern'
-                     || only.kind === 'Box'  || only.kind === 'Fn')) {
+                     || only.kind === 'Atom' || only.kind === 'Fn')) {
           bodyNode = only;
         }
       }

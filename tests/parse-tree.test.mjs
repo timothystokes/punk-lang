@@ -19,6 +19,7 @@ function strip(node) {
   if (typeof node !== 'object') return node;
   const out = { kind: node.kind };
   if ('text'  in node) out.text  = node.text;
+  if ('name'  in node) out.name  = node.name;
   if ('items' in node) out.items = node.items.map(strip);
   if ('parts' in node) {
     out.parts = node.parts.map(p =>
@@ -125,12 +126,12 @@ test('nested patterns', () => {
   });
 });
 
-test('box wraps its contents', () => {
-  assert.deepEqual(top('[counter]'), {
+test('atom marker parses as an Atom node', () => {
+  assert.deepEqual(top('@counter'), {
     kind: 'Tmpl',
     items: [{
-      kind: 'Box',
-      items: [{ kind: 'Word', text: 'counter' }],
+      kind: 'Atom',
+      name: 'counter',
     }],
   });
 });

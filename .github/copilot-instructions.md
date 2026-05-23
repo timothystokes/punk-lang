@@ -36,7 +36,7 @@ directly.
 | Pattern `(...)` | NO | first-class; `p:(x:_)` names a pattern (see [Named patterns](#named-patterns)) |
 | Tmpl `{...}` | NO | already a template |
 | Text `"..."` | NO | already a template (joined-with-space form) |
-| Box `[name]` | error on `:` RHS | boxes don't bind via `:` |
+| Atom `@name` | error on `:` RHS | atoms don't bind via `:` |
 | Ref (`xs?`) | NO | evaluates lazily; no wrap |
 | Range `1~5` | NO | already structural |
 | Exec `f!x` | NO | already structural |
@@ -123,10 +123,10 @@ is `{Hello Sally}` — flat, because the body itself has the items.
 **Pipe seed auto-wrap (uniform):** a bare Word value/number/reserved
 at the start of an executing pipe gets the same short-form wrap as
 `:` / `!` / `'` RHS — it becomes a singleton Tmpl. This applies
-uniformly to ALL executing pipes, including box writes. So
-`42->[n]!` parses with seed `{42}` and writes `{42}` (a Tmpl) into
-the box. The box stores whatever flows through; there is no special
-unwrap for box-write pipes. Mid-stages are callable refs (resolved
+uniformly to ALL executing pipes, including atom writes. So
+`42->@n!` parses with seed `{42}` and writes `{42}` (a Tmpl) into
+the atom. The atom stores whatever flows through; there is no special
+unwrap for atom-write pipes. Mid-stages are callable refs (resolved
 when the trailing `!` fires) and are **not** wrapped. Arity mismatch
 (e.g. `{a b}->one-slot!`) remains a runtime error, not a parse error.
 
@@ -157,11 +157,12 @@ inline into a structured template.
 - Word-internal escapes: `\n`, `\t` map to newline/tab; any other
   `\X` is literal X (esc-flagged). No `\s`.
 
-### Boxes
+### Atoms
 
-- No declaration form. `name:[value]` is **wrong**. The brackets ARE
-  the box; it comes into existence on first write: `value->[name]!`.
-- Read: `[name]->fn!`.
+- No declaration form. `name:@value` is **wrong**. The `@` ARE
+  the atom; it comes into existence on first write: `value->@name!`.
+- Read: `@name->fn!`.
+- (Atoms were previously written `[name]`. The bracket form is gone.)
 
 ### Function return semantics
 
@@ -185,7 +186,7 @@ evaluates the body template's items in scope and returns the result
   nesting.
 
 Pipe-seed wrap is uniform: `value->stage!` ≡ `{value}->stage!`. The
-seed is a tmpl as it flows; box writes therefore store the wrapped
+seed is a tmpl as it flows; atom writes therefore store the wrapped
 form. Use `.?` (in a fn body) or feed through `(v:_){v?~}` if you
 want the seed-as-bare-value.
 
@@ -225,7 +226,7 @@ want the seed-as-bare-value.
   in `match.js`. Wrap kinds per the table above.
 - **Unified call-form mechanism:** `node ! args`, `node ' args`,
   `node ? segments` should produce `Exec`/`PartialFn`/`Query`
-  regardless of whether `node` is a name-Word, Fn, Tmpl, Box, etc.
+  regardless of whether `node` is a name-Word, Fn, Tmpl, Atom, etc.
   Today there are two paths (decodeWord-glued vs `passPostfixBang`)
   and `passPostfixBang` runs after the final `passArgsAttach`, which
   is a bug.

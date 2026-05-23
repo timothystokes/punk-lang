@@ -13,7 +13,7 @@
 //   Null      { kind:'Null' }                      — the only NULL value
 //   Pattern   { kind:'Pattern',  items: Value[] }
 //   Fn        { kind:'Fn',       params:Pattern, body:Tmpl, returnRange?:{from,to}, env:Env }
-//   Box       { kind:'Box',      name:string }
+//   Atom      { kind:'Atom',     name:string }
 //   Pipeline  { kind:'Pipeline', stages: Value[] }
 //
 // TRUE and FALSE are Word{subkind:'reserved'} singletons.
@@ -35,7 +35,7 @@ export const mkFn       = (params, body, env, returnRange) =>
   returnRange
     ? { kind: 'Fn', params, body, env, returnRange }
     : { kind: 'Fn', params, body, env };
-export const mkBox      = (name) => ({ kind: 'Box', name });
+export const mkAtom     = (name) => ({ kind: 'Atom', name });
 export const mkPipeline = (stages) => ({ kind: 'Pipeline', stages });
 
 // A partial-application value. `target` is the underlying callable
@@ -94,7 +94,7 @@ export function equals(a, b) {
         }
       }
       return true;
-    case 'Box':
+    case 'Atom':
       return a.name === b.name;
     case 'Fn':
       return false; // identity only

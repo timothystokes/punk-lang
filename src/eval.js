@@ -86,7 +86,7 @@ const evalItem = (node, env) => {
     case 'Tmpl':
     case 'Text':
     case 'Pattern':
-    case 'Box':
+    case 'Atom':
     case 'Regex':
       return stripMeta(node);
 
@@ -643,9 +643,9 @@ function runPipeline(node, env, seed) {
     i = 0;
   } else {
     const s0 = stages[0];
-    if (s0 && s0.kind === 'Box') {
-      // Reading a box as the initial value of a pipeline.
-      current = readBox(s0, env);
+    if (s0 && s0.kind === 'Atom') {
+      // Reading an atom as the initial value of a pipeline.
+      current = readAtom(s0, env);
     } else {
       current = cascadeOne(s0, env);
     }
@@ -653,10 +653,10 @@ function runPipeline(node, env, seed) {
   }
   for (; i < stages.length; i++) {
     const stage = stages[i];
-    if (stage && stage.kind === 'Box') {
-      // Writing the running value into the box; the value passes
+    if (stage && stage.kind === 'Atom') {
+      // Writing the running value into the atom; the value passes
       // through unchanged so further stages still see it.
-      writeBox(stage, current, env);
+      writeAtom(stage, current, env);
       continue;
     }
     const callable = resolveStageCallable(stage, env);
@@ -665,19 +665,19 @@ function runPipeline(node, env, seed) {
   return current;
 }
 
-function readBox(boxNode, env) {
-  const store = env.rootBoxes();
-  if (!store.has(boxNode.name)) {
+function readAtom(atomNode, env) {
+  const store = env.rootAtoms();
+  if (!store.has(atomNode.name)) {
     throw new PunkRuntimeError(
-      `box '[${boxNode.name}]' has not been written to`,
-      boxNode.line, boxNode.col,
+      `atom '@${atomNode.name}' has not been written to`,
+      atomNode.line, atomNode.col,
     );
   }
-  return store.get(boxNode.name);
+  return store.get(atomNode.name);
 }
 
-function writeBox(boxNode, value, env) {
-  env.rootBoxes().set(boxNode.name, value);
+function writeAtom(atomNode, value, env) {
+  env.rootAtoms().set(atomNode.name, value);
 }
 
 function resolveStageCallable(stage, env) {

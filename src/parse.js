@@ -6,7 +6,7 @@
 //
 //   1. parseTree(tokens)
 //        Builds the bracket structure. Produces a tree of Tmpl/Text/
-//        Pattern/Box/Word nodes. Words are still raw — their internal
+//        Pattern/Atom/Word nodes. Words are still raw — their internal
 //        structure (paths, suffixes, `name:value`) is not decoded yet.
 //
 //   2. parseWords(tree)            — TODO (next pass)
@@ -33,7 +33,7 @@ import { slotName, slotIsRest, isPureWildcard } from './slot.js';
 //      where each part is either { lit: string } or { embed: Node }
 //   - Pattern  { items[],    glued?,  line, col }
 //      pattern slots are still raw Words / Tmpls / nested Patterns
-//   - Box      { items[],    glued?,  line, col }
+//   - Atom     { name:string, glued?, line, col }
 //      contents inside [...]; later passes verify it's a single name
 //   - Word     { text,       glued?,  line, col }
 //      a raw word token; later passes split this into Named/Query/etc.
@@ -45,7 +45,7 @@ import { slotName, slotIsRest, isPureWildcard } from './slot.js';
 const mkTmpl    = (items, line, col)    => ({ kind: 'Tmpl',    items, line, col });
 const mkText    = (parts, line, col)    => ({ kind: 'Text',    parts, line, col });
 const mkPattern = (items, line, col)    => ({ kind: 'Pattern', items, line, col });
-const mkBox     = (items, line, col)    => ({ kind: 'Box',     items, line, col });
+const mkAtom    = (name, line, col)     => ({ kind: 'Atom',    name, line, col });
 const mkWord    = (text, line, col)     => ({ kind: 'Word',    text,  line, col });
 
 // Nodes refined by parseWords:
@@ -188,7 +188,7 @@ export function parseTree(tokens) {
     switch (tok.type) {
       case T.LBRACE:    return parseBraces();
       case T.LPAREN:    return parseParens();
-      case T.LBRACK:    return parseBrackets();
+      case T.AT:        return parseAt();
       case T.QUOTE_OPEN: return parseText();
       case T.WORD: {
         i++;
@@ -208,7 +208,6 @@ export function parseTree(tokens) {
       // Stray closing delimiters at this point are unmatched.
       case T.RBRACE:
       case T.RPAREN:
-      case T.RBRACK:
       case T.QUOTE_CLOSE:
         throw new PunkSyntaxError(`unexpected '${tok.text}'`, tok.line, tok.col);
       case T.TEXT:
@@ -249,14 +248,22 @@ export function parseTree(tokens) {
   };
 
   const parseBrackets = () => {
-    const open = at();
+    // Brackets are no longer Punk delimiters — kept here only because
+    // it would be reached if a stray `[`/`]` token slipped through. The
+    // tokenizer now rejects `[`/`]` directly so this should be dead.
+    const tok = at();
+    throw new PunkSyntaxError(
+      "'[' is not a Punk delimiter — use '@name' for atoms",
+      tok.line, tok.col,
+    );
+  };
+
+  const parseAt = () => {
+    const tok = at();
     i++;
-    const items = parseItems(new Set([T.RBRACK]));
-    if (at()?.type !== T.RBRACK) {
-      throw new PunkSyntaxError("unclosed '['", open.line, open.col);
-    }
-    i++;
-    return mkBox(items, open.line, open.col);
+    // tok.text is the full `@name`; strip the leading `@`.
+    const name = tok.text.slice(1);
+    return mkAtom(name, tok.line, tok.col);
   };
 
   // Parse a "..." run. The tokenizer has already split it into TEXT
@@ -1044,9 +1051,8 @@ const walkNode = (node) => {
       if (node.glued) out.glued = true;
       return out;
     }
-    case 'Box': {
-      const items = walkSiblings(node.items);
-      const out = mkBox(items, node.line, node.col);
+    case 'Atom': {
+      const out = mkAtom(node.name, node.line, node.col);
       if (node.glued) out.glued = true;
       return out;
     }
@@ -1114,12 +1120,13 @@ const mkPipeline = (stages, execute, line, col) =>
 const opsWalk = (node) => {
   switch (node.kind) {
     case 'Tmpl':
-    case 'Box':
     case 'Pattern': {
       const items = node.items.map(opsWalk);
       const merged = mergeSiblings(items);
       return { ...node, items: merged };
     }
+    case 'Atom':
+      return node;
     case 'Text': {
       const parts = node.parts.map((p) =>
         'embed' in p ? { embed: opsWalk(p.embed) } : p,
@@ -1181,7 +1188,7 @@ const mergeSiblings = (items) => {
 //        - followed by Tmpl-of-Fns  → dispatch (multi-arm)
 //
 // Subject can be any value-kind: Query (the most common shape), Tmpl,
-// Text, Box, Pattern, Fn — anything an outer `!` can later cascade.
+// Text, Atom, Pattern, Fn — anything an outer `!` can later cascade.
 const isMatchOp = (n) => n && n.kind === 'Word' && n.subkind === 'match-op';
 
 const tmplOfFnsBranches = (tmpl) => {
@@ -1197,7 +1204,7 @@ const tmplOfFnsBranches = (tmpl) => {
 const matchValueSubject = (n) => {
   if (!n) return false;
   switch (n.kind) {
-    case 'Query': case 'Tmpl': case 'Text': case 'Box':
+    case 'Query': case 'Tmpl': case 'Text': case 'Atom':
     case 'Pattern': case 'Fn': case 'Exec': case 'Partial':
     case 'Word': case 'Range':
       return true;
@@ -1350,7 +1357,7 @@ const passReturnRange = (xs) => {
 // decodeWord.
 const passArgsAttach = (xs) => {
   const isSingleArg = (n) => n && (
-    n.kind === 'Text' || n.kind === 'Box' || n.kind === 'Fn' ||
+    n.kind === 'Text' || n.kind === 'Atom' || n.kind === 'Fn' ||
     n.kind === 'Pattern' || n.kind === 'Query' || n.kind === 'Exec' ||
     n.kind === 'Partial' || n.kind === 'Range' ||
     // A glued value/number/op Word is the mid-bang RHS in the
@@ -1444,7 +1451,7 @@ const passPostfixBang = (xs) => {
     if (
       next && next.kind === 'Word' && next.subkind === 'bang' && next.glued
       // Only on values that don't already carry their own `!`/`?` rule.
-      && (cur.kind === 'Tmpl' || cur.kind === 'Text' || cur.kind === 'Box'
+      && (cur.kind === 'Tmpl' || cur.kind === 'Text' || cur.kind === 'Atom'
           || cur.kind === 'Fn'  || cur.kind === 'Pattern' || cur.kind === 'Pipeline')
     ) {
       // If this is the start of a pipeline (cur + glued ->), let
@@ -1591,7 +1598,7 @@ const passResolveNamed = (xs) => {
 // Match branch body items), a Named whose value is a bare Word
 // value/number/reserved is wrapped in a singleton Tmpl. In DATA
 // contexts (items inside a `{...}` tmpl literal that is not a fn/match
-// body, items inside a Box, items inside a Pattern) the wrap is NOT
+// body, items inside an Atom-name, items inside a Pattern) the wrap is NOT
 // applied — those are data pairs / slot decls.
 //
 // Per copilot-instructions § "Short-form sugar": `n:5` ≡ `n:{5}` and
@@ -1610,7 +1617,7 @@ const wrapBareWord = (v) => {
 
 // Walk the final AST, applying short-form wrap. `isBindingTmpl` is the
 // flag for the CURRENT node: when true and node is a Tmpl, its Named
-// items get wrap applied. Children Tmpls/Boxes inside a Tmpl's items
+// items get wrap applied. Children Tmpls/Atoms inside a Tmpl's items
 // are data — recurse with isBindingTmpl=false. Fn.body and Match
 // branch bodies, when they are Tmpls, recurse with isBindingTmpl=true.
 const wrapWalk = (node, isBindingTmpl) => {
@@ -1629,10 +1636,8 @@ const wrapWalk = (node, isBindingTmpl) => {
       });
       return { ...node, items };
     }
-    case 'Box': {
-      const items = node.items.map((it) => wrapWalk(it, false));
-      return { ...node, items };
-    }
+    case 'Atom':
+      return node;
     case 'Pattern': {
       const items = node.items.map((it) => wrapWalk(it, false));
       return { ...node, items };
@@ -1839,9 +1844,11 @@ const validateNode = (node, stack) => {
       return;
     }
 
+    case 'Atom':
+      return;
+
     case 'Tmpl':
-    case 'Pattern':
-    case 'Box': {
+    case 'Pattern': {
       if (node.kind === 'Pattern') {
         let varCount = 0;
         for (let i = 0; i < node.items.length; i++) {

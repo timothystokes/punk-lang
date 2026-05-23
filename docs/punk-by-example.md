@@ -25,7 +25,7 @@ Punk doesn't have data *types* in the usual sense — instead it has a small set
 | Number | a Word that follows the numeric formatting rules | `42`, `0.5`, `-5`, `3.141` |
 | Pattern | `( ... )` — a shape used for matching, binding and dispatching | `(name:_ age:_)` |
 | Function | a Pattern attached directly to a Template | `(name:_){Hello name?}` or `(name:_)"Hello {name?}"` |
-| Box | `[ name ]` — the one mutable cell in the language | `[counter]` |
+| Atom | `@name` — the one mutable cell in the language | `@counter` |
 | Regex literal | `/ ... /` — a regular expression usable as a pattern slot | `/^\d+$/` |
 
 > NOTE: A "Word" in Punk is not an English word — it's just any group of characters delimited by whitespace (or by the surrounding `{`/`}`/`(`/`)`). `red-green-blue`, `3.141`, `&`, and `Hello` are all Words. Numbers are Words that happen to look numeric, so they can be used with arithmetic builtins.
@@ -94,7 +94,7 @@ So `age:42` is short form for `age:{42}`, and `name:Tim` is short form for `name
 > age:42  age.2?  ⏎    NULL
 ```
 
-Everything that already has its own delimiters — templates `{...}`, patterns `(...)`, functions `(p){body}`, texts `"..."`, boxes `[name]` — binds bare, no extra wrapping. Bare Words (including `TRUE`, `FALSE`, `NULL`) and bare Numbers all wrap into a singleton template the same way `name:Tim` does.
+Everything that already has its own delimiters — templates `{...}`, patterns `(...)`, functions `(p){body}`, texts `"..."`, atoms `@name` — binds bare, no extra wrapping. Bare Words (including `TRUE`, `FALSE`, `NULL`) and bare Numbers all wrap into a singleton template the same way `name:Tim` does.
 
 ## Templates
 
@@ -520,6 +520,9 @@ A slot can be both named and shape-constrained — the name goes on the left of 
 
 > NOTE: Names do not impact matching — matching is done purely on shape and order. A name introduced by a pattern is only visible inside that pattern's template — it is a local binding for the duration of that one match, not a name in any enclosing scope.
 
+
+
+
 ### Regex slots
 
 A pattern slot can also be a regex literal written between forward slashes `/.../`. It matches a single thing whose text satisfies the regex.
@@ -860,7 +863,7 @@ When the chain ends with `!`, it runs: the thing on the left flows through each 
 
 Each stage on the right of an `->` is expected to be a function. The input becomes that function's argument, so each stage must be able to accept one thing.
 
-> NOTE: A bare value-word at the **start** of an executing pipeline auto-wraps the same way it does on the RHS of `:`, `!`, or `'`. So `Hello->upper!` is shorthand for `{Hello}->upper!`, which is equivalent to `upper!{Hello}`. Numbers and reserved words (`TRUE`, `FALSE`, `NULL`) wrap the same way. This applies uniformly — including pipes that only write to a box (`42->[n]!` stores `{42}`, not bare `42`). Intermediate stages are callable references, not values, and are not wrapped.
+> NOTE: A bare value-word at the **start** of an executing pipeline auto-wraps the same way it does on the RHS of `:`, `!`, or `'`. So `Hello->upper!` is shorthand for `{Hello}->upper!`, which is equivalent to `upper!{Hello}`. Numbers and reserved words (`TRUE`, `FALSE`, `NULL`) wrap the same way. This applies uniformly — including pipes that only write to an atom (`42->@n!` stores `{42}`, not bare `42`). Intermediate stages are callable references, not values, and are not wrapped.
 
 ### Composing a pipeline
 
@@ -877,7 +880,7 @@ This is the same distinction that `?` and `!` already make: writing a pipeline w
 
 > PRECEDENCE: A `:` binding always extends over the **whole** pipeline that follows it, not just the first stage. `upperLogger:upper->log` binds `upperLogger` to the composed pipeline `upper->log`, not `(upperLogger:upper)->log`. The same is true when executing: `result:5->double->log!` binds `result` to the value the executed pipeline produces.
 
-> NOTE: A *bare* `!` — one that isn't glued to a name as part of a normal call like `f!` — is only meaningful as the trailing trigger of a `->` chain (as in `0->[counter]!`, where the `!` runs the whole pipeline). Reading or writing a box outside a pipeline (`[counter]!` on its own) is a syntax error; boxes only participate in `->` chains.
+> NOTE: A *bare* `!` — one that isn't glued to a name as part of a normal call like `f!` — is only meaningful as the trailing trigger of a `->` chain (as in `0->@counter!`, where the `!` runs the whole pipeline). Reading or writing an atom outside a pipeline (`@counter!` on its own) is a syntax error; atoms only participate in `->` chains.
 
 ### Pipelines as ordinary things
 
@@ -930,37 +933,37 @@ TRUE
 
 > NOTE: `'` looks like half of the `!` character so this is why it was chosen as the partial function notation. Because `'` mirrors `!` exactly — same call form, same left-to-right pattern fill — there is nothing new to learn about how arguments line up. The only difference is whether the function runs (`!`) or returns a new function with fewer parameters (`'`).
 
-## Boxes
+## Atoms
 
-Everything else in Punk is immutable. A **box** is the one and only exception — a mutable cell that lives outside the normal naming system. Boxes are not named in the usual sense; the square brackets *are* the box. Writing `[name]` doesn't look up a binding the way `name` does — it refers to the box itself, wherever it happens to be reached.
+Everything else in Punk is immutable. An **atom** is the one and only exception — a mutable cell that lives outside the normal naming system. Atoms are not named in the usual sense; the `@` *is* the atom. Writing `@name` doesn't look up a binding the way `name` does — it refers to the atom itself, wherever it happens to be reached.
 
 ```punk
-> 0->[currentAge]! ⏎ # writing into [currentAge] is enough to bring it into existence #
+> 0->@currentAge! ⏎ # writing into @currentAge is enough to bring it into existence #
 ```
 
-A box is not the same as its contents — it's a container. The only way to read what's inside, and the only way to put something new inside, is through a pipeline that has `[name]` on one side.
+An atom is not the same as its contents — it's a container. The only way to read what's inside, and the only way to put something new inside, is through a pipeline that has `@name` on one side.
 
-### Reading from a box
+### Reading from an atom
 
-Put `[name]` on the **left** of `->`. The pipeline starts with the value currently inside the box.
+Put `@name` on the **left** of `->`. The pipeline starts with the value currently inside the atom.
 
 ```punk
-> [currentAge]->log! ⏎ # reads the value out of the box, pipes it to log #
+> @currentAge->log! ⏎ # reads the value out of the atom, pipes it to log #
 0
 ```
 
-> NOTE: A box only exists once something has been written into it. Reading from a box that has never been written to is a runtime error.
+> NOTE: An atom only exists once something has been written into it. Reading from an atom that has never been written to is a runtime error.
 
-### Writing to a box
+### Writing to an atom
 
-Put `[name]` on the **right** of `->`. Whatever flows into it replaces what was inside.
+Put `@name` on the **right** of `->`. Whatever flows into it replaces what was inside.
 
 ```punk
-> 42->[currentAge]! ⏎ # the box now contains 42 #
-> [currentAge]->log! ⏎
+> 42->@currentAge! ⏎ # the atom now contains 42 #
+> @currentAge->log! ⏎
 42
-> 43->[currentAge]! ⏎ # replaces 42 with 43 #
-> [currentAge]->log! ⏎
+> 43->@currentAge! ⏎ # replaces 42 with 43 #
+> @currentAge->log! ⏎
 43
 ```
 
@@ -968,25 +971,25 @@ The `!` at the end of the pipeline is what causes the read or the write to actua
 
 ### Read, transform, write
 
-Because `[name]` can appear on either side of `->`, the same box can show up twice in one chain: read from on the left, written to on the right. This is how counters and other simple state updates are expressed.
+Because `@name` can appear on either side of `->`, the same atom can show up twice in one chain: read from on the left, written to on the right. This is how counters and other simple state updates are expressed.
 
 ```punk
-> 0->[counter]! ⏎
-> [counter]->+'1->[counter]! ⏎ # reads 0, adds 1, writes 1 back #
-> [counter]->log! ⏎
+> 0->@counter! ⏎
+> @counter->+'1->@counter! ⏎ # reads 0, adds 1, writes 1 back #
+> @counter->log! ⏎
 1
-> [counter]->+'1->[counter]! ⏎ # reads 1, adds 1, writes 2 back #
-> [counter]->log! ⏎
+> @counter->+'1->@counter! ⏎ # reads 1, adds 1, writes 2 back #
+> @counter->log! ⏎
 2
 ```
 
-Here `+'1` is a partially-applied `+!` with its first parameter already locked to `1`, so it accepts the piped value as its second argument. The pipeline reads the box, runs the increment, then writes the result back into the same box.
+Here `+'1` is a partially-applied `+!` with its first parameter already locked to `1`, so it accepts the piped value as its second argument. The pipeline reads the atom, runs the increment, then writes the result back into the same atom.
 
-> NOTE: Boxes sit outside Punk's normal namespace. They aren't bound with `:` and they don't shadow or interact with ordinary names. The brackets are the box — and the only door in or out is the pipeline form: `[name]->` to read, `->[name]!` to write.
+> NOTE: Atoms sit outside Punk's normal namespace. They aren't bound with `:` and they don't shadow or interact with ordinary names. The `@` is the atom — and the only door in or out is the pipeline form: `@name->` to read, `->@name!` to write.
 
 ## Polymorphism
 
-Punk doesn't bake in a single polymorphism mechanism — no classes, no multimethods, no interfaces. Patterns, `??`, queries and boxes already cover the use cases between them, so you compose the flavour you want from what's already in the language. The sections below show the same kinds of dispatch you'd reach for in other languages, expressed in Punk.
+Punk doesn't bake in a single polymorphism mechanism — no classes, no multimethods, no interfaces. Patterns, `??`, queries and atoms already cover the use cases between them, so you compose the flavour you want from what's already in the language. The sections below show the same kinds of dispatch you'd reach for in other languages, expressed in Punk.
 
 ### By arity — dispatch on how many things were passed
 
@@ -1066,24 +1069,24 @@ Imagine you're writing something that greets people. You start with English and 
 
 What you actually want is: one place that knows how to greet, and a way for anyone to walk up and say "here's another language — use this phrase". The greeter doesn't change. The list of known languages can grows at runtime.
 
-This is the shape Punk reaches for with a box. A box lets us append things to a common reference point where normal Punk variables are imutable.
+This is the shape Punk reaches for with an atom. An atom lets us append things to a common reference point where normal Punk variables are imutable.
 
 ```punk
-  # put an inital empty list into the greeters box. #
-  {}->[greeters]! 
+  # put an inital empty list into the greeters atom. #
+  {}->@greeters! 
 
   # get the current list of greeters, 
     add a new greeter 
-    and put that new combined list as the new contents of the box #
+    and put that new combined list as the new contents of the atom #
   register-greeter:(lang:_ msg:_){
-    [greeters]->(g:_){g? {lang:lang? msg:msg?}}->[greeters]! 
+    @greeters->(g:_){g? {lang:lang? msg:msg?}}->@greeters! 
   }
 
   register-greeter!{en Hello}
   register-greeter!{fr Bonjour}
 
   greet:(lang:_ name:_){
-    [greeters]->(g:_)"{find!{(i:_ *)=!{i.lang? lang?} g?}.msg?} {name?}"!
+    @greeters->(g:_)"{find!{(i:_ *)=!{i.lang? lang?} g?}.msg?} {name?}"!
   }
 ```
 
@@ -1127,12 +1130,12 @@ The trick when the receiver is itself bound to a name is the `?.` query-chain he
 | Predicate `cond` clauses | any pattern is itself a predicate — use `??` |
 | Arity overloading | `??` over `args:*` |
 | Closed multimethod / dispatch table | `??` with literal-value or shape patterns |
-| Open multimethod / extensible dispatch | a box holding a handler template, plus a `register` function and a dispatcher |
+| Open multimethod / extensible dispatch | an atom holding a handler template, plus a `register` function and a dispatcher |
 | Protocols / interfaces | objects-as-namespaces: a template carrying named functions, called via name-path query |
 | `instanceof` / type tag checks | shape patterns and regex slots |
 | Records / structs with required fields | named slots in a pattern: `(name:_ age:_)` |
 
-All of these are assembled from four primitives — patterns, `??`, name-path queries, and boxes — none of which exist solely for polymorphism.
+All of these are assembled from four primitives — patterns, `??`, name-path queries, and atoms — none of which exist solely for polymorphism.
 
 ## Built-in Functions
 
@@ -1470,7 +1473,7 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | --- | --- | --- |
 | `{` `}` | Template delimiters | Anywhere outside an escape |
 | `(` `)` | Pattern delimiters | Anywhere outside an escape |
-| `[` `]` | Box delimiters — `[name]` refers to a box; the brackets *are* the box. Boxes come into existence on first write: `value->[name]!` | Anywhere outside an escape |
+| `@` | Atom marker — `@name` refers to an atom; the `@` *is* the atom. Atoms come into existence on first write: `value->@name!` | Anywhere outside an escape |
 | `:` | Names a thing — `name:value` | Anywhere outside an escape |
 | `?` | Query — resolves nested queries in a template | Suffix of a path token; `?(pattern){...}!` is the single-condition form (trailing `!` required when a template body is attached); `??{(p1){...}(p2){...}}!` is the multi-condition form (same rule); `head?.seg.seg` is the query-chain head — a `?` glued to the first segment dereferences a bareword binding once before walking the rest of the path |
 | `!` | Execute — runs a function or evaluates a template, by name or directly. Also invokes any embedded calls like `+!`. A body-bearing conditional (`?(p){...}!`, `??{...}!`) requires a trailing `!`. | Suffix of a path token, or of a function name |

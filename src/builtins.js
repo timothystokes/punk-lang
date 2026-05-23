@@ -216,7 +216,7 @@ const singleArg = (args, _env, ctx) => {
 const isTextV = (v) => v && v.kind === 'Text';
 const isTmplV = (v) => v && v.kind === 'Tmpl';
 const isFnV   = (v) => v && v.kind === 'Fn';
-const isBox   = (v) => v && v.kind === 'Box';
+const isAtom  = (v) => v && v.kind === 'Atom';
 
 // ---------- Builtin registry ----------
 

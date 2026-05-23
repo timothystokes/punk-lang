@@ -407,11 +407,10 @@ test('words inside Pattern are decoded (PendingNamed + wildcard pairs)', () => {
   assert.equal(pat.items[3].subkind, 'wildcard');
 });
 
-test('words inside Box are decoded', () => {
-  const box = items('[counter]')[0];
-  assert.equal(box.kind, 'Box');
-  assert.equal(box.items[0].kind, 'Word');
-  assert.equal(box.items[0].text, 'counter');
+test('@-marker parses as an Atom node with its name', () => {
+  const atom = items('@counter')[0];
+  assert.equal(atom.kind, 'Atom');
+  assert.equal(atom.name, 'counter');
 });
 
 test('embeds in Text are recursed into', () => {

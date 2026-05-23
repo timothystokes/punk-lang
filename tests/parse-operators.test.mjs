@@ -158,19 +158,19 @@ test('Hello->upper->log! → Pipeline, executed (last is Exec)', () => {
   assert.equal(p.stages[2].kind, 'Exec');
 });
 
-test('0->[counter]! → Pipeline ending in Box, executed via bare !', () => {
-  const [p] = items('0->[counter]!');
+test('0->@counter! → Pipeline ending in Atom, executed via bare !', () => {
+  const [p] = items('0->@counter!');
   assert.equal(p.kind, 'Pipeline');
   assert.equal(p.stages.length, 2);
-  assert.equal(p.stages[1].kind, 'Box');
+  assert.equal(p.stages[1].kind, 'Atom');
   assert.equal(p.execute, true);
 });
 
-test('[counter]->log! → Pipeline starting from Box, executed', () => {
-  const [p] = items('[counter]->log!');
+test('@counter->log! → Pipeline starting from Atom, executed', () => {
+  const [p] = items('@counter->log!');
   assert.equal(p.kind, 'Pipeline');
   assert.equal(p.stages.length, 2);
-  assert.equal(p.stages[0].kind, 'Box');
+  assert.equal(p.stages[0].kind, 'Atom');
   assert.equal(p.execute, true);
 });
 

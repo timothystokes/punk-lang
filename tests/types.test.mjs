@@ -17,7 +17,6 @@ test('a bare Word auto-wraps into a structured template', () => {
 test('a bare Word with non-letters still auto-wraps', () => {
   assert.equal(punk('red-green-blue'), '{red-green-blue}');
   assert.equal(punk('&'), '{&}');
-  assert.equal(punk('@home'), '{@home}');
 });
 
 test('a bare Number auto-wraps', () => {

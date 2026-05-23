@@ -49,7 +49,7 @@ test('a stray bare ! at top level is a syntax error', () => {
 });
 
 test('bare ! absorbed into a pipeline does NOT trigger the check', () => {
-  run('0->[counter]!');
+  run('0->@counter!');
   run('Hello->upper->log!');
 });
 

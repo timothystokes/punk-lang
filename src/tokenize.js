@@ -21,8 +21,7 @@ export const TOKEN_TYPES = Object.freeze({
   RBRACE: 'RBRACE',         // }
   LPAREN: 'LPAREN',         // (
   RPAREN: 'RPAREN',         // )
-  LBRACK: 'LBRACK',         // [
-  RBRACK: 'RBRACK',         // ]
+  AT: 'AT',                 // @name — atom marker (carries the full @name in `text`)
   QUOTE_OPEN: 'QUOTE_OPEN', // opening "
   QUOTE_CLOSE: 'QUOTE_CLOSE', // closing "
   ARROW: 'ARROW',           // ->
@@ -33,7 +32,7 @@ export const TOKEN_TYPES = Object.freeze({
   EOF: 'EOF',
 });
 
-const STRUCT_DELIMS = new Set(['{', '}', '(', ')', '[', ']', '"']);
+const STRUCT_DELIMS = new Set(['{', '}', '(', ')', '"']);
 
 function isNameChar(ch) {
   return (ch >= 'a' && ch <= 'z')
@@ -165,8 +164,33 @@ export function tokenize(src) {
       }
       if (c === '(') { advance(); push(TOKEN_TYPES.LPAREN, '(', startLine, startCol); patternDepth++; continue; }
       if (c === ')') { advance(); push(TOKEN_TYPES.RPAREN, ')', startLine, startCol); if (patternDepth > 0) patternDepth--; continue; }
-      if (c === '[') { advance(); push(TOKEN_TYPES.LBRACK, '[', startLine, startCol); continue; }
-      if (c === ']') { advance(); push(TOKEN_TYPES.RBRACK, ']', startLine, startCol); continue; }
+      if (c === '[' || c === ']') {
+        throw new PunkSyntaxError(
+          `'${c}' is not a Punk delimiter — atoms use the '@name' form`,
+          startLine, startCol,
+        );
+      }
+      if (c === '@') {
+        advance();
+        let name = '';
+        while (!eof()) {
+          const ch = peek();
+          if (!isNameChar(ch)) break;
+          // Stop before an `->` arrow so atom names don't swallow the
+          // pipeline operator: `@n->...` must yield AT('@n') + ARROW.
+          if (ch === '-' && peek(1) === '>') break;
+          name += ch;
+          advance();
+        }
+        if (name.length === 0) {
+          throw new PunkSyntaxError(
+            "'@' must be followed by an atom name",
+            startLine, startCol,
+          );
+        }
+        push(TOKEN_TYPES.AT, '@' + name, startLine, startCol);
+        continue;
+      }
 
       // Opening quote -> switch to TEXT mode.
       if (c === '"') {
