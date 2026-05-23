@@ -20,17 +20,17 @@ renderTodoItem:(v:_ i:_ k:_){
 indexPage:(todos:___){
   <\!DOCTYPE html>
   html:(lang:en){
-    head:(){
-      title:(){punk-todo}
+    head:{
+      title:{punk-todo}
     }
-    body:(){
-      h1:(){Todo}
+    body:{
+      h1:{Todo}
       form:(method:POST action:/todo enctype:text/plain){
         input:(name:note type:text){}
         input:(name:description type:text){}
         button:(type:submit){Add Item}
       }
-      ul:(){
+      ul:{
         map!{renderTodoItem? todos?}
       }
     }
@@ -63,3 +63,28 @@ dispatch:(req:___){
 
 http.serve!{8080 dispatch?}
 log!{listening on port 8080}
+
+
+# approach to evaluating fucntiona as html
+
+render:(*){
+  map!{([element])"<{element.:?} {join!(map!(([attrib]){
+    "{attrib.:?}=\"{attrib?}\""
+  } element.()?))}>
+    {join!{map!{render? element.{}?!}}}
+  </{element.:?}>" *}
+}
+
+render!{
+  html:(lang:en){
+    head:(){
+      title:(){punk-todo}
+    }
+    body:(){
+      h1:(class:bold){Welcome}
+      p:(){Welcome to Punk}
+    }
+  }
+}
+
+#
