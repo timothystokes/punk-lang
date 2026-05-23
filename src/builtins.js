@@ -10,6 +10,7 @@ import {
   isTrue, isFalse, equals,
 } from './values.js';
 import { format } from './format.js';
+import { slotIsRest } from './slot.js';
 import * as fs from 'node:fs';
 
 // ---------- Helpers ----------
@@ -593,11 +594,7 @@ function hofArity(fn, hofName) {
   // Detect variadic trailing slot (last slot is `*` or `name:*`).
   let variadic = false;
   if (items.length > 0) {
-    const last = items[items.length - 1];
-    const inner = last && last.kind === 'Named' ? last.value : last;
-    if (inner && inner.kind === 'Word' && inner.subkind === 'variadic') {
-      variadic = true;
-    }
+    variadic = slotIsRest(items[items.length - 1]);
   }
   // Effective non-variadic slot count we must satisfy.
   const fixed = variadic ? remaining - 1 : remaining;

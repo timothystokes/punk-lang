@@ -20,6 +20,7 @@
 import { PunkRuntimeError } from './errors.js';
 import { mkTmpl, mkText, mkWord, mkFn, mkPartialFn, NULL, TRUE, FALSE } from './values.js';
 import { match } from './match.js';
+import { slotName, slotIsRest } from './slot.js';
 import { builtins, builtinArity } from './builtins.js';
 import { format } from './format.js';
 
@@ -35,10 +36,7 @@ function getArity(callable) {
     const items = (callable.params && callable.params.items) || [];
     let variadic = false;
     for (const slot of items) {
-      const inner = slot && slot.kind === 'Named' ? slot.value : slot;
-      if (inner && inner.kind === 'Word' && inner.subkind === 'variadic') {
-        variadic = true;
-      }
+      if (slotIsRest(slot)) variadic = true;
     }
     return { slots: items.length, variadic };
   }
@@ -314,7 +312,7 @@ function walkSegment(cur, seg, node, env) {
         const params = v.params;
         if (params && params.kind === 'Pattern') {
           for (const item of params.items || []) {
-            if (item && item.kind === 'Named' && item.name === seg.text) {
+            if (slotName(item) === seg.text && item.kind === 'Named') {
               return { value: item.value, name: item.name };
             }
           }

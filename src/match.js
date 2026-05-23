@@ -19,11 +19,7 @@
 // Matching a non-Tmpl against a Pattern always fails.
 
 import { equals } from './values.js';
-
-const isWildcard = (n) => n && n.kind === 'Word' && n.subkind === 'wildcard';
-const isVariadic = (n) => n && n.kind === 'Word' && n.subkind === 'variadic';
-
-const slotInner = (slot) => slot.kind === 'Named' ? slot.value : slot;
+import { slotInfo, slotName, slotIsRest, isPureWildcard } from './slot.js';
 
 const bind = (bindings, name, value) => {
   if (bindings.has(name)) {
@@ -103,35 +99,41 @@ function matchSlot(item, slot, bindings) {
   // Names aren't part of the contract — if the item is Named, unwrap it
   // so its shape (and value) drives matching uniformly.
   const unwrapped = item && item.kind === 'Named' ? item.value : item;
-  if (slot.kind === 'Named') {
-    // Regex inner: bind name to a structured-tmpl of [full, ...groups].
-    if (slot.value && slot.value.kind === 'Regex') {
-      const s = itemAsString(unwrapped);
-      if (s === null) return false;
-      let re;
-      try { re = new RegExp(slot.value.body, slot.value.flags || ''); }
-      catch { return false; }
-      const r = re.exec(s);
-      if (!r) return false;
-      return bind(bindings, slot.name, regexMatchTmpl(r, re));
-    }
-    if (!matchSlot(unwrapped, slot.value, bindings)) return false;
-    // Bind to the ORIGINAL item (Named-preserved), not the unwrapped value,
-    // so the binding can reflect on its name via `.:?`.
-    return bind(bindings, slot.name, item);
+  const info = slotInfo(slot);
+  // Regex-named slot: `n:/.../` binds n to [full, ...groups].
+  if (info.name != null && info.inner && info.inner.kind === 'Regex') {
+    const s = itemAsString(unwrapped);
+    if (s === null) return false;
+    let re;
+    try { re = new RegExp(info.inner.body, info.inner.flags || ''); }
+    catch { return false; }
+    const r = re.exec(s);
+    if (!r) return false;
+    return bind(bindings, info.name, regexMatchTmpl(r, re));
   }
-  if (isWildcard(slot)) return true;
-  if (slot.kind === 'Regex') {
+  // Named slot with inner shape: match inner, then bind name to ORIGINAL
+  // (Named-preserved) item so reflection via `.:?` can see the name.
+  if (info.name != null) {
+    if (info.inner === null) {
+      // `x:_` — wildcard binding
+      return bind(bindings, info.name, item);
+    }
+    if (!matchSlot(unwrapped, info.inner, bindings)) return false;
+    return bind(bindings, info.name, item);
+  }
+  // Unnamed slot:
+  if (info.inner === null) return true; // bare `_`
+  if (info.inner.kind === 'Regex') {
     const s = itemAsString(unwrapped);
     if (s === null) return false;
     try {
-      const re = new RegExp(slot.body, slot.flags || '');
+      const re = new RegExp(info.inner.body, info.inner.flags || '');
       return re.test(s);
     } catch { return false; }
   }
-  if (slot.kind === 'Pattern') {
+  if (info.inner.kind === 'Pattern') {
     if (!unwrapped || unwrapped.kind !== 'Tmpl') return false;
-    return matchPatternItems(unwrapped.items, slot.items, bindings);
+    return matchPatternItems(unwrapped.items, info.inner.items, bindings);
   }
   // Bare literal — exact value equality. Auto-wrap means runtime values
   // are often a singleton Tmpl (e.g. `{GET}` for `method:GET`); unwrap
@@ -141,22 +143,21 @@ function matchSlot(item, slot, bindings) {
   if (cmp && cmp.kind === 'Tmpl' && cmp.items.length === 1) {
     cmp = cmp.items[0];
   }
-  return equals(cmp, slot);
+  return equals(cmp, info.inner);
 }
 
 function matchPatternItems(items, slots, bindings) {
   // Variadic, if present, is always the LAST slot (parseValidate enforces).
   const lastIdx = slots.length - 1;
-  const hasVariadic =
-    slots.length > 0 && isVariadic(slotInner(slots[lastIdx]));
+  const hasVariadic = slots.length > 0 && slotIsRest(slots[lastIdx]);
 
   if (!hasVariadic) {
     if (items.length !== slots.length) return false;
     for (let i = 0; i < items.length; i++) {
       if (!matchSlot(items[i], slots[i], bindings)) return false;
     }
-    // Single-slot wildcard `(_)` also binds `_` so `_?` can resolve it.
-    if (slots.length === 1 && isWildcard(slots[0])) {
+    // Single-slot raw wildcard `(_)` also binds `_` so `_?` can resolve it.
+    if (slots.length === 1 && isPureWildcard(slots[0]) && slotName(slots[0]) === null) {
       bind(bindings, '_', items[0]);
     }
     return true;
@@ -170,10 +171,10 @@ function matchPatternItems(items, slots, bindings) {
   }
   // Trailing variadic captures everything left over. Bind to a Tmpl of
   // those items if named.
-  const variadicSlot = slots[lastIdx];
-  if (variadicSlot.kind === 'Named') {
+  const restName = slotName(slots[lastIdx]);
+  if (restName != null) {
     const captured = items.slice(head.length);
-    if (!bind(bindings, variadicSlot.name, { kind: 'Tmpl', items: captured })) return false;
+    if (!bind(bindings, restName, { kind: 'Tmpl', items: captured })) return false;
   }
   return true;
 }

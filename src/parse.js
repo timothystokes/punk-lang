@@ -22,6 +22,7 @@
 
 import { TOKEN_TYPES as T } from './tokenize.js';
 import { PunkSyntaxError } from './errors.js';
+import { slotName, slotIsRest, isPureWildcard } from './slot.js';
 
 // ---------------------------------------------------------------------------
 // Node constructors
@@ -1787,11 +1788,11 @@ const validateNode = (node, stack) => {
           const anc = stack[i];
           if (anc && anc.kind === 'Fn') {
             const ps = anc.params;
-            if (
+              if (
               ps && ps.kind === 'Pattern'
               && ps.items.length === 1
-              && ps.items[0].kind === 'Word'
-              && ps.items[0].subkind === 'wildcard'
+              && isPureWildcard(ps.items[0])
+              && slotName(ps.items[0]) === null
             ) {
               ok = true;
             }
@@ -1845,23 +1846,18 @@ const validateNode = (node, stack) => {
         let varCount = 0;
         for (let i = 0; i < node.items.length; i++) {
           const item = node.items[i];
-          const v =
-            (item.kind === 'Word' && item.subkind === 'variadic') ? item :
-            (item.kind === 'Named' && item.value
-              && item.value.kind === 'Word' && item.value.subkind === 'variadic') ? item :
-            null;
-          if (v) {
+          if (slotIsRest(item)) {
             varCount++;
             if (varCount > 1) {
               throw new PunkSyntaxError(
                 'a pattern can have at most one variadic slot',
-                v.line, v.col,
+                item.line, item.col,
               );
             }
             if (i !== node.items.length - 1) {
               throw new PunkSyntaxError(
                 'variadic `*` must be the last slot in a pattern',
-                v.line, v.col,
+                item.line, item.col,
               );
             }
           }
