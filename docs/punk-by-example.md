@@ -515,6 +515,8 @@ You can label any positional slot to extract its matched value for use in the at
 
 > NOTE: Labels are local to the pattern's template — they aren't names in any enclosing scope, and don't participate in the matching contract. `([n])` and `(_)` match identically; only the body of the attached template can tell them apart.
 
+> NOTE: A label rebinds the **value** at that slot, dropping any incoming name. If a positional slot `[x]` happens to align with an argument `a:7`, the slot is named-context-blind — the binding inside the body is `x:7`, **not** `x:a:7` or `x:{a:7}`. The pattern didn't specify the name `a`, so it isn't preserved; if preserving the name matters, write `a:[x]` (which still binds `x:7`) or match positionally without a label.
+
 ### Context matching with `:` in a pattern
 
 `:` inside a pattern means **match a Named entry by name and value** at this position. Each context-match clause consumes one positional slot, just like any other slot.

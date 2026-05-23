@@ -120,6 +120,12 @@ Rules:
   after every other positional slot at that same level.
 - Labels (`[n]`) are for extraction; they do not participate in the
   shape contract. `([n])` and `(_)` match identically.
+- A label **rebinds the value**, dropping any incoming name. If a
+  positional slot `[x]` lines up with an argument `a:7`, the body sees
+  `x:7` — not `x:a:7` or `x:{a:7}`. The pattern didn't ask for the name
+  `a`, so it isn't preserved. To keep the name, write `a:[x]` (still
+  binds `x:7` but contractually requires the `a` name) or match
+  positionally without a label.
 - A `name:` clause WITHOUT `:` (just `name`) is a literal Word match,
   not a context match. To context-match without extracting use
   `name:_`.

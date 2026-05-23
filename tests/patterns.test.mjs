@@ -167,3 +167,18 @@ test('label re-used across nested patterns is a parse-time error', () => {
   punkThrows('f:([x] ([x] _)){x?}');
   punkThrows('f:(a:[x] b:([x] _)){x?}');
 });
+
+test('a label rebinds the value — incoming name is dropped', () => {
+  // Positional `[x]` matching a Named arg `a:7` binds x to the value 7,
+  // not to the Named pair. The pattern didn't ask for the name `a`,
+  // so it isn't preserved.
+  assert.equal(punk('f:([x]){x?}  f!{a:7}'), '{7}');
+  // Same when the label is alongside an unrelated slot.
+  assert.equal(punk('f:(_ [x]){x?}  f!{first a:7}'), '{7}');
+  // To require the name `a` in the contract while still labelling the
+  // value as x, use context-match.
+  assert.equal(punk('f:(a:[x]){x?}  f!{a:7}'), '{7}');
+  // Without a context-match clause the slot doesn't care about the
+  // incoming name — a plain literal arg also binds x to its value.
+  assert.equal(punk('f:([x]){x?}  f!{7}'), '{7}');
+});
