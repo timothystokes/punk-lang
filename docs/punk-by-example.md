@@ -63,7 +63,7 @@ Names are **immutable** once bound in a scope: rebinding `x:1` in a scope where 
 A few words have special meaning **in specific positions**:
 
 - `_` — inside a `()` pattern, an unnamed single-item wildcard slot. **In a function body**, when the function's pattern is exactly `(_)` (a single anonymous slot), `_?` resolves that one slot — so you don't need to name it. Anywhere else (template, name binding, body of a multi-slot fn), `_` is just an ordinary word — `_?` outside a `(_)` body is a syntax error.
-- `*` — inside a `()` pattern, an unnamed variadic wildcard slot (zero or more items). It must be the **last** slot in the pattern — anywhere else there is no way to decide how many items it should swallow (use `_` for a single-slot hole). Inside a function body, `*?` queries **the whole argument template** that the function was called with. Anywhere else `*` is just an ordinary word (the same way `+`, `-`, `=` are just words outside an Exec).
+- `*` — inside a `()` pattern, an unnamed variadic wildcard slot (zero or more items). It must be the **last** slot in the pattern — anywhere else there is no way to decide how many items it should swallow (use `_` for a single-slot hole). Inside a function body, `*` is a reference to **the whole argument template** that the function was called with, regardless of how the pattern matched; `*?` lands the whole template, and `*.path?` walks into it (`*.1?`, `*.name?`, etc.). Anywhere else `*` is just an ordinary word (the same way `+`, `-`, `=` are just words outside an Exec).
 - `TRUE`, `FALSE`, `NULL` — the three reserved values. Always reserved, in every position.
 
 `_`, `*`, `-`, and `X` need no escaping — their special meaning is purely positional:
@@ -526,13 +526,37 @@ You can label any positional slot to extract its matched value for use in the at
 > (_ name:John _) ⏎ # three items; the middle one must be name:John #
 ```
 
-The RHS of `:` in a pattern can currently be: `_`, a word/number literal, or `[label]`. Nested patterns and regex on the RHS are not yet supported.
+The RHS of `:` accepts any slot form — `_`, a literal, `[label]`, a regex, **or another `(...)` pattern** (see *Nested patterns* below).
 
 Two clean principles are at work here:
 - **`name:value`** in a pattern matches a Named entry — it lines up with how Named entries appear elsewhere in PDN.
 - **`[label]`** in a pattern extracts the matched value to a local name in the attached template.
 
 These compose: `name:[v]` matches a Named entry called `name` and extracts the value as `v`.
+
+
+### Nested patterns
+
+A pattern can follow the **shape** of the template it matches. Anywhere a slot's body is allowed — that includes a bare positional slot and the RHS of a `:` context match — you can write another `(...)` pattern. That nested pattern is then applied to the template-shaped value at that position.
+
+Given the value `{a:1 b:{green blue}}`:
+
+```punk
+> (a:_ b:([c1] _)) ⏎
+#   a: matched, value 1 not bound                                  #
+#   b: value must be a 2-item template                             #
+#     [c1] binds the first item (green)                            #
+#     _ accepts the second item without binding it (blue dropped)  #
+```
+
+```punk
+> (a:[x] b:([y] [z])) ⏎
+#   binds x=1, y=green, z=blue                                     #
+```
+
+Inside a nested pattern every slot form is available — `_`, `*`, `[n]`, `*[n]`, `/re/`, `[n/re/f]`, literals, and further `name:value` context matches. Patterns can nest to any depth, mirroring the template carrying the parameter input they describe.
+
+**Labels are a flat scope.** All labels collected across a pattern — at every depth — are exposed to the function body as one flat map. So a label must be **unique within the whole outer pattern**; re-using the same label name anywhere in a nested pattern is a parse-time error.
 
 
 ### Regex slots
@@ -764,6 +788,17 @@ Inside a function body, `*?` queries the whole template of arguments that the fu
 > echo:(_ *){*?}  echo!{a b c} ⏎
 {a b c}
 ```
+
+`*` from inside a function body is a reference to the whole argument template, so paths apply to it like any other value. `*.1?` is the first argument, `*.2?` the second, `*.name?` the Named entry called `name`, and so on. This is independent of how the pattern matched — the pattern only decides whether the function runs at all; once it's running, `*` is the **as-passed** input.
+
+```punk
+> first:(_ *){*.1?}  first!{a b c} ⏎
+{a}
+> getName:(name:_ *){*.name?}  getName!{name:Sally age:32} ⏎
+{Sally}
+```
+
+> NOTE: `*` has two distinct meanings depending on where it appears. **In a pattern**, `*` (or `*[label]`) is the variadic slot that swallows the remaining positional items. **In a function body**, `*` is the reference to the whole argument template that was passed in. The two uses never collide because patterns and bodies are different contexts.
 
 
 For functions that work like data templates, getting the whole resulting template back is useful. But for templates that contain a number of intermediate steps, it's often just the last item that matters. Here is an example that also uses the `<` less-than built-in function.

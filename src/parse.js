@@ -1946,6 +1946,36 @@ const validateNode = (node, stack) => {
             }
           }
         }
+        // At a top-level Pattern (no Pattern ancestor), ensure labels are
+        // unique across the whole nested-pattern shape — they all share one
+        // flat scope in the function body.
+        const hasPatternAncestor = stack.some((a) => a && a.kind === 'Pattern');
+        if (!hasPatternAncestor) {
+          const seen = new Map();
+          const collect = (n) => {
+            if (!n || typeof n !== 'object') return;
+            if (n.kind === 'Named' && n._label === true) {
+              const prev = seen.get(n.name);
+              if (prev) {
+                throw new PunkSyntaxError(
+                  `duplicate pattern label \`${n.name}\``,
+                  n.line, n.col,
+                );
+              }
+              seen.set(n.name, n);
+              collect(n.value);
+              return;
+            }
+            if (n.kind === 'Pattern' || n.kind === 'Tmpl') {
+              for (const it of n.items) collect(it);
+              return;
+            }
+            if (n.kind === 'Named') {
+              collect(n.value);
+            }
+          };
+          for (const item of node.items) collect(item);
+        }
       }
       const childStack = [...stack, node];
       for (const item of node.items) validateNode(item, childStack);

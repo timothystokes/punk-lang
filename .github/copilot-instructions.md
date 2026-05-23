@@ -92,13 +92,32 @@ Like positional slots, each context-match clause consumes one position
 - `name:_`    — Named entry `name` with any value, not extracted
 - `name:[v]`  — Named entry `name`, value extracted to `v`
 
-RHS of `:` in pattern context is restricted to: `_`, a word/number
-literal, or `[label]`. Nested patterns and regex on the RHS are
-deferred.
+### Nested patterns — match deeper shape
+
+A pattern can mirror the **shape** of a template at any depth. Anywhere
+a positional-slot RHS is allowed (including the RHS of a `:` context
+match), you can write another `(...)` pattern, which then matches a
+Tmpl-shaped item at that position.
+
+Given `{a:1 b:{green blue}}`:
+
+- `(a:_ b:([c1] _))` — `a` matched any value (`1`, not bound);
+  `b`'s value must be a 2-item Tmpl; `c1` binds `green`; second
+  position is wildcard so `blue` is not bound.
+- `(a:[x] b:([y] [z]))` — binds `x=1`, `y=green`, `z=blue`.
+
+Inside a nested pattern, every slot form is available: `_`, `*`, `[n]`,
+`*[n]`, `/re/`, `[n/re/f]`, literals, and `name:value` context matches.
+Patterns can nest arbitrarily deep.
+
+**Labels are a flat map.** All labels collected across a pattern —
+no matter how deeply nested — are exposed to the function body as a
+single flat scope. Each label must therefore be **unique within the
+whole outer pattern**; re-using a label is a parse-time error.
 
 Rules:
-- At most one `*` (or `*[label]`) per pattern; it must come after
-  every other positional slot.
+- At most one `*` (or `*[label]`) per pattern level; it must come
+  after every other positional slot at that same level.
 - Labels (`[n]`) are for extraction; they do not participate in the
   shape contract. `([n])` and `(_)` match identically.
 - A `name:` clause WITHOUT `:` (just `name`) is a literal Word match,
@@ -124,6 +143,23 @@ functions.
 Currently a `(p?){body}` form supports a single named-pattern reference
 spliced as the entire pattern; mixing splice and inline slots is not
 yet defined.
+
+### Whole-arguments reference — `*` in a body
+
+Inside a function body, `*` is a reference to the **whole argument
+template** that was passed to the call, as-passed. The pattern only
+decides whether the function runs at all; once it's running, `*` is
+the original args.
+
+- `*?` resolves to the whole args template.
+- `*.1?`, `*.2?` index into it positionally.
+- `*.name?` reads a Named entry by name.
+- `*.#?` is its length, `*.~?` is its last item, etc. — all standard
+  path semantics apply.
+
+This is distinct from `*` inside a pattern (which is the variadic
+slot). The two never collide: patterns and bodies are different
+contexts.
 
 ### Function call / pipe canonical table
 

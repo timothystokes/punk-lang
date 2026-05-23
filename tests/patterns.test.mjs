@@ -120,3 +120,50 @@ test('regex slot mixed with wildcard', () => {
   assert.equal(punk('{x 42}?(_ /^\\d+$/)'), 'TRUE');
   assert.equal(punk('{x ab}?(_ /^\\d+$/)'), 'FALSE');
 });
+
+// --- Nested patterns -------------------------------------------------
+//
+// A slot's body can itself be a `(...)` pattern, matching a
+// template-shaped value at that position. Labels collected anywhere in
+// the (possibly nested) pattern are exposed as ONE flat scope.
+
+test('nested pattern as a positional slot — labels propagate to outer scope', () => {
+  // outer slot 2 is the nested pattern ([y] [z]); y and z appear at top
+  // level via the flat label scope so the body can refer to them directly.
+  assert.equal(
+    punk('f:(_ ([y] [z])){y? z?}  f!{a {green blue}}'),
+    '{green blue}',
+  );
+});
+
+test('context-match RHS may be a nested pattern', () => {
+  // b's value must be a 2-item template; c1 binds the first inner item.
+  assert.equal(punk('{a:1 b:{green blue}}?(a:_ b:([c1] _))'), 'TRUE');
+  // Same shape against a non-matching inner length fails.
+  assert.equal(punk('{a:1 b:{green}}?(a:_ b:([c1] _))'),     'FALSE');
+});
+
+test('nested pattern binds labels from the deeper template', () => {
+  assert.equal(
+    punk('f:(a:[x] b:([y] [z])){x? y? z?}  f!{a:1 b:{green blue}}'),
+    '{1 green blue}',
+  );
+});
+
+test('nested pattern can use *[rest] for a deep tail', () => {
+  assert.equal(
+    punk('f:(_ ([head] *[tail])){head? tail?}  f!{x {1 2 3 4}}'),
+    '{1 {2 3 4}}',
+  );
+});
+
+test('nested pattern can use a regex slot', () => {
+  assert.equal(punk('{x {42}}?(_ ([n/^\\d+$/]))'),  'TRUE');
+  assert.equal(punk('{x {abc}}?(_ ([n/^\\d+$/]))'), 'FALSE');
+});
+
+test('label re-used across nested patterns is a parse-time error', () => {
+  punkThrows('f:(_ ([x] [x])){x?}');
+  punkThrows('f:([x] ([x] _)){x?}');
+  punkThrows('f:(a:[x] b:([x] _)){x?}');
+});
