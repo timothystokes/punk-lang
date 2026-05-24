@@ -1,6 +1,6 @@
 # Punk
 
-Punk is a Functional immutable interpreted programming language. It has unique concept and syntax. It's named after it's creator who is a self confessed punk! This implementation uses JavaScript as it's runtime.
+Punk is a functional immutable interpreted programming language. It has unique concept and syntax. It's named after it's creator who is a self confessed punk! This implementation uses JavaScript as it's runtime.
 
 ## Getting Started
 
