@@ -1,10 +1,10 @@
 # Punk
 
-Punk is a Fun-ctional imutable interpreted programming language. It has unique concept and syntax. It's named after it's creator who is a self confessed punk! This implementation uses JavaScript as it's runtime.
+Punk is a Fun-ctional immutable interpreted programming language. It has unique concept and syntax. It's named after it's creator who is a self confessed punk! This implementation uses JavaScript as it's runtime.
 
 ## Getting Started
 
-To run Punk in interaactive mode.
+To run Punk in interactive mode.
 
 ```bash
 npm start
@@ -26,7 +26,7 @@ Punk is not a strongly typed language but it does have specific contracts includ
 
 ### Numbers
 
-Most programing language allow literal numebrs to be part of the code and Punk is no exception. 
+Most software languages understand numbers implicitly and Punk is no exception. 
 
 ```punk
 > 42 ⏎
@@ -35,21 +35,21 @@ Most programing language allow literal numebrs to be part of the code and Punk i
 
 ### Words
 
-Where other languages won't acept literal words as token in the language, Punk is fine with it. 
+Where other languages usually don't accept words as data outside of strings, Punk is fine with it. 
 
 ```punk
 > Paul ⏎
 {Paul}
 ```
 
-In fact Punk doesn't differenciate netween 42 and Paul until you do things with them later. They are just data values until then. Data elements are separated by space.
+In fact Punk doesn't differentiate between 42 and Paul until you do things with them later. They are just data values until then. Data elements are separated by space.
 
 ```punk
 > 42 Paul ⏎
 {42 Paul}
 ```
 
-42 and Paul are two things so the { } wrapper is describing to you that they have been interpreted as two things. In the above reponses you can see Punk is making it clear they are one thing using the same { } notation. Punk things within parenthasis Templates.
+42 and Paul are two things so the { } wrapper is describing to you that they have been interpreted as two things. In the above responses you can see Punk is making it clear they are one thing using the same { } notation. Punk calls things with parenthesis Templates.
 
 ### Templates
 
@@ -62,7 +62,7 @@ To explicitly define a Template of two things then you can code the { } directly
 
 ### Named Things
 
-In Punk most things can be given a name so they can queried in a leter part of your code. Names are simply attached directly to the start of a thing using colons : to specify the name assignment. Spaces are not allowed because then Punk would see two things not one named thing.
+In Punk most things can be given a name so they can queried in a later part of your code. Names are simply attached directly to the start of a thing using colons : to specify the name assignment. Spaces are not allowed because then Punk would see two things not one named thing.
 
 In this example we have one named template which itself contains two things.
 
@@ -71,18 +71,18 @@ In this example we have one named template which itself contains two things.
 {message:{Hello world}}
 ```
 
-> NOTE: Punk treats names as imutable. Once you have attached a name to one thing then it sticks. You can't remove the name or attached that name to another thing (within the same namespace).
+> NOTE: Punk treats names as immutable. Once you have attached a name to one thing then it sticks. You can't remove the name or attached that name to another thing (within the same namespace).
 
 ### Querying Named Things
 
-You can retrive a thing from it's name using a ? query.
+You can retrieve a thing from it's name using a ? query.
 
 ```punk
 > message? ⏎
 {Hello world}
 ```
 
-> NOTE: Without the : or ? on the end message is just a normal word and Punk woudl treat it as data. its the : that let's Punk know you want to use it as a name or ? to let Punk know you want resolve it as a name.
+> NOTE: Without the : or ? on the end, message is just a normal word and Punk would treat it as data. its the : that let's Punk know you want to use it as a name or ? to let Punk know you want resolve it as a name.
 
 ### Nested Templates
 
@@ -113,7 +113,7 @@ This query resolved the value attached to the nested 'age' name within the perso
 
 This query resolved the name within the person template then from there the 2nd item in the inner template.
 
-> NOTE: Manu progrsamming languages index things in lists starting from 0 to represent the 1st item. In Punk 1 means 1st. 2 means 2nd etc..
+> NOTE: Many software languages index things in lists starting from 0 to represent the 1st item. In Punk 1 means 1st. 2 means 2nd etc..
 
 Here is a list of all the query types available using this example template:
 
@@ -172,12 +172,12 @@ The inner `{Paul}` is there because `name:Paul` is short for `name:{Paul}` (abov
 
 ### Patterns
 
-Paterns are a way of defining the shape of a template so that they can be compared and so we can build conditions in out program. Patterns are defined by ( ) syntax where underscores _ are used to denote an item placement ans * to denote any number of items.
+Paterns are a way of defining the shape of a template so that they can be compared and so we can build conditions in out program. Patterns are defined by ( ) syntax where underscores _ are used to denote an item placement and * to denote any number of items.
 
 ```punk
 > (_) # A pattern that describes a template shape that contains a single thing # ⏎
 > (_ _) # A pattern that describes a template shape that contains two things # ⏎
-> (*) # A pattern that describes a template that has any numebr of things including empty # ⏎
+> (*) # A pattern that describes a template that has any number of things including empty # ⏎
 > (5) # A pattern that describes a template that contains the single value 5 # ⏎
 ```
 
@@ -213,7 +213,7 @@ In Punk a function is simply a pattern connected to a template (...){...} and in
 
 ### Named Functions
 
-Like other things functons can also be named so they can be used later. Here is a simple functon that greets peopl with any numebr of parts to their name as * matches all.
+Like other things functions can also be named so they can be used later. Here is a simple function that greets people with any number of parts to their name as * matches all.
 
 ```punk
 > welcome:(n:_){Hello n?} ⏎
@@ -221,7 +221,7 @@ Like other things functons can also be named so they can be used later. Here is 
 
 ### Evaluating a Function
 
-We can provide the value for the function to operat on after the ! signal to evaluate as follows:
+We can provide the value for the function to operate on after the ! signal to evaluate as follows:
 
 ```punk
 > welcome!{Sally} ⏎
@@ -230,18 +230,18 @@ We can provide the value for the function to operat on after the ! signal to eva
 
 ### Pipes
 
-We can also provide values to functiuon by piping it using the -> notation like an arrow.
+We can also provide values to functions by piping it using the -> notation like an arrow.
 
 ```punk
 > {Sally}->welcome! ⏎
 {Hello Sally}
 ```
 
-> NOTE: Pipes can be made chained together using an initial query or reference followed by any numebr of function names and then terminated with our evaluate symbol !
+> NOTE: Pipes can be made chained together using an initial query or reference followed by any number of function names and then terminated with our evaluate symbol !
 
 ### Unstructured Templates
 
-We have seen how structured templates are core to how Punk references code and data alomst interchangably. Somethings we need to work with or produce unstructures data. Punk uses " " to define Unstructured Templates rather than { } which are used to define Structured Templates as we have already seen. Unstructured templates can be used in the same way as structured ones.
+We have seen how structured templates are core to how Punk references code and data almost interchangeably. Somethings we need to work with or produce unstructured data. Punk uses " " to define Unstructured Templates rather than { } which are used to define Structured Templates as we have already seen. Unstructured templates can be used in the same way as structured ones.
 
 ```punk
 > name:"Sally Green" ⏎
@@ -258,7 +258,7 @@ Just like structured templates unstructured ones can also nested structured temp
 > welcome:"Hello {name?}" ⏎
 ```
 
-And to evaluate an unstructured template we use the same directive of ! which finds any embeded structural templates and evaluates them as data or code based on the directives they contain. In this case the {name?} template is found, resolved to "Sally Green" which is then inserted into the position of the placeholder.
+And to evaluate an unstructured template we use the same directive of ! which finds any embedded structural templates and evaluates them as data or code based on the directives they contain. In this case the {name?} template is found, resolved to "Sally Green" which is then inserted into the position of the placeholder.
 
 ```punk
 > welcome! ⏎
