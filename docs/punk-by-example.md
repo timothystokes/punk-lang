@@ -799,7 +799,7 @@ It's not that useful outside of matching in a condition so here is a more useful
 
 > NOTE: The pattern `(...)` and the template `{...}` must be **attached** — no whitespace between the closing `)` and the opening `{`. The moment you write `([name]) {Hello name?}` with a space in there it is no longer one thing; it is a pattern followed by an unrelated template, not a function. Whitespace *inside* the pattern or *inside* the template is free — you can use it to align code — but the bridge between them is sacred.
 
-> SHORTCUT: When the body is a single expression, the outer `{ }` are optional. So `mylogger:([m])log!{m?}` is the same as `mylogger:([m]){log!{m?}}`. This matches the existing `(p)"..."` form where the body is a single unstructured template.
+> SHORTCUT: When the body is a single expression, the outer `{ }` are optional. So `mylogger:([m])print!{m?}` is the same as `mylogger:([m]){print!{m?}}`. This matches the existing `(p)"..."` form where the body is a single unstructured template.
 
 > SHORTCUT: When a call or partial application passes exactly one thing and that thing is a single name or a single integer, you can drop the `{ }` and write the argument directly against the `!`/`'`. So `sizer!7` is the same as `sizer!{7}`, `times'2` is the same as `times'{2}`, and `+'1` is the same as `+'{1}`. Only a bare name or a bare integer is accepted on the right of mid-call `!`/`'`: anything else (decimals like `1.2`, paths like `foo.bar`, templates) must use the full `f!{...}` form.
 
@@ -963,8 +963,8 @@ Punk supports a pipeline operator `->` for chaining values through functions. Th
 When the chain ends with `!`, it runs: the thing on the left flows through each function in order, with the output of each stage becoming the input of the next.
 
 ```punk
-> hello->log! ⏎ # log receives {hello} #
-> Hello->upper->log! ⏎ # upper makes {HELLO}, then log receives it #
+> hello->print! ⏎ # print receives {hello} #
+> Hello->upper->print! ⏎ # upper makes {HELLO}, then print receives it #
 ```
 
 Each stage on the right of an `->` is expected to be a function. The input becomes that function's argument, so each stage must be able to accept one thing.
@@ -976,15 +976,15 @@ Each stage on the right of an `->` is expected to be a function. The input becom
 Without `!`, a chain is a **value** — a new function formed from the composition of the stages. Nothing runs yet.
 
 ```punk
-> upperLogger:upper->log ⏎ # binds a function: upper then log #
-> upperLogger!hello ⏎ # now it runs: {hello} → {HELLO} → log prints HELLO #
+> upperLogger:upper->print ⏎ # binds a function: upper then print #
+> upperLogger!hello ⏎ # now it runs: {hello} → {HELLO} → print prints HELLO #
 ```
 
 > NOTE: A composed pipeline is always a **one-argument** function. Calling it with `!arg` feeds `arg` in as the seed of the chain, so `clean!Hello` and `Hello->clean!` mean the same thing.
 
 This is the same distinction that `?` and `!` already make: writing a pipeline without `!` leaves it as a thing that can be named, passed around, or executed later. Adding `!` is what causes it to run.
 
-> PRECEDENCE: A `:` binding always extends over the **whole** pipeline that follows it, not just the first stage. `upperLogger:upper->log` binds `upperLogger` to the composed pipeline `upper->log`, not `(upperLogger:upper)->log`. The same is true when executing: `result:5->double->log!` binds `result` to the value the executed pipeline produces.
+> PRECEDENCE: A `:` binding always extends over the **whole** pipeline that follows it, not just the first stage. `upperLogger:upper->print` binds `upperLogger` to the composed pipeline `upper->print`, not `(upperLogger:upper)->print`. The same is true when executing: `result:5->double->print!` binds `result` to the value the executed pipeline produces.
 
 > NOTE: A *bare* `!` — one that isn't glued to a name as part of a normal call like `f!` — is only meaningful as the trailing trigger of a `->` chain (as in `0->@counter!`, where the `!` runs the whole pipeline). Reading or writing an atom outside a pipeline (`@counter!` on its own) is a syntax error; atoms only participate in `->` chains.
 
@@ -994,7 +994,7 @@ Because a composed pipeline is just another function, it can sit anywhere a func
 
 ```punk
 > shout:upper->trim # composed function #
-> {Hello World}->shout->log! ⏎ # prints HELLO WORLD #
+> {Hello World}->shout->print! ⏎ # prints HELLO WORLD #
 ```
 
 > NOTE: A pipeline stage receives exactly one thing. A function that takes multiple arguments needs to be wrapped or partially applied before it can sit on the right of an `->`. The unary case is the natural fit.
@@ -1025,7 +1025,7 @@ This is the natural way to make a multi-parameter function fit into a pipeline, 
 ```punk
 > times:([a] [b]){X!{a? b?}} ⏎
 > double:times'2 ⏎ # first param locked to 2, second one open #
-> 5->double->log! ⏎ # pipes 5 in as the remaining param, then logs #
+> 5->double->print! ⏎ # pipes 5 in as the remaining param, then prints #
 {10}
 ```
 
@@ -1033,7 +1033,7 @@ The same applies to built-in binary functions like `+!`, `-!`, `<!` and friends 
 
 ```punk
 > under10:>'10 ⏎ # >'10 pre-fills the first param of >! as 10 #
-> 7->under10->log! ⏎ # asks: is 10 > 7? — logs TRUE #
+> 7->under10->print! ⏎ # asks: is 10 > 7? — prints TRUE #
 TRUE
 ```
 
@@ -1054,7 +1054,7 @@ An atom is not the same as its contents — it's a container. The only way to re
 Put `@name` on the **left** of `->`. The pipeline starts with the value currently inside the atom.
 
 ```punk
-> @currentAge->log! ⏎ # reads the value out of the atom, pipes it to log #
+> @currentAge->print! ⏎ # reads the value out of the atom, pipes it to print #
 0
 ```
 
@@ -1066,10 +1066,10 @@ Put `@name` on the **right** of `->`. Whatever flows into it replaces what was i
 
 ```punk
 > 42->@currentAge! ⏎ # the atom now contains 42 #
-> @currentAge->log! ⏎
+> @currentAge->print! ⏎
 42
 > 43->@currentAge! ⏎ # replaces 42 with 43 #
-> @currentAge->log! ⏎
+> @currentAge->print! ⏎
 43
 ```
 
@@ -1082,10 +1082,10 @@ Because `@name` can appear on either side of `->`, the same atom can show up twi
 ```punk
 > 0->@counter! ⏎
 > @counter->+'1->@counter! ⏎ # reads 0, adds 1, writes 1 back #
-> @counter->log! ⏎
+> @counter->print! ⏎
 1
 > @counter->+'1->@counter! ⏎ # reads 1, adds 1, writes 2 back #
-> @counter->log! ⏎
+> @counter->print! ⏎
 2
 ```
 
@@ -1534,7 +1534,7 @@ A small server file shows the pieces working together. The consumer file imports
 html:import!punk.html
 keystore:import!punk.keystore
 
-keystore.open!todo->[db]!
+keystore.open!todo->@db!
 
 dispatch:([req]){
   req??{
@@ -1545,7 +1545,7 @@ dispatch:([req]){
 }
 
 httpServe!{8080 dispatch.!?}
-{listening on port 8080}->log!
+{listening on port 8080}->print!
 ```
 
 Nothing about the call site is special: `httpServe!` is still the same execute-with-arguments form used everywhere else, and passing `dispatch.!?` keeps handler references explicit.

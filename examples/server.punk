@@ -1,22 +1,42 @@
+# Import reusable Punk modules. #
 html:import!punk.html
 keystore:import!punk.keystore
 
-handle:keystore.open!todo
-handle?->[db]!
+# Open append-only todo store and keep the current handle in atom @db. #
+keystore.open!todo->@db!
 
-createTodo:(note:_ desc:_){
-  [db]->keystore.put'{
+# Add a todo: append new {key value} entry and write the returned handle back to @db. #
+createTodo:([note] [desc]){
+  @db->keystore.put'{
     keystore.newKey!
     {note:note? desc:desc?}
-  }->[db]!
-}
+  }->@db!
+}~
 
-renderTodoItem:(v:_ i:_ k:_){
-  li:(){k?\:v.note? (v.desc?)}
-  name!{li li?}
-}
+# Pull replayed entries from a keystore handle. #
+dbEntries:([h]){
+  h.entries?
+}~
 
-indexPage:(todos:___){
+# Extract one field from parsed form pairs: {{note "x"} {description "y"}}. #
+formValue:([key] [pairs]){
+  reduce!{
+    ([acc] [pair]){
+      =!{pair.1? key?}??{
+        (TRUE){pair.2?}
+        (FALSE){acc?}
+      }!
+    }~
+    NULL
+    pairs?
+  }
+}~
+
+# Page template as DATA (functions as data):
+# - `indexPage` returns an element-tree value (html/head/body/etc).
+# - Nothing renders here; this is just structured data.
+# - `html.render!` later consumes this function-produced data and turns it into text/HTML. #
+indexPage:(){
   <\!DOCTYPE html>
   html:(lang:en){
     head:{
@@ -24,41 +44,49 @@ indexPage:(todos:___){
     }
     body:{
       h1:{Todo}
-      form:(method:POST action:/todo enctype:text/plain){
+      form:(method:POST action:\/todo enctype:text\/plain){
         input:(name:note type:text){}
         input:(name:description type:text){}
         button:(type:submit){Add Item}
       }
-      ul:{
-        map!{renderTodoItem? todos?}
-      }
+      ul:{}
     }
   }
-}
+}~
 
-index:(___){
-  todos:[db]->keystore.list!
-  body:html.render!indexPage!todos?
-  {status:200 headers:{Content-Type:text/html} body:body?}
-}
+# GET / -> render the page data into HTML text and return HTTP response. #
+index:([req]){
+  body:html.render!indexPage!
+  {status:200 headers:{Content-Type:text\/html} body:body?}
+}~
 
-createTodoHandler:(method:_ path:_ body:_){
-  form:html.parsePost!body?
-  createTodo!{form.note? form.description?}
-  {status:303 headers:{Location:/} body:{}}
-}
+# POST /todo -> parse plain-text form body, persist new todo, redirect to /. #
+createTodoHandler:([req]){
+  form:html.parsePost!req.3?
+  createTodo!{formValue!{note form?} formValue!{description form?}}
+  {status:303 headers:{Location:\/} body:{}}
+}~
 
-notFound:(___){
-  {status:404 headers:{Content-Type:text/plain} body:{Not Found}}
-}
+# Fallback route response. #
+notFound:([req]){
+  {status:404 headers:{Content-Type:text\/plain} body:{Not Found}}
+}~
 
-dispatch:(req:___){
-  req??{
-    (GET / ___){index!req?}
-    (POST /todo body:_){createTodoHandler!{POST /todo body?}}
-    (___){notFound!req?}
-  }
-}
+# Route dispatcher for request shape {method url body}. #
+dispatch:([req]){
+  isGetRoot:and!{=!{req.1? GET} =!{req.2? "/"}}
+  isPostTodo:and!{=!{req.1? POST} =!{req.2? "/todo"}}
+  isGetRoot??{
+    (TRUE){index!req?}
+    (FALSE){
+      isPostTodo??{
+        (TRUE){createTodoHandler!req?}
+        (FALSE){notFound!req?}
+      }!
+    }
+  }!
+}~
 
+# Start server by passing callable dispatch reference to core httpServe!. #
 httpServe!{8080 dispatch.!?}
-log!{listening on port 8080}
+print!{listening on port 8080}

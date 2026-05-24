@@ -515,6 +515,12 @@ export const builtins = {
     fs.appendFileSync(path, resolveForIO(valueToText(xs[1])));
     return NULL;
   },
+  'serialize': (args, _env, ctx) => {
+    const xs = argsItems(args);
+    const v = xs.length === 1 ? xs[0] : args;
+    return mkTextLit(format(v));
+  },
+  'deserialize': (args, _env, ctx) => deserializeBuiltin(args, ctx),
   'import': (args, env, ctx) => importBuiltin(args, env, ctx),
   'httpServe': (args, env, ctx) => httpServeBuiltin(args, env, ctx),
 
@@ -568,6 +574,20 @@ function resolveImportPath(spec, node) {
       : process.cwd();
     return path.resolve(base, cleaned.endsWith('.punk') ? cleaned : `${cleaned}.punk`);
   }
+
+  function deserializeBuiltin(args, ctx) {
+    const node = ctx && ctx.node;
+    const src = resolveForIO(valueToText(singleArg(args)));
+    if (src.trim() === '') return NULL;
+    const tokens = tokenize(src);
+    const tree = parseValidate(parseOperators(parseWords(parseTree(tokens))));
+    if (!tree || !Array.isArray(tree.items) || tree.items.length === 0) return NULL;
+    if (tree.items.length !== 1) {
+      throw new PunkRuntimeError(`deserialize!: expected exactly one value`, node && node.line, node && node.col);
+    }
+    const env = new Env();
+    return ctx.evalItem(tree.items[0], env);
+  }
   if (cleaned.startsWith('punk.')) {
     const parts = cleaned.slice('punk.'.length).split('.').filter(Boolean);
     if (parts.length === 0) {
@@ -602,6 +622,24 @@ function resolveImportPath(spec, node) {
     `import: cannot resolve module '${cleaned}' (use './X', '../X', or 'pkg.X')`,
     node && node.line, node && node.col,
   );
+}
+
+function deserializeBuiltin(args, ctx) {
+  const node = ctx && ctx.node;
+  const src = resolveForIO(valueToText(singleArg(args)));
+  if (src.trim() === '') return NULL;
+  const tokens = tokenize(src);
+  const tree = parseValidate(parseOperators(parseWords(parseTree(tokens))));
+  if (!tree || !Array.isArray(tree.items) || tree.items.length === 0) return NULL;
+  if (tree.items.length !== 1) {
+    throw new PunkRuntimeError(
+      `deserialize!: expected exactly one value`,
+      node && node.line,
+      node && node.col,
+    );
+  }
+  const env = new Env();
+  return ctx.evalItem(tree.items[0], env);
 }
 
 function importBuiltin(args, _env, ctx) {

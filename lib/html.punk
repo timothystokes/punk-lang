@@ -94,8 +94,8 @@ render:(*[items]){
 parseLine:([line]){
   parts:split!{\= line?}
   parts.#??{
-    (1){name!{parts.1? {}}}
-    (___){name!{parts.1? parts.2?}}
+    (1){{parts.1? {}}}
+    (___){{parts.1? parts.2?}}
   }!
 }~
 
@@ -104,4 +104,13 @@ parsePost:([body]){
   map!{([line]){parseLine!line?}~ lines?}
 }~
 
-{render:render? escText:escText? escAttr:escAttr? parsePost:parsePost?}
+module:(){
+  {
+    render:render.!?
+    escText:escText.!?
+    escAttr:escAttr.!?
+    parsePost:parsePost.!?
+  }
+}~
+
+module!
