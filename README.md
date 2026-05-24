@@ -1,3 +1,12 @@
+```
+╭───╮ ╭╮  ╭─╮ ╭╮ ╭╮ ╭╮╭─╮      
+│╭╮ │ ││  │ │ │╰╮││ │╰╯╭╯         
+│╰╯ │ ││  │╭╯ │ ╰╯│ │╭╮│         
+│╭──╯ ││  ││ ╭╯╭╮ │ │││╰╮            
+│╰╮   │╰──╯│ │ │╰╮│ │││ ╰╮      
+╰─╯   ╰────╯ ╰─╯ ╰╯ ╰╯╰──╯ 
+```
+
 # Punk
 
 Punk is a functional immutable interpreted loosely-typed programming language. It has unique concepts and syntax. It's named after it's creator who is a self-confessed punk! This implementation uses JavaScript as it's runtime.
