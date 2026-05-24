@@ -1,7 +1,7 @@
 {
   "name": "punk-lang",
-  "version": "0.2.1",
-  "description": "Punk is a Fun-ctional imutable interpreted programming language.",
+  "version": "0.2.2",
+  "description": "Punk is a functional immutable interpreted loosely-typed programming language.",
   "author": "Timothy Stokes",
   "license": "LGPL-3.0",
   "type": "module",
