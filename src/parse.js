@@ -515,7 +515,8 @@ const decodeRangeWord = (text, line, col) => {
 //   N        → { kind: 'index', n }
 //   #        → { kind: 'length' }      (final only)
 //   :        → { kind: 'nameOf' }      (final only)
-//   ()       → { kind: 'pattern' }     (final only)
+//   _        → { kind: 'pattern' }     (final only)
+//   !        → { kind: 'functionRef' } (final only)
 //   name     → { kind: 'name', text }
 //   N~M etc. → { kind: 'range', from, to }
 const decodeSegments = (segs, line, col) => {
@@ -529,9 +530,12 @@ const decodeSegments = (segs, line, col) => {
     } else if (s === ':') {
       if (!last) throw new PunkSyntaxError("':' must be the final path segment", line, col);
       out.push({ kind: 'nameOf' });
-    } else if (s === '()') {
-      if (!last) throw new PunkSyntaxError("'()' must be the final path segment", line, col);
+    } else if (s === '_') {
+      if (!last) throw new PunkSyntaxError("'_' must be the final path segment", line, col);
       out.push({ kind: 'pattern' });
+    } else if (s === '!') {
+      if (!last) throw new PunkSyntaxError("'!' must be the final path segment", line, col);
+      out.push({ kind: 'functionRef' });
     } else if (s.includes('~')) {
       const { from, to } = decodeRangeWord(s, line, col);
       out.push({ kind: 'range', from, to });
@@ -702,12 +706,13 @@ const decodeWord = (w) => {
     let headNode = null;
     if (isInt(headRaw)) {
       // A number can head a path only when every tail segment is a
-      // "meta" segment that's defined on any value: `.()` (pattern) or
-      // `.:` (name). Anything else (`.1`, `.#`, `.1~3`) implies the
+      // "meta" segment that's defined on any value: `._` (pattern info),
+      // `.!` (function ref), or `.:` (name). Anything else (`.1`, `.#`,
+      // `.1~3`) implies the
       // head is a container, which a number is not.
       const tailSegs = segs.slice(1);
       const allMeta = tailSegs.length > 0
-        && tailSegs.every((s) => s === '()' || s === ':');
+        && tailSegs.every((s) => s === '_' || s === '!' || s === ':');
       if (!allMeta) {
         throw new PunkSyntaxError(
           `a number cannot head a path ('${text}')`, line, col,
@@ -996,19 +1001,13 @@ const collectDynPath = (items, i, headOverride) => {
     const rs = tail[k];
     const isLast = k === tail.length - 1;
     if (rs.tmpl) {
-      // Special: an empty `{}` segment is the "body" segment — gets a
-      // function's body items as a tmpl (queries/text-embeds evaluated
-      // in the function's captured env). Must be the final segment.
+      // Empty `{}` path segment syntax was removed.
       if (rs.tmpl.kind === 'Tmpl' && rs.tmpl.items.length === 0) {
-        if (!isLast) {
-          throw new PunkSyntaxError(
-            "'{}' must be the final path segment", lineRef, colRef,
-          );
-        }
-        segs.push({ kind: 'body' });
-      } else {
-        segs.push({ kind: 'dynamic', expr: walkNode(rs.tmpl) });
+        throw new PunkSyntaxError(
+          "'{}' is not a valid path segment", lineRef, colRef,
+        );
       }
+      segs.push({ kind: 'dynamic', expr: walkNode(rs.tmpl) });
     } else {
       const s = rs.str;
       if (s === '#') {
@@ -1017,9 +1016,12 @@ const collectDynPath = (items, i, headOverride) => {
       } else if (s === ':') {
         if (!isLast) throw new PunkSyntaxError("':' must be the final path segment", lineRef, colRef);
         segs.push({ kind: 'nameOf' });
-      } else if (s === '()') {
-        if (!isLast) throw new PunkSyntaxError("'()' must be the final path segment", lineRef, colRef);
+      } else if (s === '_') {
+        if (!isLast) throw new PunkSyntaxError("'_' must be the final path segment", lineRef, colRef);
         segs.push({ kind: 'pattern' });
+      } else if (s === '!') {
+        if (!isLast) throw new PunkSyntaxError("'!' must be the final path segment", lineRef, colRef);
+        segs.push({ kind: 'functionRef' });
       } else if (s.includes('~')) {
         const { from, to } = decodeRangeWord(s, lineRef, colRef);
         segs.push({ kind: 'range', from, to });

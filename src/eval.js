@@ -20,7 +20,7 @@
 import { PunkRuntimeError } from './errors.js';
 import { mkTmpl, mkText, mkWord, mkFn, mkPartialFn, NULL, TRUE, FALSE } from './values.js';
 import { match } from './match.js';
-import { slotName, slotIsRest } from './slot.js';
+import { slotInfo, slotName, slotIsRest } from './slot.js';
 import { builtins, builtinArity } from './builtins.js';
 import { format } from './format.js';
 
@@ -77,6 +77,31 @@ const stripMeta = (node) => {
   const { line, col, glued, ...rest } = node;
   return rest;
 };
+
+function patternInfoSlot(raw) {
+  const info = slotInfo(raw);
+  const match = info.inner === null
+    ? (info.rest ? mkWord('*', 'variadic') : mkWord('_', 'wildcard'))
+    : stripMeta(info.inner);
+  return mkTmpl([
+    { kind: 'Named', name: 'bind',  value: info.name == null ? NULL : mkWord(info.name) },
+    { kind: 'Named', name: 'rest',  value: info.rest ? TRUE : FALSE },
+    { kind: 'Named', name: 'match', value: match },
+  ]);
+}
+
+function patternInfo(pattern) {
+  const ordered = mkTmpl((pattern.items || []).map(patternInfoSlot));
+  const named = mkTmpl((pattern.suchThat || []).map((clause) => ({
+    kind: 'Named',
+    name: clause.name,
+    value: patternInfoSlot(clause.value),
+  })));
+  return mkTmpl([
+    { kind: 'Named', name: 'ordered', value: ordered },
+    { kind: 'Named', name: 'named', value: named },
+  ]);
+}
 
 // Evaluate one top-level item. Most kinds return as-is (templates
 // are inert). Named binds into `env` and yields the bound value.
@@ -340,9 +365,19 @@ function walkSegment(cur, seg, node, env) {
       return { value: mkWord(cur.name), name: null };
     }
     case 'pattern': {
+      const target = (v && v.kind === 'Named') ? v.value : v;
+      if (!target) return null;
+      if (target.kind === 'Fn') return { value: patternInfo(target.params), name: null };
+      if (target.kind === 'Pattern') return { value: patternInfo(target), name: null };
+      return null;
+    }
+    case 'functionRef': {
       const fn = (v && v.kind === 'Named') ? v.value : v;
-      if (!fn || fn.kind !== 'Fn') return null;
-      return { value: mkTmpl(fn.params.items), name: null };
+      if (!fn) return null;
+      if (fn.kind === 'Fn' || fn.kind === 'Builtin' || fn.kind === 'PartialFn' || fn.kind === 'Pipeline') {
+        return { value: fn, name: null };
+      }
+      return null;
     }
     case 'body': {
       const fn = (v && v.kind === 'Named') ? v.value : v;
@@ -426,7 +461,24 @@ function walkSegment(cur, seg, node, env) {
 function evalQuery(node, env) {
   const result = evalQueryFull(node, env);
   if (result === null) return NULL;
-  return result.value;
+  return queryValue(node, result.value);
+}
+
+function queryEndsWithFnRef(node) {
+  const segs = node && node.segments ? node.segments : [];
+  return segs.length > 0 && segs[segs.length - 1].kind === 'functionRef';
+}
+
+function queryValue(node, v) {
+  if (!v) return v;
+  // `?` on a function returns its body/template. Use `.!?` to retrieve
+  // a function reference.
+  if (v.kind === 'Fn' && !queryEndsWithFnRef(node)) {
+    const body = v.body;
+    if (!body) return NULL;
+    return stripMeta(body);
+  }
+  return v;
 }
 
 // Like evalQuery, but returns { value, name } so callers can reconstruct
@@ -842,7 +894,7 @@ function cascadeTmpl(tmpl, env) {
     } else if (it && it.kind === 'Query' && it.spread) {
       const full = evalQueryFull(it, env);
       if (full === null) { items.push(NULL); continue; }
-      spreadFull(items, full, env);
+      spreadFull(items, { ...full, value: queryValue(it, full.value) }, env);
     } else if (it && it.kind === 'Named') {
       // Named-item INSIDE a tmpl literal is a data pair, NOT a binding
       // into outer scope. Evaluate the value side; do not env.bind.

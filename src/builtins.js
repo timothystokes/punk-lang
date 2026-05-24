@@ -12,6 +12,15 @@ import {
 import { format } from './format.js';
 import { slotIsRest } from './slot.js';
 import * as fs from 'node:fs';
+import * as http from 'node:http';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { tokenize } from './tokenize.js';
+import {
+  parseTree, parseWords, parseOperators, parseValidate,
+} from './parse.js';
+import { Env } from './env.js';
 
 // ---------- Helpers ----------
 
@@ -506,6 +515,8 @@ export const builtins = {
     fs.appendFileSync(path, resolveForIO(valueToText(xs[1])));
     return NULL;
   },
+  'import': (args, env, ctx) => importBuiltin(args, env, ctx),
+  'httpServe': (args, env, ctx) => httpServeBuiltin(args, env, ctx),
 
   // ----- Collections --------------------------------------------------
   // HOFs take behaviour first, data last (so `'`-partial is useful).
@@ -544,6 +555,179 @@ export const builtins = {
     return boolValue(haystack.some((h) => equals(h, needle)));
   },
 };
+
+const STDLIB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'lib');
+const moduleCache = new Map();
+const importStack = [];
+
+function resolveImportPath(spec, node) {
+  const cleaned = spec.endsWith('.') ? spec.slice(0, -1) : spec;
+  if (cleaned.startsWith('./') || cleaned.startsWith('../')) {
+    const base = importStack.length > 0
+      ? path.dirname(importStack[importStack.length - 1])
+      : process.cwd();
+    return path.resolve(base, cleaned.endsWith('.punk') ? cleaned : `${cleaned}.punk`);
+  }
+  if (cleaned.startsWith('punk.')) {
+    const parts = cleaned.slice('punk.'.length).split('.').filter(Boolean);
+    if (parts.length === 0) {
+      throw new PunkRuntimeError(`import: empty stdlib path 'punk.'`, node && node.line, node && node.col);
+    }
+    return path.join(STDLIB_DIR, ...parts) + '.punk';
+  }
+  const dot = cleaned.indexOf('.');
+  if (dot > 0) {
+    const pkg = cleaned.slice(0, dot);
+    const parts = cleaned.slice(dot + 1).split('.').filter(Boolean);
+    if (parts.length === 0) {
+      throw new PunkRuntimeError(`import: empty module path '${cleaned}'`, node && node.line, node && node.col);
+    }
+    const base = importStack.length > 0
+      ? path.dirname(importStack[importStack.length - 1])
+      : process.cwd();
+    const req = createRequire(path.join(base, 'noop.js'));
+    let pkgJson;
+    try {
+      pkgJson = req.resolve(`${pkg}/package.json`);
+    } catch (e) {
+      throw new PunkRuntimeError(
+        `import: cannot resolve package '${pkg}': ${e.message}`,
+        node && node.line, node && node.col,
+      );
+    }
+    const pkgDir = path.dirname(pkgJson);
+    return path.join(pkgDir, 'lib', ...parts) + '.punk';
+  }
+  throw new PunkRuntimeError(
+    `import: cannot resolve module '${cleaned}' (use './X', '../X', or 'pkg.X')`,
+    node && node.line, node && node.col,
+  );
+}
+
+function importBuiltin(args, _env, ctx) {
+  const node = ctx && ctx.node;
+  const spec = resolveForIO(valueToText(singleArg(args)));
+  const absPath = resolveImportPath(spec, node);
+  if (moduleCache.has(absPath)) return moduleCache.get(absPath);
+  let source;
+  try {
+    source = fs.readFileSync(absPath, 'utf8');
+  } catch (e) {
+    throw new PunkRuntimeError(`import: cannot read '${absPath}': ${e.message}`, node && node.line, node && node.col);
+  }
+  const tokens = tokenize(source);
+  const tree = parseValidate(parseOperators(parseWords(parseTree(tokens))));
+  const modEnv = new Env();
+  importStack.push(absPath);
+  let last = NULL;
+  try {
+    for (const item of tree.items) {
+      last = ctx.evalItem(item, modEnv);
+    }
+  } finally {
+    importStack.pop();
+  }
+  moduleCache.set(absPath, last);
+  return last;
+}
+
+function getNamedField(tmpl, name) {
+  if (!tmpl || tmpl.kind !== 'Tmpl') return null;
+  for (const it of tmpl.items) {
+    if (it && it.kind === 'Named' && it.name === name) return it.value;
+  }
+  return null;
+}
+
+function unwrapSingleton(v) {
+  let cur = v;
+  while (cur && cur.kind === 'Tmpl' && cur.items.length === 1) {
+    cur = cur.items[0];
+  }
+  return cur;
+}
+
+function isCallable(v) {
+  if (!v) return false;
+  return v.kind === 'Fn'
+    || v.kind === 'Builtin'
+    || v.kind === 'PartialFn'
+    || v.kind === 'Pipeline'
+    || v.kind === 'Tmpl'
+    || v.kind === 'Text';
+}
+
+function asHeaderObject(v, node) {
+  if (v == null || (v && v.kind === 'Null')) return {};
+  if (!v || v.kind !== 'Tmpl') {
+    throw new PunkRuntimeError(`httpServe: headers must be a template`, node && node.line, node && node.col);
+  }
+  const out = {};
+  for (const it of v.items) {
+    if (it && it.kind === 'Named') {
+      out[it.name] = resolveForIO(valueToText(it.value));
+    }
+  }
+  return out;
+}
+
+function methodNeedsBody(m) {
+  return m === 'POST' || m === 'PUT' || m === 'PATCH';
+}
+
+function toRequestValue(req, bodyText) {
+  const method = mkWord(String(req.method || 'GET'));
+  const url = mkTextLit(String(req.url || '/'));
+  const body = bodyText == null ? NULL : mkTextLit(bodyText);
+  return mkTmpl([method, url, body]);
+}
+
+function toResponseParts(v, node) {
+  let r = unwrapSingleton(v);
+  if (!r || r.kind !== 'Tmpl') {
+    throw new PunkRuntimeError(`httpServe: handler must return a template response`, node && node.line, node && node.col);
+  }
+  const statusV = getNamedField(r, 'status');
+  const headersV = getNamedField(r, 'headers');
+  const bodyV = getNamedField(r, 'body');
+  const status = statusV == null ? 200 : Number(toNum(statusV, node));
+  const headers = asHeaderObject(headersV, node);
+  const body = bodyV == null || (bodyV && bodyV.kind === 'Null')
+    ? ''
+    : resolveForIO(valueToText(bodyV));
+  return { status, headers, body };
+}
+
+function httpServeBuiltin(args, _env, ctx) {
+  const node = ctx && ctx.node;
+  const xs = argsItems(args);
+  if (xs.length !== 2) {
+    throw new PunkRuntimeError(`httpServe! expects 2 arguments, got ${xs.length}`, node && node.line, node && node.col);
+  }
+  const port = Number(toNum(xs[0], node));
+  const handler = unwrapSingleton(xs[1]);
+  if (!isCallable(handler)) {
+    throw new PunkRuntimeError(`httpServe: second argument must be callable`, node && node.line, node && node.col);
+  }
+  const invoke = (req, res, bodyText) => {
+    const requestValue = toRequestValue(req, bodyText);
+    const result = ctx.callFn(handler, mkTmpl([requestValue]), node);
+    const response = toResponseParts(result, node);
+    res.writeHead(response.status, response.headers);
+    res.end(response.body);
+  };
+  const server = http.createServer((req, res) => {
+    if (methodNeedsBody(String(req.method || 'GET'))) {
+      const chunks = [];
+      req.on('data', (chunk) => { chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))); });
+      req.on('end', () => invoke(req, res, Buffer.concat(chunks).toString('utf8')));
+      return;
+    }
+    invoke(req, res, null);
+  });
+  server.listen(port);
+  return NULL;
+}
 
 // ---------- Collection helpers ----------
 

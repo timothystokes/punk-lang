@@ -1,5 +1,5 @@
 // Querying — path navigation, length, index, range, name (`.:?`),
-// pattern-of-function (`.()?`).
+// function-pattern (`._?`) and function-ref (`.!?`).
 //
 // Locked semantics:
 //   - Path traversal always returns the VALUE side of any named thing it
@@ -141,19 +141,63 @@ test('`.:?` works off any segment of a path', () => {
   assert.equal(punk(withPeople('people.1.2.:?')), '{age}');
 });
 
-// ---------- Pattern segment `.()?` ----------
+// ---------- Pattern segment `._?` ----------
 
-test('`.()?` of a function returns its pattern items as a tmpl', () => {
-  // The pattern's items are returned as a tmpl so callers can `map!`
-  // or otherwise iterate them like any structured template.
-  assert.equal(punk('add:([a] [b]){+!{a? b?}}  add.()?'),
-                    '{[a] [b]}');
+test('`._?` of a function returns structured pattern info (ordered/named)', () => {
+  assert.equal(
+    punk(`
+      add:([a] [b]){+!{a? b?}}
+      p:add._?
+      o:{p.ordered.#? p.named.#? p.ordered.1.bind? p.ordered.1.match?}
+      o!
+    `),
+    '{2 0 a _}'
+  );
 });
 
-test('`.()?` of a non-function returns NULL', () => {
-  assert.equal(punk('x:42  x.()?'), 'NULL');
-  assert.equal(punk('xs:{1 2 3}  xs.()?'), 'NULL');
-  assert.equal(punk('s:"hi"  s.()?'), 'NULL');
+test('`?` on a named pattern returns the pattern reference', () => {
+  assert.equal(punk('pat:([a] [b])  pat?'), '([a] [b])');
+});
+
+test('`._?` on a named pattern returns structured pattern info', () => {
+  assert.equal(
+    punk(`
+      pat:([x] * | b:[y])
+      p:pat._?
+      o:{p.ordered.#? p.named.#? p.ordered.2.rest? p.named.b.bind?}
+      o!
+    `),
+    '{2 1 TRUE y}'
+  );
+});
+
+test('`._?` of a non-function returns NULL', () => {
+  assert.equal(punk('x:42  x._?'), 'NULL');
+  assert.equal(punk('xs:{1 2 3}  xs._?'), 'NULL');
+  assert.equal(punk('s:"hi"  s._?'), 'NULL');
+});
+
+test('removed pattern/body segment syntaxes now fail', () => {
+  punkThrows('x.()?');
+  punkThrows('x.{}?');
+});
+
+// ---------- Function-ref segment `.!?` ----------
+
+test('`.!?` returns a function reference for user functions and builtins', () => {
+  assert.equal(punk('add:([a] [b]){+!{a? b?}}  f:add.!?  f!{2 3}'), '{5}');
+  assert.equal(punk('plus:+.!?  plus!{7 8}'), '{15}');
+});
+
+test('`.!?` of a non-function returns NULL', () => {
+  assert.equal(punk('x:42  x.!?'), 'NULL');
+});
+
+// ---------- `?` on function values returns the body/template ----------
+
+test('`?` on a function returns its body/template value', () => {
+  assert.equal(punk('f:([x]){+!{x? 1}}  f?'), '{+!{x? 1}}');
+  assert.equal(punk('g:([x])"a {x?} c"  g?'), '{"a {x?} c"}');
 });
 
 // ---------- Querying without a `?` is just text ----------
@@ -168,7 +212,7 @@ test('a path without `?` is just bare characters at the top level', () => {
 test('querying does not evaluate functions inside the value', () => {
   assert.equal(
     punk('xs:{([n]){+!{n? 1}} 2}  xs.1?'),
-    '([n]){+!{n? 1}}'
+    '{+!{n? 1}}'
   );
 });
 

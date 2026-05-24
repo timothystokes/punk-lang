@@ -1,4 +1,3 @@
-http:import!punk.http
 html:import!punk.html
 keystore:import!punk.keystore
 
@@ -61,30 +60,5 @@ dispatch:(req:___){
   }
 }
 
-http.serve!{8080 dispatch?}
+httpServe!{8080 dispatch.!?}
 log!{listening on port 8080}
-
-
-# approach to evaluating fucntiona as html
-
-render:(*){
-  map!{([element])"<{element.:?} {join!(map!(([attrib]){
-    "{attrib.:?}=\"{attrib?}\""
-  } element.()?))}>
-    {join!{map!{render? element.{}?!}}}
-  </{element.:?}>" *}
-}
-
-render!{
-  html:(lang:en){
-    head:(){
-      title:(){punk-todo}
-    }
-    body:(){
-      h1:(class:bold){Welcome}
-      p:(){Welcome to Punk}
-    }
-  }
-}
-
-#

@@ -249,9 +249,14 @@ test('xs.:? → nameOf segment', () => {
   assert.deepEqual(q.segments, [{ kind: 'nameOf' }]);
 });
 
-test('xs.()? → pattern segment', () => {
-  const [q] = items('xs.()?');
+test('xs._? → pattern segment', () => {
+  const [q] = items('xs._?');
   assert.deepEqual(q.segments, [{ kind: 'pattern' }]);
+});
+
+test('xs.!? → functionRef segment', () => {
+  const [q] = items('xs.!?');
+  assert.deepEqual(q.segments, [{ kind: 'functionRef' }]);
 });
 
 test('xs.fullname? → name segment', () => {

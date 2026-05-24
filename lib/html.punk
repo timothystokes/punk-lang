@@ -1,77 +1,107 @@
 voidTags:{area base br col embed hr img input link meta source track wbr}
 
-escText:(s:_){
+escText:([s]){
   s1:replace!{& &amp; s?}
   s2:replace!{< &lt; s1?}
   s3:replace!{> &gt; s2?}
   s3?
-}
+}~
 
-escAttr:(s:_){
+escAttr:([s]){
   s1:replace!{& &amp; s?}
   s2:replace!{< &lt; s1?}
   s3:replace!{\" &quot; s2?}
   s3?
-}
+}~
 
-isVoid:(tag:_){contains!{tag? voidTags?}}
+isVoid:([tag]){contains!{tag? voidTags?}}
 
-renderAttrs:(fn:_){
-  attrs:pattern!fn?
-  map!{(v:_ i:_ k:_){
-    {{k?}=\"{escAttr!text!v?}\"}
-  } attrs?}
-}
+renderAttrs:([info]){
+  slots:info.ordered?
+  parts:map!{([slot]){
+    k:slot.bind?
+    k??{
+      (NULL){""}
+      (_){
+        or!{=!{slot.match? _} =!{slot.match? *}}??{
+          (TRUE){""}
+          (FALSE){"{k?}=\"{escAttr!{slot.match?}}\""}
+        }!
+      }
+    }!
+  }~ slots?}
+  keep:filter!{([p]){not!isempty!p?}~ parts?}
+  join!{" " keep?}
+}~
 
-walk:(tag:_ fn:_){
-  attrs:renderAttrs!fn?
-  void:isVoid!tag?
-  void??{
-    (TRUE){{<{tag?} {attrs?}/>}}
-    (FALSE){
-      kids:template!fn?
-      parts:map!{(v:_ i:_ k:_){
-        islist:islist!v?
-        islist??{
-          (TRUE){
-            map!{(vv:_ ii:_ kk:_){
-              isfn:isfn!vv?
-              isfn??{
-                (TRUE){walk!{kk? vv?}}
-                (FALSE){escText!text!vv?}
-              }
-            } v?}
-          }
-          (FALSE){
-            isfn:isfn!v?
-            isfn??{
-              (TRUE){walk!{k? v?}}
-              (FALSE){escText!text!v?}
-            }
-          }
-        }
-      } kids?}
-      {<{tag?} {attrs?}>{parts?}</{tag?}>}
+renderLeaf:([value]){
+  islist!value??{
+    (TRUE){join!{" " render!value.?}}
+    (FALSE){escText!{value?}}
+  }!
+}~
+
+renderNamedTmpl:([tag] [body]){
+  inner:join!{" " render!body.?}
+  isVoid!tag??{
+    (TRUE){"<{tag?}/>"}
+    (FALSE){"<{tag?}>{inner?}</{tag?}>"}
+  }!
+}~
+
+renderNamedFn:([tag] [attrs] [body]){
+  inner:join!{" " render!body.?}
+  isVoid!tag??{
+    (TRUE){
+      isempty!attrs??{
+        (TRUE){"<{tag?}/>"}
+        (FALSE){"<{tag?} {attrs?}/>"}
+      }!
     }
-  }
-}
+    (FALSE){
+      isempty!attrs??{
+        (TRUE){"<{tag?}>{inner?}</{tag?}>"}
+        (FALSE){"<{tag?} {attrs?}>{inner?}</{tag?}>"}
+      }!
+    }
+  }!
+}~
 
-render:(page:_){
-  tree:walk!{html page?}
-  flatten!tree?
-}
+render:(*[items]){
+  map!{(*[wrap]){
+    tag:wrap.1.:?
+    isFn:isfn!wrap.1.!?
+    patInfo:wrap.1._?
+    isFn??{
+      (FALSE){
+        tag??{
+          (NULL){renderLeaf!{wrap.1?}}
+          (_){
+            patInfo??{
+              (NULL){renderNamedTmpl!{tag? wrap.1?}}
+              (*){renderNamedFn!{tag? renderAttrs!patInfo? {}}}
+            }!
+          }
+        }!
+      }
+      (TRUE){
+        renderNamedFn!{tag? renderAttrs!wrap.1._? wrap.1?}
+      }
+    }!
+  }~ items?}
+}~
 
-parseLine:(line:_){
+parseLine:([line]){
   parts:split!{\= line?}
   parts.#??{
     (1){name!{parts.1? {}}}
     (___){name!{parts.1? parts.2?}}
-  }
-}
+  }!
+}~
 
-parsePost:(body:_){
+parsePost:([body]){
   lines:split!{\n body?}
-  map!{(line:_){parseLine!line?} lines?}
-}
+  map!{([line]){parseLine!line?}~ lines?}
+}~
 
 {render:render? escText:escText? escAttr:escAttr? parsePost:parsePost?}

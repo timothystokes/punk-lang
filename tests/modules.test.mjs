@@ -18,7 +18,8 @@
 // For now: only the parser-shape sanity checks live here.
 
 import { test } from 'node:test';
-import { punkThrows } from './_punk.mjs';
+import assert from 'node:assert/strict';
+import { punk, punkThrows } from './_punk.mjs';
 
 test('import! — missing arg is an error', () => {
   punkThrows('import!');
@@ -26,4 +27,16 @@ test('import! — missing arg is an error', () => {
 
 test('importJS! — missing arg is an error', () => {
   punkThrows('importJS!');
+});
+
+test('import!punk.html returns module namespace template', () => {
+  assert.equal(punk('m:import!punk.html  m.render.:?'), '{render}');
+});
+
+test('httpServe! is available as a core builtin', () => {
+  assert.equal(punk('x:httpServe.!?  x??{(NULL){FALSE}(*){TRUE}}!'), '{TRUE}');
+});
+
+test('httpServe! rejects non-callable handler', () => {
+  punkThrows('httpServe!{8080 42}');
 });

@@ -75,8 +75,8 @@ test('isfn! — TRUE for a function literal', () => {
   assert.equal(punk('isfn!([x]){x?}'), 'TRUE');
 });
 
-test('isfn! — TRUE for a named function (resolved with `?`)', () => {
-  assert.equal(punk('f:([x]){x?}  isfn!{f?}'), 'TRUE');
+test('isfn! — TRUE for a named function (resolved with `.!?`)', () => {
+  assert.equal(punk('f:([x]){x?}  isfn!{f.!?}'), 'TRUE');
 });
 
 test('isfn! — FALSE for a pattern without a body', () => {

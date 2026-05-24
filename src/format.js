@@ -101,7 +101,8 @@ const formatSegment = (seg) => {
     case 'name':    return '.' + seg.text;
     case 'length':  return '.#';
     case 'nameOf':  return '.:';
-    case 'pattern': return '.()';
+    case 'pattern': return '._';
+    case 'functionRef': return '.!';
     case 'range':   return '.' + formatRange(seg);
     case 'dynamic': return '.' + format(seg.expr);
     default:

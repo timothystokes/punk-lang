@@ -167,7 +167,7 @@ Three bare names always resolve to fixed values. They behave like ordinary Words
 
 - a query whose path doesn't resolve — `people.99.fullname?` → `NULL`
 - the name segment of an unnamed thing — `{a b c}.1.:?` → `NULL`
-- the pattern segment of a non-function — `42.()?` → `NULL`
+- the pattern segment of a non-function — `42._?` → `NULL`
 - a regex capture group that didn't match — see [Unmatched groups](#unmatched-groups)
 - a function that produces no value via its return range
 
@@ -256,14 +256,30 @@ Here are some other ways of querying:
 | `people.3.fullname.~5?` | `"Ben J"` | `~n` | Range: from the beginning up to the item at position `n`. Works on characters of an unstructured template too. |
 | `people.1.2~3?` | `{42 black}` | `n~n` | Range: items from position `n` through position `m` inclusive. |
 | `people.1.fullname.:?` | `{fullname}` | `:` | Name: the name of the referenced thing as a Word, or `NULL` if it has no name. |
-| `add.()?` | `{[a] [b]}` | `()` | Pattern: the pattern items of a function as a tmpl (so callers can `map!`/iterate them like any structured template), or `NULL` if the referenced thing is not a function. |
+| `sum:([a] [b]){+!{a? b?}}  sum?` | `{+!{a? b?}}` | `?` | Querying a function returns its body/template (not a callable reference). |
+| `pat:([a] [b])  pat?` | `([a] [b])` | `?` | Querying a named pattern returns the pattern reference itself. |
+| `add._?` | `{ordered:{...} named:{...}}` | `_` | Pattern info: returns a structured template describing a function/pattern shape. `ordered` holds positional slots; `named` holds right-of-`|` clauses. |
+| `add.!?` | `([a] [b]){+!{a? b?}}` | `!` | Function reference: returns the function value itself (works for user functions and builtins). |
 | `people.1.?` | `fullname:"John Smith" age:42 hair:black ...` | `.?` | Spread: the full thing at the end of the path, inlined into the parent (Named names preserved; plain `{}` boundary dropped). See *How values splice into their surroundings* below. |
 
-> NOTE: Querying a built-in function name with `?` gives you the function itself (e.g. `+?` is the `+!` function as a value). This is how you alias a built-in under a new name: `add:+?` — bare `+` on its own would be the literal Word `+`, but `+?` looks it up and returns the function.
+> NOTE: `?` on a function returns that function's body/template (without name/pattern), and `?` on a named pattern returns the pattern value. To get a callable function value, use `.!?` — e.g. `add:+.!?`.
+
+> NOTE: `._?` returns structured slot info. Each slot is `{bind:... rest:TRUE|FALSE match:...}`. `bind` is `NULL` when unbound; `named` corresponds to clauses right of `|`.
+
+```punk
+> pat:([x] * | b:[y]) ⏎
+> pat? ⏎
+([x] * | b:[y])
+> info:pat._? ⏎
+> info? ⏎
+{ordered:{{bind:x rest:FALSE match:_} {bind:NULL rest:TRUE match:*}} named:{b:{bind:y rest:FALSE match:_}}}
+> {info.ordered.#? info.named.#? info.named.b.bind?}! ⏎
+{2 1 y}
+```
 
 > NOTE: Querying templates is safe. Punk does not evaluate anything when querying. It simply resolves the information as it is currently contained within the structure of a template.
 
-> NOTE: The terminal segments `.#`, `.:` and `.()` only make sense at the **end** of a path — they each return a value that isn't further structured by the same path. So `xs.#.1?` (length, then first item of it) is not a valid path; if you need to use a length or name in further work, get it out with one query and use it in the next.
+> NOTE: The terminal segments `.#`, `.:`, `._` and `.!` only make sense at the **end** of a path — they each return a value that isn't further structured by the same path. So `xs.#.1?` (length, then first item of it) is not a valid path; if you need to use a length or name in further work, get it out with one query and use it in the next.
 
 #### Dynamic path steps
 
@@ -795,7 +811,7 @@ To use the function we apply it using ! which is the notation in punk for execut
 ```
 
 > Q: What is the differnce between querying a template using ? and executing a template using ! ?
-> A: a query will not execute anything only resolve queries defined by nested ? usage. Execution using ! will first evaluate just as ? does and then also cascades down to execute any functions nested within that template. 
+> A: `?` resolves only the single path it's attached to. It does not cascade into nested items. `!` evaluates/cascades through the whole target template (resolving reached queries and executing reached functions). Special case: if the queried thing is a function, `?` returns the function body/template; use `.!?` when you need the callable function reference.
 
 ### Functions used within functions
 
@@ -1191,7 +1207,7 @@ To call use the greeters...
 
 ### Method-style dispatch — objects as namespaces
 
-Because a name-path query (`http.serve!…`, `db.read!…`) is just navigation into a template, swapping the *object* swaps the implementation. The same call site works against any template that carries the right names — the Punk version of structural typing or duck-typed protocols.
+Because a name-path query (`db.read!…`) is just navigation into a template, swapping the *object* swaps the implementation. The same call site works against any template that carries the right names — the Punk version of structural typing or duck-typed protocols.
 
 The trick when the receiver is itself bound to a name is the `?.` query-chain head: `p?.print!{...}` says "fetch what `p` is bound to, then follow `.print`". If `p` is bound to the bareword `printer`, the `?` step also dereferences that bareword as a name in scope, landing on the `printer` template before walking into `.print`. Without the leading `?`, `p.print!` would try to walk a path *inside* the bareword `printer` and fail.
 
@@ -1231,7 +1247,7 @@ All of these are assembled from four primitives — patterns, `??`, name-path qu
 
 Punk ships with a set of built-in functions. They all follow the same form: `name!{arguments}`. Because everything is a template, a single un-braced argument is shorthand for a one-item template — `not!TRUE` and `not!{TRUE}` are the same call.
 
-Anything that's already expressible through queries is **not** a built-in. There is no `slice`, `index`, `head`, `tail`, `first`, `last`, `take`, `drop`, `concat`, `prep`, `append`, or `len` — those are all covered by path-and-range queries (`.1?`, `.~?`, `.2~5?`, `.3~?`, `.#?`) and by template composition (`{a? b?}` splices, because queries return contents).
+Anything that's already expressible through queries is **not** a built-in. There is no `slice`, `index`, `head`, `tail`, `first`, `last`, `take`, `drop`, `concat`, `prep`, `append`, or `len` — those are all covered by path-and-range queries (`.1?`, `.~?`, `.2~5?`, `.3~?`, `.#?`) and by template composition (`{a? b?}` for single-value query landings, `{a.? b.?}` when you explicitly want spread).
 
 ### Arithmetic
 
@@ -1458,7 +1474,7 @@ Because the file is just a template, it can be queried for the count of asserts,
 | Call | Result |
 | --- | --- |
 | `import!path` | load a Punk module by dotted path, return its template (see *Modules*) |
-| `importJS!name` | load a JavaScript module by host-style name, return it as a namespace |
+| `httpServe!{port handler}` | start an HTTP server on `port`, invoke `handler` with `{method url body}` requests |
 
 ## Modules
 
@@ -1484,7 +1500,6 @@ The block has no name of its own. The convention is that the *filename* (`http.p
 Use the built-in `import!`. It takes a module path and returns the template the file defines; bind it to a name to give it a namespace.
 
 ```punk
-> http:import!punk.http ⏎
 > html:import!punk.html ⏎
 > keystore:import!punk.keystore ⏎
 ```
@@ -1492,7 +1507,7 @@ Use the built-in `import!`. It takes a module path and returns the template the 
 Once imported, the module's bindings are reachable through the regular name-path query — the dots between `http` and `serve` are just navigation into the module's template.
 
 ```punk
-> http.serve!{8080 dispatch} ⏎
+> httpServe!{8080 dispatch.!?} ⏎
 > html.render!doc ⏎
 > keystore.open!todo ⏎
 ```
@@ -1501,39 +1516,21 @@ The argument to `import!` is just text that names the module:
 
 | Form | Means |
 | --- | --- |
-| `punk.http` | a stdlib module shipped with the Punk runtime |
 | `./helpers` | a path relative to the importing file (no `.punk` extension) |
 | `mypkg.utils` | a module from a third-party package on the module path |
 
 The `.` inside the import argument is not a path-query — it's just part of the text being passed in. The query rule only applies inside a path token that itself ends in `?` or `!`.
 
-### JavaScript interop
+### Host-backed capabilities
 
-Punk can pull in modules from the JavaScript host. `importJS!` takes a Node-style module name and returns the imported module bound as a namespace, exactly like a Punk import.
-
-```punk
-> node:importJS!http ⏎ # Node's built-in http module #
-> fs:importJS!fs ⏎ # filesystem #
-> got:importJS!got ⏎ # an npm package #
-```
-
-The returned namespace exposes whatever the JavaScript module exports. Function and method calls follow the same `name.method!{args}` form as Punk namespaces.
-
-```punk
-> server:node.createServer!handler ⏎
-> server.listen!8080 ⏎
-> fs.readFileSync!{config.json utf8}->log! ⏎
-```
-
-> NOTE: Values crossing the JavaScript boundary are converted as you'd expect — numbers become numbers, text becomes strings, templates of things become arrays, named slots become object properties. A function passed into a JavaScript callback parameter stays a callable Punk function on the other side, so handler-style APIs work naturally.
+Host-backed capabilities should stay behind Punk interfaces. For HTTP serving, use core `httpServe!` and pass a callable handler reference (`.!?`) rather than touching host JS APIs directly.
 
 ### Putting it together
 
-A small server file shows the pieces working together. The consumer file imports a few Punk modules, defines its own handlers, then hands them to the imported `http.serve`.
+A small server file shows the pieces working together. The consumer file imports Punk modules, defines its own handlers, then hands them to core `httpServe!`.
 
 ```punk
 # server.punk #
-http:import!punk.http
 html:import!punk.html
 keystore:import!punk.keystore
 
@@ -1547,11 +1544,11 @@ dispatch:([req]){
   }!
 }
 
-http.serve!{8080 dispatch}
+httpServe!{8080 dispatch.!?}
 {listening on port 8080}->log!
 ```
 
-Nothing about the call site is special: `http.serve` is the same kind of name-path query you'd use on any data structure, and `!{8080 dispatch}` is the same kind of execute-with-arguments form used everywhere else.
+Nothing about the call site is special: `httpServe!` is still the same execute-with-arguments form used everywhere else, and passing `dispatch.!?` keeps handler references explicit.
 
 ## Appendix
 
@@ -1566,17 +1563,18 @@ These characters carry meaning in Punk source. Anywhere they're meant as ordinar
 | `[` `]` | Slot-label delimiters — `[name]` (single) or `*[name]` (rest) inside a pattern; reserved (parse error) elsewhere | Only meaningful inside `( ... )` |
 | `@` | Atom marker — `@name` refers to an atom; the `@` *is* the atom. Atoms come into existence on first write: `value->@name!` | Anywhere outside an escape |
 | `:` | Names a thing — `name:value` | Anywhere outside an escape |
-| `?` | Query — resolves nested queries in a template | Suffix of a path token; `?(pattern){...}!` is the single-condition form (trailing `!` required when a template body is attached); `??{(p1){...}(p2){...}}!` is the multi-condition form (same rule); `head?.seg.seg` is the query-chain head — a `?` glued to the first segment dereferences a bareword binding once before walking the rest of the path |
+| `?` | Query — resolves a path to its value; when the resolved value is a function, returns the function body/template | Suffix of a path token; `?(pattern){...}!` is the single-condition form (trailing `!` required when a template body is attached); `??{(p1){...}(p2){...}}!` is the multi-condition form (same rule); `head?.seg.seg` is the query-chain head — a `?` glued to the first segment dereferences a bareword binding once before walking the rest of the path |
 | `!` | Execute — runs a function or evaluates a template, by name or directly. Also invokes any embedded calls like `+!`. A body-bearing conditional (`?(p){...}!`, `??{...}!`) requires a trailing `!`. | Suffix of a path token, or of a function name |
 | `'` | Partial application — like `!` but returns a new function with the leftmost parameters pre-filled | Suffix of a function name where `!` would otherwise execute it |
 | `.` | Path segment separator | Only inside a path token that ends in `?` or `!` |
 | `.:?` | Name segment — resolves to the name of the referenced thing, or `NULL` if it has no name | At the end of a path |
-| `.()?` | Pattern segment — resolves to the pattern items of a function as a tmpl, or `NULL` if the referenced thing is not a function | At the end of a path |
+| `._?` | Pattern-info segment — resolves to `{ordered:{...} named:{...}}` for a function or pattern value, or `NULL` if the referenced thing has no pattern | At the end of a path |
+| `.!?` | Function-reference segment — resolves to the function value itself, or `NULL` if the referenced thing is not callable | At the end of a path |
 | `~` | Range / last-item | Inside paths (`.~`, `.N~M`), as a value constructor (`5~15`), and as a function-return constraint (`{…}~`) |
 | `#` | Comment delimiter / length-of segment | `#` is a paired comment delimiter anywhere outside of escapes — `# ... #`. Comments vanish entirely (zero-width); unclosed `#` is a syntax error. The one exception is `.#?` at the end of a path, where `#` is the length-of segment. |
 | `->` | Pipeline operator | Joins two sides with no whitespace; left flows into right when the chain ends in `!`, otherwise the chain is a composed function |
 | `/` `/` | Regex literal delimiters | Reserved — `/` outside `(...)` or `"..."` is a syntax error. Inside a pattern `(...)` a `/`-delimited literal is a regex pattern slot. `\/` escapes a literal slash; `/!` is the division builtin (a complete word, not a bare `/`). |
-| `_` | Single wildcard | Only inside patterns |
+| `_` | Single wildcard, and pattern-segment marker in paths (`._?`) | In patterns; also as terminal path segment marker |
 | `*` | Variadic wildcard (zero or more) | Only inside patterns |
 | `|` | Such-that separator inside a pattern | Only inside patterns; must be space-padded; switches the remainder of the pattern to order-independent context-only matching |
 | `\` | Escape character — makes the next character literal | Anywhere a special character needs to appear as text |
@@ -1634,10 +1632,9 @@ The same rule, restated: where two pieces of source need to *be* a single thing,
 
 Two punctuation rules in particular shape how a run of characters is split into tokens before any structural parsing happens, and it's useful to know them when reading source closely:
 
-- `:` ends the current word as soon as the previous character was a name character (letter, digit, `_`, `-`, `$`). So `foo:bar` becomes the two tokens `foo:` and `bar`, but `xs.:?` stays one token (the `:` follows a `.`, not a name char). This is what makes `foo:a->b` bind `foo` to the pipeline `a->b` instead of `(foo:a)->b`.
+- `:` ends the current word as soon as the previous character was a name character (letter, digit, `_`, `-`, `$`). So `foo:bar` becomes the two tokens `foo:` and `bar`, but query tails like `xs.:?`, `xs._?`, and `xs.!?` each stay one token (the punctuation follows a `.`, not a name char). This is what makes `foo:a->b` bind `foo` to the pipeline `a->b` instead of `(foo:a)->b`.
 - `.` is only a path separator *inside* a token that ends in `?` or `!`. In any other context — running text, decimal numbers — it's just a character.
 
 ### Reserved templates
 
 See [Reserved values](#reserved-values) under Templates for full coverage of `TRUE`, `FALSE`, and `NULL`.
-

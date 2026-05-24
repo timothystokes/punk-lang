@@ -4,7 +4,7 @@
 //   - Print bare at the REPL (no auto-wrap).
 //   - Comparison/boolean builtins return TRUE/FALSE.
 //   - `??` dispatches on them via `(TRUE){...} (FALSE){...}`.
-//   - NULL is returned for invalid paths, unnamed-thing `.:?`, non-fn `.()?`,
+//   - NULL is returned for invalid paths, unnamed-thing `.:?`, non-fn `._?`,
 //     unmatched regex groups, void functions.
 //   - NULL is not truthy.
 //   - All three can be named, passed, compared, matched.
@@ -62,8 +62,8 @@ test('the name segment of an unnamed thing returns NULL', () => {
 });
 
 test('the pattern segment of a non-function returns NULL', () => {
-  assert.equal(punk('42.()?'),       'NULL');
-  assert.equal(punk('xs:{1 2}  xs.()?'), 'NULL');
+  assert.equal(punk('x:42  x._?'),       'NULL');
+  assert.equal(punk('xs:{1 2}  xs._?'), 'NULL');
 });
 
 // ---------- Comparison & dispatch ----------

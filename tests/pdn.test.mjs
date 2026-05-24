@@ -59,19 +59,19 @@ test('`age: 42` (space after colon) is a syntax error', () => {
 });
 
 test('a function literal is just PDN — inert until called', () => {
-  // Holding the function in source as a value; querying gives it back.
+  // Querying a function returns only its body/template.
   assert.equal(
     punk('f:([x]){+!{x? 1}}  f?'),
-    '([x]){+!{x? 1}}'
+    '{+!{x? 1}}'
   );
 });
 
 test('element-tree shape — tag:(attrs)body', () => {
   // The named thing `p:()` "" body is element-shaped PDN.
-  // We assert the value round-trips through display.
+  // Querying the function returns its body template.
   assert.equal(
     punk('p:()"Welcome to Punk"  p?'),
-    '()"Welcome to Punk"'
+    '{"Welcome to Punk"}'
   );
 });
 
@@ -97,10 +97,10 @@ test('element-tree attribute is a path-queryable named slot in the pattern', () 
 
 test('element-tree child at index is queryable — name stripped by path traversal', () => {
   // Doc rule: path traversal returns the VALUE side of any named thing
-  // walked through. The 2nd child is `p:()"B"`; the `p:` name is stripped.
+  // walked through. The 2nd child is `p:()"B"`; query returns fn body.
   const src = `page:{div:(){
     h1:()"A"
     p:()"B"
   }}  page.div.2?`;
-  assert.equal(punk(src), '()"B"');
+  assert.equal(punk(src), '{"B"}');
 });
