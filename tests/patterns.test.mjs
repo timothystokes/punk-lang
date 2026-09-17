@@ -138,15 +138,15 @@ test('nested pattern as a positional slot — labels propagate to outer scope', 
 
 test('context-match RHS may be a nested pattern', () => {
   // b's value must be a 2-item template; c1 binds the first inner item.
-  assert.equal(punk('{a:1 b:{green blue}}?(a:_ b:([c1] _))'), 'TRUE');
+  assert.equal(punk('{a:{1} b:{green blue}}?(a:_ b:([c1] _))'), 'TRUE');
   // Same shape against a non-matching inner length fails.
-  assert.equal(punk('{a:1 b:{green}}?(a:_ b:([c1] _))'),     'FALSE');
+  assert.equal(punk('{a:{1} b:{green}}?(a:_ b:([c1] _))'),     'FALSE');
 });
 
 test('nested pattern binds labels from the deeper template', () => {
   assert.equal(
-    punk('f:(a:[x] b:([y] [z])){x? y? z?}  f!{a:1 b:{green blue}}'),
-    '{1 green blue}',
+    punk('f:(a:[x] b:([y] [z])){x? y? z?}  f!{a:{1} b:{green blue}}'),
+    '{{1} green blue}',
   );
 });
 
@@ -172,12 +172,12 @@ test('a label rebinds the value — incoming name is dropped', () => {
   // Positional `[x]` matching a Named arg `a:7` binds x to the value 7,
   // not to the Named pair. The pattern didn't ask for the name `a`,
   // so it isn't preserved.
-  assert.equal(punk('f:([x]){x?}  f!{a:7}'), '{7}');
+  assert.equal(punk('f:([x]){x?}  f!{a:{7}}'), '{7}');
   // Same when the label is alongside an unrelated slot.
-  assert.equal(punk('f:(_ [x]){x?}  f!{first a:7}'), '{7}');
+  assert.equal(punk('f:(_ [x]){x?}  f!{first a:{7}}'), '{7}');
   // To require the name `a` in the contract while still labelling the
   // value as x, use context-match.
-  assert.equal(punk('f:(a:[x]){x?}  f!{a:7}'), '{7}');
+  assert.equal(punk('f:(a:[x]){x?}  f!{a:{7}}'), '{7}');
   // Without a context-match clause the slot doesn't care about the
   // incoming name — a plain literal arg also binds x to its value.
   assert.equal(punk('f:([x]){x?}  f!{7}'), '{7}');
@@ -196,18 +196,18 @@ test('pure such-that: empty LHS only matches `{}`', () => {
 });
 
 test('such-that with `*` LHS pulls a Named entry by name regardless of position', () => {
-  assert.equal(punk('{a:1 b:2 c:3}?(* | b:_)'), 'TRUE');
-  assert.equal(punk('{a:1 b:2 c:3}?(* | missing:_)'), 'FALSE');
+  assert.equal(punk('{a:{1} b:{2} c:{3}}?(* | b:_)'), 'TRUE');
+  assert.equal(punk('{a:{1} b:{2} c:{3}}?(* | missing:_)'), 'FALSE');
 });
 
 test('such-that extracts via `[label]` into the body', () => {
   assert.equal(
-    punk('f:(* | b:[y]){y?}  f!{a:1 b:2 c:3}'),
+    punk('f:(* | b:[y]){y?}  f!{a:{1} b:{2} c:{3}}'),
     '{2}',
   );
   // Order-independent — `b` can appear anywhere.
   assert.equal(
-    punk('f:(* | b:[y]){y?}  f!{b:99 a:1}'),
+    punk('f:(* | b:[y]){y?}  f!{b:{99} a:{1}}'),
     '{99}',
   );
 });
@@ -215,23 +215,23 @@ test('such-that extracts via `[label]` into the body', () => {
 test('such-that hybrid: LHS positional + RHS context, both see full input', () => {
   // `[x]` binds the first item by position; `b:[y]` finds `b` anywhere.
   assert.equal(
-    punk('f:([x] * | b:[y]){x? y?}  f!{first a:1 b:42}'),
-    '{first 42}',
+    punk('f:([x] * | b:[y]){x? y?}  f!{first a:{1} b:{42}}'),
+    '{first {42}}',
   );
 });
 
 test('such-that literal value: enforces equality', () => {
-  assert.equal(punk('{a:1 x:11 b:2}?(* | x:11)'), 'TRUE');
-  assert.equal(punk('{a:1 x:10 b:2}?(* | x:11)'), 'FALSE');
+  assert.equal(punk('{a:{1} x:{11} b:{2}}?(* | x:11)'), 'TRUE');
+  assert.equal(punk('{a:{1} x:{10} b:{2}}?(* | x:11)'), 'FALSE');
 });
 
 test('such-that RHS clause can carry a nested pattern', () => {
   assert.equal(
-    punk('{a:1 b:2 c:{green blue}}?(* | c:([m] [n]))'),
+    punk('{a:{1} b:{2} c:{green blue}}?(* | c:([m] [n]))'),
     'TRUE',
   );
   assert.equal(
-    punk('f:(* | c:([m] [n])){m? n?}  f!{a:1 b:2 c:{green blue}}'),
+    punk('f:(* | c:([m] [n])){m? n?}  f!{a:{1} b:{2} c:{green blue}}'),
     '{green blue}',
   );
 });
@@ -239,7 +239,7 @@ test('such-that RHS clause can carry a nested pattern', () => {
 test('such-that RHS clause can carry another `|` for deeper context-only match', () => {
   assert.equal(
     punk(
-      'f:(* | c:(* | inner:[v])){v?}  f!{a:1 c:{x:9 inner:42 y:7}}',
+      'f:(* | c:(* | inner:[v])){v?}  f!{a:{1} c:{x:{9} inner:{42} y:{7}}}',
     ),
     '{42}',
   );
@@ -247,9 +247,9 @@ test('such-that RHS clause can carry another `|` for deeper context-only match',
 
 test('such-that requires strict LHS — extras without `*` fail', () => {
   // No `*` to absorb the extras → LHS demands exactly two items.
-  assert.equal(punk('{a:1 b:2 c:3}?([x] [y] | a:_)'), 'FALSE');
+  assert.equal(punk('{a:{1} b:{2} c:{3}}?([x] [y] | a:_)'), 'FALSE');
   // With `*`, LHS is lax, RHS finds `a`.
-  assert.equal(punk('{a:1 b:2 c:3}?([x] [y] * | a:_)'), 'TRUE');
+  assert.equal(punk('{a:{1} b:{2} c:{3}}?([x] [y] * | a:_)'), 'TRUE');
 });
 
 test('such-that labels share the same flat scope; duplicates are a parse error', () => {

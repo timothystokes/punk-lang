@@ -71,8 +71,8 @@ test('deeply nested structured templates round-trip', () => {
 // ---------- Mixed items inside structures ----------
 
 test('a structured template can mix bare words, numbers, named things and templates', () => {
-  assert.equal(punk('{Tim 42 colour:blue {1 2}}'),
-                    '{Tim 42 colour:blue {1 2}}');
+  assert.equal(punk('{Tim 42 colour:{blue} {1 2}}'),
+                    '{Tim 42 colour:{blue} {1 2}}');
 });
 
 // ---------- Sad paths ----------

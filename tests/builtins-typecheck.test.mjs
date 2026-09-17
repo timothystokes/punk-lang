@@ -14,13 +14,13 @@ import { punk } from './_punk.mjs';
 // ---- isnum! -----------------------------------------------------------
 
 test('isnum! — TRUE for numeric values', () => {
-  assert.equal(punk('isnum!42'), 'TRUE');
-  assert.equal(punk('isnum!3.141'), 'TRUE');
-  assert.equal(punk('isnum!-5'), 'TRUE');
+  assert.equal(punk('isnum!{42}'), 'TRUE');
+  assert.equal(punk('isnum!{3.141}'), 'TRUE');
+  assert.equal(punk('isnum!{-5}'), 'TRUE');
 });
 
 test('isnum! — FALSE for words', () => {
-  assert.equal(punk('isnum!hello'), 'FALSE');
+  assert.equal(punk('isnum!{hello}'), 'FALSE');
 });
 
 test('isnum! — FALSE for text', () => {
@@ -40,11 +40,11 @@ test('istext! — TRUE for unstructured text', () => {
 
 test('istext! — FALSE for words', () => {
   // A bare Word is not text — text is the `"..."` form.
-  assert.equal(punk('istext!hello'), 'FALSE');
+  assert.equal(punk('istext!{hello}'), 'FALSE');
 });
 
 test('istext! — FALSE for numbers', () => {
-  assert.equal(punk('istext!42'), 'FALSE');
+  assert.equal(punk('istext!{42}'), 'FALSE');
 });
 
 test('istext! — FALSE for structured templates', () => {
@@ -62,7 +62,7 @@ test('islist! — TRUE for empty template', () => {
 });
 
 test('islist! — FALSE for a number', () => {
-  assert.equal(punk('islist!42'), 'FALSE');
+  assert.equal(punk('islist!{42}'), 'FALSE');
 });
 
 test('islist! — FALSE for unstructured text', () => {

@@ -16,15 +16,15 @@ import { punk } from './_punk.mjs';
 // ---------- Bare printing ----------
 
 test('TRUE prints bare', () => {
-  assert.equal(punk('TRUE'), 'TRUE');
+  assert.equal(punk('{TRUE}.1?'), 'TRUE');
 });
 
 test('FALSE prints bare', () => {
-  assert.equal(punk('FALSE'), 'FALSE');
+  assert.equal(punk('{FALSE}.1?'), 'FALSE');
 });
 
 test('NULL prints bare', () => {
-  assert.equal(punk('NULL'), 'NULL');
+  assert.equal(punk('{NULL}.1?'), 'NULL');
 });
 
 // ---------- Inside templates they're just values ----------
@@ -36,11 +36,9 @@ test('reserved values inside a structured template appear as-is', () => {
 // ---------- Naming ----------
 
 test('reserved values can be bound to names', () => {
-  // Reserved words wrap like any value Word, so `ok:TRUE` ≡ `ok:{TRUE}`
-  // and the query returns the wrapped singleton.
-  assert.equal(punk('ok:TRUE       ok?'),   '{TRUE}');
-  assert.equal(punk('done:FALSE    done?'), '{FALSE}');
-  assert.equal(punk('absent:NULL   absent?'),'{NULL}');
+  assert.equal(punk('ok:{TRUE}       ok?'),    '{TRUE}');
+  assert.equal(punk('done:{FALSE}    done?'),  '{FALSE}');
+  assert.equal(punk('absent:{NULL}   absent?'),'{NULL}');
 });
 
 // ---------- NULL is produced by invalid paths ----------
@@ -54,7 +52,7 @@ test('an out-of-range index returns NULL', () => {
 });
 
 test('a missing named field inside a record returns NULL', () => {
-  assert.equal(punk('r:{a:1 b:2}  r.c?'), 'NULL');
+  assert.equal(punk('r:{a:{1} b:{2}}  r.c?'), 'NULL');
 });
 
 test('the name segment of an unnamed thing returns NULL', () => {
@@ -62,7 +60,7 @@ test('the name segment of an unnamed thing returns NULL', () => {
 });
 
 test('the pattern segment of a non-function returns NULL', () => {
-  assert.equal(punk('x:42  x._?'),       'NULL');
+  assert.equal(punk('x:{42}  x._?'),      'NULL');
   assert.equal(punk('xs:{1 2}  xs._?'), 'NULL');
 });
 
@@ -82,11 +80,11 @@ test('TRUE is not equal to FALSE', () => {
 
 test('reserved values can be matched by pattern', () => {
   assert.equal(
-    punk('x:NULL  x??{ (NULL){"nope"} (_){"yep"} }!'),
+    punk('x:{NULL}  x??{ (NULL){"nope"} (_){"yep"} }!'),
     '"nope"'
   );
   assert.equal(
-    punk('x:TRUE  x??{ (TRUE){"yes"} (FALSE){"no"} }!'),
+    punk('x:{TRUE}  x??{ (TRUE){"yes"} (FALSE){"no"} }!'),
     '"yes"'
   );
 });

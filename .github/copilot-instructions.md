@@ -16,31 +16,76 @@ is the bug — flag it and ask before reinterpreting.
 
 ## Core language rules
 
-### Short-form sugar (parse-time)
+### One value shape — `{...}` only (no short-form sugar)
 
-The RHS of `:`, `!`, `'` accepts a single bare value as shorthand for a
-singleton template. Wrap is applied uniformly **at parse time** so all
-downstream passes see one canonical shape.
+There is exactly one value shape in Punk: a template `{...}`. A bare
+Word (a value, number, or reserved word like `TRUE`/`NULL`) is never
+itself a value — it only exists as content inside a template's items.
+Punk previously had "short-form sugar" that silently auto-wrapped a
+bare Word into a singleton template at three RHS positions (`:`, `!`/
+`'` call args, an executing pipe's seed) — plus the program's root
+level accepted a bare Word as a whole top-level statement. All four
+sites are **gone**. Each now requires the explicit `{...}` and rejects
+a bare Word with a `PunkSyntaxError` instead of wrapping it.
 
-**Principle:** wrap only **bare value-words** — things with no internal
-structure. Anything that already has its own structural identity binds
-directly.
-
-| Value on RHS | Wrap to `{value}`? | Notes |
+| Position | Required form | Bare form (now a syntax error) |
 |---|---|---|
-| Word value (`hello`) | **YES** | `n:Paul` ≡ `n:{Paul}` |
-| Word number (`42`) | **YES** | `n:5` ≡ `n:{5}` |
-| Word reserved (`TRUE` `NULL`) | **YES** | `ok:TRUE` ≡ `ok:{TRUE}` |
-| Fn `(p){b}` | NO | `name:(p){b}` is *naming a function* — binds the Fn directly. To put a Fn into a template, the user wraps it explicitly. |
+| Named binding RHS (binding context — root Tmpl item, Fn body item, Match branch body item) | `n:{Paul}` | `n:Paul` |
+| Call argument | `f!{5}` | `f!5` |
+| Executing pipe seed | `{5}->double!` | `5->double!` |
+| Top-level program statement (root Tmpl direct item, no visible enclosing `{}`) | `{42}` | `42` |
+
+**Principle:** the requirement applies only to **bare value-words** —
+things with no internal structure. Anything that already has its own
+structural identity binds/attaches directly, no braces needed, same as
+before:
+
+| Value | Needs `{...}`? | Notes |
+|---|---|---|
+| Word value (`hello`) | **YES** | must write `n:{Paul}` |
+| Word number (`42`) | **YES** | must write `n:{5}` |
+| Word reserved (`TRUE` `NULL`) | **YES** | must write `ok:{TRUE}` |
+| Fn `(p){b}` | NO | `name:(p){b}` is *naming a function* — binds the Fn directly. |
 | PartialFn `fn'x` | NO | callable, same reason as Fn |
 | Pattern `(...)` | NO | first-class; `p:([x] [y])` names a pattern (see [Named patterns](#named-patterns)) |
 | Tmpl `{...}` | NO | already a template |
 | Text `"..."` | NO | already a template (joined-with-space form) |
 | Atom `@name` | error on `:` RHS | atoms don't bind via `:` |
-| Ref (`xs?`) | NO | evaluates lazily; no wrap |
+| Ref (`xs?`) | NO | evaluates lazily |
 | Range `1~5` | NO | already structural |
 | Exec `f!x` | NO | already structural |
 | Query `xs.1?` | NO | already structural |
+
+**Unaffected by this rule:**
+- **Patterns** keep bare literal slots: `(name:John)`, `(age:42)` are
+  untouched — a pattern slot describes the *content* of a value (a
+  match against a Tmpl item), not a standalone value.
+- **Named-as-data pairs** nested inside an ordinary `{...}` literal
+  (not a root/Fn-body/Match-body binding) are untouched — e.g.
+  `{colour:blue}` as a plain record was never wrapped/rejected either
+  way.
+- **Slot binding/extraction** (`([n])` binds `n` to the matched item,
+  unwrapped) is untouched.
+- A bare Word already sitting as *content* inside an authored `{...}`
+  is fine at any depth — e.g. `{a b c}`, a Fn body `{Hello n?}`, or a
+  Match branch body. The 4th (top-level) rejection is about a bare
+  Word standing in as an entire program statement with **no** visible
+  enclosing braces at all — different from a Word that's already an
+  item inside braces the user wrote.
+- Arithmetic/data builtin singleton auto-unwrap (see below) is
+  unaffected — it already assumes Tmpl-wrapped input.
+- The REPL's display-wrap of a bare Word/Number *result* (e.g. from
+  `{a b c}.1?` → shown as `{a}`) is a separate, still-live mechanism in
+  `src/format.js`'s `formatRepl` — it wraps a resolved value for
+  presentation, and is unrelated to whether the bare Word was valid as
+  *written source*.
+
+Enforcement lives in `src/parse.js`: the Named-binding check is
+`rejectBareWord`/`validateWalk` (called from `parseOperators`), the
+top-level/root check is a loop over the root Tmpl's direct items at
+the top of `parseOperators` (checked before `validateWalk` runs), the
+call-argument check is in `passArgsAttach`, and the pipe-seed check is
+in `opsWalk`'s pipe branch.
 
 ### Slots are NOT named bindings — never wrap
 
@@ -219,12 +264,11 @@ For `welcome:([n]){Hello n?}`:
 | Form | Result |
 |---|---|
 | `welcome!{Sally}` | `{Hello Sally}` |
-| `welcome!Sally` | `{Hello Sally}` — short-form of above |
 | `{Sally}->welcome!` | `{Hello Sally}` — pipe ≡ `welcome!{Sally}` |
-| `Sally->welcome!` | `{Hello Sally}` — pipe seed auto-wraps (≡ above) |
-| `5->double!` | short-form of `{5}->double!` ≡ `double!{5}` |
 | `{a b}->welcome!` | **runtime error** — 2 items into 1 slot |
 | `welcome!{a b}` | **runtime error** — same reason |
+| `welcome!Sally` | **syntax error** — bare call arg, write `welcome!{Sally}` |
+| `Sally->welcome!` | **syntax error** — bare pipe seed, write `{Sally}->welcome!` |
 
 Pipe rule: `X->fn!` ≡ `fn!X`. A pipe stage receives exactly one thing.
 
@@ -232,21 +276,20 @@ The fn body has 2 items (`Hello` and `n?`). Slot binding doesn't
 wrap, so `n?` is bare `Sally`. The body IS a template, so its result
 is `{Hello Sally}` — flat, because the body itself has the items.
 
-**Pipe seed auto-wrap (uniform):** a bare Word value/number/reserved
-at the start of an executing pipe gets the same short-form wrap as
-`:` / `!` / `'` RHS — it becomes a singleton Tmpl. This applies
-uniformly to ALL executing pipes, including atom writes. So
-`42->@n!` parses with seed `{42}` and writes `{42}` (a Tmpl) into
-the atom. The atom stores whatever flows through; there is no special
+**Pipe seed and call args require an explicit template:** a bare Word
+value/number/reserved is rejected as a call argument or as an
+executing pipe's seed — see "One value shape" above. So `{42}->@n!` parses with seed
+`{42}` and writes `{42}` (a Tmpl) into the atom; `42->@n!` is a syntax
+error. The atom stores whatever flows through; there is no special
 unwrap for atom-write pipes. Mid-stages are callable refs (resolved
-when the trailing `!` fires) and are **not** wrapped. Arity mismatch
-(e.g. `{a b}->one-slot!`) remains a runtime error, not a parse error.
+when the trailing `!` fires). Arity mismatch (e.g. `{a b}->one-slot!`)
+remains a runtime error, not a parse error.
 
 ### Embed stringification — `"..."` vs `{...}`
 
 - Inside `"..."` (unstructured text): each `{expr}` embed is evaluated,
   then **joined-with-space** to a string. A singleton-Tmpl value
-  stringifies as its inner item (join of one). So `([n])"Hi {n?}"!Bob`
+  stringifies as its inner item (join of one). So `([n])"Hi {n?}"!{Bob}`
   → `"Hi Bob"` — the singleton form is invisible to text rendering.
 - Inside `{...}` (structured template): embeds are NOT stringified;
   the resolved value lands as one item, preserving its shape.
@@ -297,16 +340,21 @@ evaluates the body template's items in scope and returns the result
   call's result lands as one item (a Tmpl), causing the natural
   nesting.
 
-Pipe-seed wrap is uniform: `value->stage!` ≡ `{value}->stage!`. The
-seed is a tmpl as it flows; atom writes therefore store the wrapped
-form. Use `.?` (in a fn body) or feed through `(v:_){v?~}` if you
-want the seed-as-bare-value.
+Pipe seeds require an explicit template: `{value}->stage!` is the only
+valid form; `value->stage!` is a syntax error. The seed flows as the
+tmpl the user wrote; atom writes therefore store that wrapped form.
+Use `.?` (in a fn body) or feed through `(v:_){v?~}` if you want the
+seed-as-bare-value.
 
 ### Terminology
 
 - Punk has no "literals" — text/num/tmpl/named are all just Values.
   Don't introduce "literal" terminology in identifiers or docs.
-- Don't say "auto-wrap"; the term is **short-form** (parse-time sugar).
+- Punk has no "short-form"/"auto-wrap" sugar for values — a bare Word
+  (value/number/reserved) is never itself a value; it must always be
+  written inside an explicit `{...}`. Don't describe wrapping/sugar
+  behavior in docs; describe rejection instead (see "One value shape"
+  above).
 
 ## Coding conventions
 
@@ -333,9 +381,6 @@ want the seed-as-bare-value.
   replacing today's `Word{subkind:'wildcard'|'variadic'}` and
   `Named{value:Word{...}}` shapes. Removes subkind-sniffing across
   `parse.js`, `match.js`, `eval.js`, `builtins.js`.
-- **Single short-form wrap helper:** one `applyShortFormWrap(node)`
-  called from `passResolveNamed` (both branches) and from slot binding
-  in `match.js`. Wrap kinds per the table above.
 - **Unified call-form mechanism:** `node ! args`, `node ' args`,
   `node ? segments` should produce `Exec`/`PartialFn`/`Query`
   regardless of whether `node` is a name-Word, Fn, Tmpl, Atom, etc.
@@ -343,10 +388,7 @@ want the seed-as-bare-value.
   and `passPostfixBang` runs after the final `passArgsAttach`, which
   is a bug.
 - **Pipe simplification:** `runPipeline` should desugar to `fn!argsTmpl`
-  directly. Pipe seed auto-wraps via the same `applyShortFormWrap`
-  helper used elsewhere (bare Word value/number/reserved → singleton
-  Tmpl). No parse-time ban on bare seeds; arity mismatch is a runtime
-  error only.
+  directly. No change to the bare-seed rejection rule.
 - **Named-pattern splice:** `(p?){body}` resolves `p` to a Pattern and
   splices its slots into the call-site pattern.
 - **Error-location coverage:** `expected a number` and

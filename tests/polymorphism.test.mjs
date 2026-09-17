@@ -19,8 +19,8 @@ test('arity dispatch — one arg', () => {
         ([n] [t]){Hello t? n?}
       }!
     }
-    greet!Tim`;
-  assert.equal(punk(src), '{{Hello Tim}}');
+    greet!{Tim}`;
+  assert.equal(punk(src), '{Hello Tim}');
 });
 
 test('arity dispatch — two args', () => {
@@ -31,7 +31,7 @@ test('arity dispatch — two args', () => {
       }!
     }
     greet!{Tim Dr\\.}`;
-  assert.equal(punk(src), '{{Hello Dr\\. Tim}}');
+  assert.equal(punk(src), '{Hello Dr\\. Tim}');
 });
 
 test('shape dispatch — area of a rect', () => {
@@ -42,8 +42,8 @@ test('shape dispatch — area of a rect', () => {
         (tri [b] [h]){/!{X!{b? h?} 2}}
       }!
     }
-    area!{rect w:4 h:3}`;
-  assert.equal(punk(src), '{{12}}');
+    area!{rect w:{4} h:{3}}`;
+  assert.equal(punk(src), '{12}');
 });
 
 test('shape dispatch — area of a circle', () => {
@@ -54,8 +54,8 @@ test('shape dispatch — area of a circle', () => {
         (tri [b] [h]){/!{X!{b? h?} 2}}
       }!
     }
-    area!{circle r:5}`;
-  assert.equal(punk(src), '{{78.525}}');
+    area!{circle r:{5}}`;
+  assert.equal(punk(src), '{78.525}');
 });
 
 test('value dispatch — literal slots', () => {
@@ -66,8 +66,8 @@ test('value dispatch — literal slots', () => {
         (*                         ){notFound}
       }!
     }
-    route!{{method:GET path:\\/about extra:1}}`;
-  assert.equal(punk(src), '{{about}}');
+    route!{{method:{GET} path:{\\/about} extra:{1}}}`;
+  assert.equal(punk(src), '{about}');
 });
 
 test('value dispatch — falls through to catch-all', () => {
@@ -78,8 +78,8 @@ test('value dispatch — falls through to catch-all', () => {
         (*                         ){notFound}
       }!
     }
-    route!{{method:POST path:\\/x}}`;
-  assert.equal(punk(src), '{{notFound}}');
+    route!{{method:{POST} path:{\\/x}}}`;
+  assert.equal(punk(src), '{notFound}');
 });
 
 test('regex dispatch — integer text', () => {
@@ -90,8 +90,8 @@ test('regex dispatch — integer text', () => {
         (_                 ){other}
       }!
     }
-    classify!42`;
-  assert.equal(punk(src), '{{integer}}');
+    classify!{42}`;
+  assert.equal(punk(src), '{integer}');
 });
 
 test('regex dispatch — color text', () => {
@@ -103,7 +103,7 @@ test('regex dispatch — color text', () => {
       }!
     }
     classify!"#aabbcc"`;
-  assert.equal(punk(src), '{{color}}');
+  assert.equal(punk(src), '{color}');
 });
 
 test('method-style dispatch — same call site, different object', () => {
@@ -115,5 +115,5 @@ test('method-style dispatch — same call site, different object', () => {
     }
     log-it:([p] [m]){p?.print!{m?}}
     log-it!{printer hello}`;
-  assert.equal(punk(src), '{{"HELLO"}}');
+  assert.equal(punk(src), '"HELLO"');
 });

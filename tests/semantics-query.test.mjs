@@ -42,15 +42,15 @@ test('`?` on a name bound to a Tmpl lands NESTED (no spread)', () => {
 test('`?` on a Named slot returns the value side as one item', () => {
   // `r.b?` → value 2 (a Number); lands as one item.
   assert.equal(
-    punk('r:{a:1 b:2 c:3}  {got r.b?}!'),
-    '{got 2}'
+    punk('r:{a:{1} b:{2} c:{3}}  {got r.b?}!'),
+    '{got {2}}'
   );
 });
 
 test('`?` on a Named whose value is a Tmpl lands nested', () => {
   assert.equal(
-    punk('p:{birthday:{day:12 month:June year:1997}}  {Birthday p.birthday?}!'),
-    '{Birthday {day:12 month:June year:1997}}'
+    punk('p:{birthday:{day:{12} month:{June} year:{1997}}}  {Birthday p.birthday?}!'),
+    '{Birthday {day:{12} month:{June} year:{1997}}}'
   );
 });
 
@@ -67,8 +67,8 @@ test('`.?` on a Named drops the name and spreads the value', () => {
   // `.?` targets the VALUE; names are only reachable via `.:?`.
   // p.birthday's value is a Tmpl, so its items spread inline.
   assert.equal(
-    punk('p:{birthday:{day:12 month:June year:1997}}  {All date elements p.birthday.?}!'),
-    '{All date elements day:12 month:June year:1997}'
+    punk('p:{birthday:{day:{12} month:{June} year:{1997}}}  {All date elements p.birthday.?}!'),
+    '{All date elements day:{12} month:{June} year:{1997}}'
   );
 });
 
@@ -76,8 +76,8 @@ test('`.?` on an unwrapped Tmpl spreads its items inline', () => {
   // p.birthday? returns the value (an unwrapped Tmpl); `.?` on that
   // drops the `{}` and inlines.
   assert.equal(
-    punk('p:{birthday:{day:12 month:June year:1997}}  {All date elements p.birthday?.?}!'),
-    '{All date elements day:12 month:June year:1997}'
+    punk('p:{birthday:{day:{12} month:{June} year:{1997}}}  {All date elements p.birthday?.?}!'),
+    '{All date elements day:{12} month:{June} year:{1997}}'
   );
 });
 
@@ -91,7 +91,7 @@ test('`.?` on a literal Tmpl spreads inline', () => {
 test('`.?` on a Named scalar drops the name and inlines the value', () => {
   // r.a's value is the Word 1; the data-name `a` is dropped by `.?`.
   assert.equal(
-    punk('r:{a:1 b:2}  {got r.a.?}!'),
+    punk('r:{a:{1} b:{2}}  {got r.a.?}!'),
     '{got 1}'
   );
 });
@@ -115,7 +115,7 @@ test('path step on a call result without parens — call binds tighter', () => {
   assert.equal(
     punk(`
       id:([x]){x?}~
-      id!{{a:1 b:2 c:3}}.b?
+      id!{{a:{1} b:{2} c:{3}}}.b?
     `),
     '{2}',
   );
@@ -124,7 +124,7 @@ test('path step on a call result without parens — call binds tighter', () => {
 test('path terminator on a literal Tmpl head', () => {
   // Already in querying.test.mjs as a parse case; here we check `.?`.
   assert.equal(
-    punk('{{a:1 b:2}}.1.b?'),
+    punk('{{a:{1} b:{2}}}.1.b?'),
     '{2}',
   );
 });
@@ -133,13 +133,15 @@ test('`.?` spread on a call result expands the value inline', () => {
   // `f!{...}.?` ≡ `(f!{...}).?` — the post-Exec query rule routes
   // the leading-dot path to the call RESULT, not into the args.
   // pair returns its body via `~` so `.?` spreads the inner tmpl's
-  // items into the outer template.
+  // items into the outer template. x?/y? resolve to bare positional
+  // Words at runtime; format keeps the "one value shape" invariant
+  // by wrapping them so the printed record stays re-parseable.
   assert.equal(
     punk(`
       pair:([x] [y]){{a:x? b:y?}}~
       {got pair!{1 2}.?}!
     `),
-    '{got a:1 b:2}',
+    '{got a:{1} b:{2}}',
   );
 });
 
@@ -163,10 +165,10 @@ test('`.?` of a Named into a name slot creates a double-name shorthand', () => {
   // a singleton Tmpl containing the inner Named). No magic.
   assert.equal(
     punk(`
-      months:{Jan:{n:1} Sep:{n:9}}
+      months:{Jan:{n:{1}} Sep:{n:{9}}}
       {peak:months.2.?}!
     `),
-    '{peak:Sep:{n:9}}'
+    '{peak:Sep:{n:{9}}}'
   );
 });
 

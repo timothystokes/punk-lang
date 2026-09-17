@@ -3,7 +3,7 @@
 // From doc § "Boolean Logic":
 //   - `and!{a b ...}` — TRUE iff every item is TRUE (variadic).
 //   - `or!{a b ...}`  — TRUE if any item is TRUE (variadic).
-//   - `not!a`         — inverts a single boolean.
+//   - `not!{a}`       — inverts a single boolean.
 //   - `xor!{a b}`     — TRUE iff exactly one of a or b is TRUE.
 //
 // Reserved TRUE/FALSE print bare (no `{}` wrap).
@@ -22,9 +22,9 @@ test('and! — one FALSE makes it FALSE', () => {
   assert.equal(punk('and!{TRUE TRUE FALSE}'), 'FALSE');
 });
 
-test('and! — single bare arg', () => {
-  assert.equal(punk('and!TRUE'), 'TRUE');
-  assert.equal(punk('and!FALSE'), 'FALSE');
+test('and! — single explicit singleton arg', () => {
+  assert.equal(punk('and!{TRUE}'), 'TRUE');
+  assert.equal(punk('and!{FALSE}'), 'FALSE');
 });
 
 test('and! — short-circuits at first FALSE (variadic)', () => {
@@ -41,19 +41,19 @@ test('or! — all FALSE is FALSE', () => {
   assert.equal(punk('or!{FALSE FALSE FALSE}'), 'FALSE');
 });
 
-test('or! — single bare arg', () => {
-  assert.equal(punk('or!TRUE'), 'TRUE');
-  assert.equal(punk('or!FALSE'), 'FALSE');
+test('or! — single explicit singleton arg', () => {
+  assert.equal(punk('or!{TRUE}'), 'TRUE');
+  assert.equal(punk('or!{FALSE}'), 'FALSE');
 });
 
 // ---- not! -------------------------------------------------------------
 
 test('not! — inverts TRUE to FALSE', () => {
-  assert.equal(punk('not!TRUE'), 'FALSE');
+  assert.equal(punk('not!{TRUE}'), 'FALSE');
 });
 
 test('not! — inverts FALSE to TRUE', () => {
-  assert.equal(punk('not!FALSE'), 'TRUE');
+  assert.equal(punk('not!{FALSE}'), 'TRUE');
 });
 
 // ---- xor! -------------------------------------------------------------
@@ -75,7 +75,7 @@ test('xor! — both FALSE is FALSE', () => {
 
 test('boolean ops compose', () => {
   // not!(and!{TRUE FALSE}) == TRUE
-  assert.equal(punk('not!and!{TRUE FALSE}'), 'TRUE');
+  assert.equal(punk('not!{and!{TRUE FALSE}}'), 'TRUE');
   // or!{and!{TRUE TRUE} FALSE} == TRUE
   assert.equal(punk('or!{and!{TRUE TRUE} FALSE}'), 'TRUE');
 });

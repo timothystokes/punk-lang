@@ -7,7 +7,6 @@
 //   - SHORTCUT: when the body is a single expression, the outer `{}` are
 //     optional — `(p)expr` is the same as `(p){expr}`.
 //   - Call with `!`: `welcome!{Tim}` -> `{Hello Tim}`.
-//   - A single-thing arg can be passed without braces: `f!x` ≡ `f!{x}`.
 //   - Return rule: the body IS a template. Calling the function returns
 //     that body as a template — always. A 1-item body returns `{thing}`;
 //     a 3-item body returns `{a b c}`. There is no implicit unwrap.
@@ -36,18 +35,14 @@ test('named function — calling with structured arg', () => {
   );
 });
 
-test('named function — calling with single bare thing', () => {
-  // `f!Tim` is shorthand for `f!{Tim}`.
-  assert.equal(
-    punk('welcome:([name]){Hello name?}  welcome!Tim'),
-    '{Hello Tim}'
-  );
+test('named function — bare value arg is a syntax error', () => {
+  punkThrows('welcome:([name]){Hello name?}  welcome!Tim');
 });
 
 test('whitespace between `)` and `{` is a syntax error — they are not a function', () => {
   // `([name]) {Hello name?}` is a pattern then an unrelated template,
   // so attempting to call it as a function should fail.
-  punkThrows('welcome:([name]) {Hello name?}  welcome!Tim');
+  punkThrows('welcome:([name]) {Hello name?}  welcome!{Tim}');
 });
 
 test('function returns the whole resulting template by default', () => {
@@ -59,7 +54,7 @@ test('function returns the whole resulting template by default', () => {
         (FALSE){Large Circle}
       }!
     }
-    sizer!7`;
+  sizer!{7}`;
   assert.equal(punk(src), '{circumference:{43.974} {Large Circle}}');
 });
 
@@ -71,7 +66,7 @@ test('return range `~` returns only the last item of the template', () => {
         (FALSE){Large Circle}
       }!
     }~
-    sizer!7`;
+  sizer!{7}`;
   assert.equal(punk(src), '{Large Circle}');
 });
 
@@ -79,7 +74,7 @@ test('simple nested function call — body returns a singleton template', () => 
   // Body is a single arithmetic call producing a Word; the body is one
   // item and the function returns it as `{Word}`. REPL displays `{43.974}`.
   assert.equal(
-    punk('circ:([r]){X!{X!{3.141 r?} 2}}  circ!7'),
+    punk('circ:([r]){X!{X!{3.141 r?} 2}}  circ!{7}'),
     '{43.974}'
   );
 });
@@ -93,7 +88,7 @@ test('recursion — function references itself by name', () => {
         (FALSE){X!{n? factorial!{-!{n? 1}}}}
       }!
     }~
-    factorial!5`;
+    factorial!{5}`;
   assert.equal(punk(src), '{120}');
 });
 
@@ -103,24 +98,24 @@ test('closure — inner function captures outer name', () => {
   const src = `make-adder:([n]){
       ([x]){+!{x? n?}}
     }~
-    add10:make-adder!10
-    add10!5`;
+    add10:make-adder!{10}
+    add10!{5}`;
   assert.equal(punk(src), '{15}');
 });
 
 test('closure — captured name is not affected by later rebinding in another scope', () => {
   // The closure keeps the value captured at its point of creation.
   const src = `make-adder:([n]){([x]){+!{x? n?}}}~
-    add10:make-adder!10
-    add20:make-adder!20
-    {add10!5 add20!5}!`;
+    add10:make-adder!{10}
+    add20:make-adder!{20}
+    {add10!{5} add20!{5}}!`;
   assert.equal(punk(src), '{{15} {25}}');
 });
 
 test('function with unstructured-template body', () => {
   // Doc § PDN: `(...)"..."` is also a function literal.
   assert.equal(
-    punk('greet:([n])"Hi {n?}"  greet!Bob'),
+    punk('greet:([n])"Hi {n?}"  greet!{Bob}'),
     '"Hi Bob"'
   );
 });
@@ -128,25 +123,25 @@ test('function with unstructured-template body', () => {
 test('shortcut — outer braces are optional when body is a single expression', () => {
   // Doc § Functions: `(p)expr` is the same as `(p){expr}`.
   assert.equal(
-    punk('inc:([n])+!{n? 1}  inc!4'),
+    punk('inc:([n])+!{n? 1}  inc!{4}'),
     '{5}'
   );
 });
 
-test('shortcut — braceless body returns a singleton template', () => {
-  // Body is a single fn literal; the function returns `{fn}` (a 1-item
-  // template). Calling `make-adder!3` produces `{([x]){...}}`, which is
-  // not callable directly — to bind a usable adder, use the braced
-  // form with `~` (see closure tests).
+test('shortcut — braceless body returns the fn literal directly', () => {
+  // Body is a single fn literal, which is already a complete,
+  // self-contained value — it's returned as-is, no extra wrap.
+  // Calling `make-adder!3` produces the bare fn `([x]){...}`, which
+  // is directly callable.
   const src = `make-adder:([n])([x]){+!{x? n?}}
-    make-adder!3`;
-  assert.equal(punk(src), '{([x]){+!{x? n?}}}');
+    make-adder!{3}`;
+  assert.equal(punk(src), '([x]){+!{x? n?}}');
 });
 
 test('return range `~` on braceless body — allowed and a no-op', () => {
   // 1-item body's last item is the only item, so `~` just returns it.
   assert.equal(
-    punk('inc:([n])+!{n? 1}~  inc!4'),
+    punk('inc:([n])+!{n? 1}~  inc!{4}'),
     '{5}'
   );
 });

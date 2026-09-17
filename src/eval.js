@@ -996,8 +996,10 @@ function stringifyForText(node) {
 }
 
 // Apply the function-body return rule. A body Tmpl evaluates each
-// item; a 1-item body returns that item directly; multi-item returns
-// the whole Tmpl. A `returnRange` slices/picks from the items.
+// item; a 1-item body returns that item directly (unless it's a bare
+// Named pair, which gets grouped into a 1-item Tmpl, since a Named
+// pair isn't a complete value on its own); multi-item returns the
+// whole Tmpl. A `returnRange` slices/picks from the items.
 function cascadeBody(body, returnRange, env) {
   if (body.kind === 'Text') return cascadeText(body, env);
   if (body.kind !== 'Tmpl') return evalItem(body, env);
@@ -1030,10 +1032,30 @@ function cascadeBody(body, returnRange, env) {
     return mkTmpl(items.slice(lo1 - 1, hi1));
   }
 
-  // A function's body IS a template. Calling the function evaluates
-  // the body's items and returns the result template — no unwrap,
-  // even for a 1-item body. Callers inline with `.?` if they want
-  // the items spliced into the surrounding template.
+  // A function's body is a single expression when it evaluates to one
+  // item. If that item is already a complete value on its own (a
+  // Tmpl, Text, Fn, Pattern, Atom, ...), it IS the result, unwrapped
+  // — no special-casing by kind beyond "is this already `{}`-shaped
+  // (or otherwise self-contained)". Two kinds are NOT complete values
+  // by themselves and still get grouped into a 1-item Tmpl: a Named
+  // pair (a data pair must live inside a template) and a bare Word
+  // value/number/reserved (the same short-form-wrap rule that applies
+  // everywhere else a bare Word could otherwise stand alone). A
+  // multi-item body has no single expression to return as-is, so its
+  // items are grouped into one Tmpl (the only way to represent N
+  // sibling things as one value). `~` (returnRange, handled above) is
+  // how you pick out part of a multi-item body.
+  if (items.length === 1) {
+    const only = items[0];
+    const needsWrap = only && (
+      only.kind === 'Named'
+      || (only.kind === 'Word'
+          && (only.subkind === 'value'
+              || only.subkind === 'number'
+              || only.subkind === 'reserved'))
+    );
+    return needsWrap ? mkTmpl([only]) : only;
+  }
   return mkTmpl(items);
 }
 

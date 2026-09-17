@@ -1,9 +1,9 @@
 # Import reusable Punk modules. #
-html:import!punk.html
-keystore:import!punk.keystore
+html:import!{punk.html}
+keystore:import!{punk.keystore}
 
 # Open append-only todo store and keep the current handle in atom @db. #
-keystore.open!todo->@db!
+keystore.open!{todo}->@db!
 
 # Add a todo: append new {key value} entry and write the returned handle back to @db. #
 createTodo:([note] [desc]){
@@ -11,33 +11,14 @@ createTodo:([note] [desc]){
     keystore.newKey!
     {note:note? desc:desc?}
   }->@db!
-}~
-
-# Pull replayed entries from a keystore handle. #
-dbEntries:([h]){
-  h.entries?
-}~
-
-# Extract one field from parsed form pairs: {{note "x"} {description "y"}}. #
-formValue:([key] [pairs]){
-  reduce!{
-    ([acc] [pair]){
-      =!{pair.1? key?}??{
-        (TRUE){pair.2?}
-        (FALSE){acc?}
-      }!
-    }~
-    NULL
-    pairs?
-  }
-}~
+}
 
 # Page template as DATA (functions as data):
-# - `indexPage` returns an element-tree value (html/head/body/etc).
-# - Nothing renders here; this is just structured data.
-# - `html.render!` later consumes this function-produced data and turns it into text/HTML. #
+`indexPage` returns an element-tree value (html/head/body/etc).
+Nothing renders here; this is just structured data.
+`html.renderPage!` later consumes this function-produced data, prefixes it with
+a doctype declaration, and turns it into text/HTML. #
 indexPage:(){
-  <\!DOCTYPE html>
   html:(lang:en){
     head:{
       title:{punk-todo}
@@ -52,35 +33,46 @@ indexPage:(){
       ul:{}
     }
   }
-}~
+}
 
 # GET / -> render the page data into HTML text and return HTTP response. #
 index:([req]){
-  body:html.render!indexPage!
-  {status:200 headers:{Content-Type:text\/html} body:body?}
+  status:{200} headers:{Content-Type:text\/html} body:html.renderPage!{indexPage!.?}
+}
+
+# Parse a request body according to its Content-Type header, returning
+a proper record (e.g. {note:"x" description:"y"}) so handlers can
+query fields directly (req.body.note?) instead of hand-rolling
+lookups. Only `text/plain` (the punk-todo form encoding) is
+supported today; anything else is left as raw text. TODO:
+`application/json` support (see README's session TODO list). #
+parseBody:([req]){
+  req.headers.content-type??{
+    ([ct/^text\/plain/]){html.parseForm!req.body?}
+    (*){req.body?}
+  }!
 }~
 
-# POST /todo -> parse plain-text form body, persist new todo, redirect to /. #
+# POST /todo -> parse form body, persist new todo, redirect to /. #
 createTodoHandler:([req]){
-  form:html.parsePost!req.3?
-  createTodo!{formValue!{note form?} formValue!{description form?}}
-  {status:303 headers:{Location:\/} body:{}}
+  createTodo!{req.body.note? req.body.description?}
+  {status:{303} headers:{Location:\/} body:{}}
 }~
 
 # Fallback route response. #
 notFound:([req]){
-  {status:404 headers:{Content-Type:text\/plain} body:{Not Found}}
-}~
+  status:{404} headers:{Content-Type:text\/plain} body:{Not Found}
+}
 
-# Route dispatcher for request shape {method url body}. #
+# Route dispatcher for request shape {method url headers body}. #
 dispatch:([req]){
-  isGetRoot:and!{=!{req.1? GET} =!{req.2? "/"}}
-  isPostTodo:and!{=!{req.1? POST} =!{req.2? "/todo"}}
-  isGetRoot??{
+  and!{=!{req.method? GET} =!{req.url? "/"}}??{
     (TRUE){index!req?}
     (FALSE){
-      isPostTodo??{
-        (TRUE){createTodoHandler!req?}
+      and!{=!{req.method? POST} =!{req.url? "/todo"}}??{
+        (TRUE){
+          createTodoHandler!{{method:req.method? url:req.url? headers:req.headers? body:parseBody!req?}}
+        }
         (FALSE){notFound!req?}
       }!
     }

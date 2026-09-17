@@ -1,7 +1,7 @@
 // IO built-ins — `print!`, `read!`, `write!`, `append!`, `exists!`.
 //
 // From doc § "Input and Output":
-//   - `print!t` writes contents of t to stdout + newline; returns NULL.
+//   - `print!{t}` writes contents of t to stdout + newline; returns NULL.
 //   - `read!path` returns a template of the file's lines.
 //   - `write!{path t}` overwrites the file.
 //   - `append!{path t}` appends to the file.
@@ -20,7 +20,7 @@ import { punk, punkThrows } from './_punk.mjs';
 test('print! — returns NULL (effect-only)', () => {
   // The side effect of writing to stdout is not observed; only the
   // returned value is checked.
-  assert.equal(punk('print!hello'), 'NULL');
+  assert.equal(punk('print!{hello}'), 'NULL');
 });
 
 test('print! — accepts a structured template arg', () => {

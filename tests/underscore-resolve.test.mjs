@@ -17,12 +17,12 @@ import { punk, punkThrows } from './_punk.mjs';
 // ---------- valid uses ----------
 
 test('`_?` resolves the only slot of a (_) function', () => {
-  assert.equal(punk('double:(_)X!{_? 2}  double!21'), '{42}');
+  assert.equal(punk('double:(_)X!{_? 2}  double!{21}'), '{42}');
 });
 
 test('`_?` works as a single-expression body for (_)', () => {
   // 1-param body sugar: `(_)expr` ≡ `(_){expr}`
-  assert.equal(punk('id:(_)_?  id!7'), '{7}');
+  assert.equal(punk('id:(_)_?  id!{7}'), '{7}');
 });
 
 test('`_?` works inside a nested `(_)` partial', () => {
@@ -31,8 +31,8 @@ test('`_?` works inside a nested `(_)` partial', () => {
   assert.equal(
     punk(`
       add:([x]){(_)+!{x? _?}}~
-      inc:add!10
-      inc!5
+      inc:add!{10}
+      inc!{5}
     `),
     '{15}'
   );
@@ -45,7 +45,7 @@ test('`_?` outside any function is a syntax/runtime error', () => {
 });
 
 test('`_?` in a named-slot function is an error', () => {
-  punkThrows('f:([x])_?  f!1');
+  punkThrows('f:([x])_?  f!{1}');
 });
 
 test('`_?` in a multi-slot function is an error', () => {
@@ -71,9 +71,9 @@ test('`*?` resolves the variadic of a (*) function', () => {
 // pattern matched. Path access (`*.1?`, `*.name?`) walks into it.
 
 test('`*?` lands the whole args template even when the pattern bound labels', () => {
-  // `*?` lands the whole args Tmpl as ONE item inside the body tmpl,
-  // so the body `{*?}` wraps it once more — same rule as any single-query body.
-  assert.equal(punk('f:([a] [b]){*?}  f!{x y}'), '{{x y}}');
+  // `*?` lands the whole args Tmpl; a single-item body that resolves to
+  // an already-structural Tmpl returns it directly (no extra wrap).
+  assert.equal(punk('f:([a] [b]){*?}  f!{x y}'), '{x y}');
 });
 
 test('`*.1?` reads the first positional argument', () => {
@@ -87,20 +87,20 @@ test('`*.N?` indexes into the args by position', () => {
 
 test('`*.name?` reads a Named entry from the args', () => {
   assert.equal(
-    punk('getName:(name:_ *){*.name?}  getName!{name:Sally age:32}'),
+    punk('getName:(name:_ *){*.name?}  getName!{name:{Sally} age:{32}}'),
     '{Sally}',
   );
-  // For a multi-item value the query lands the whole tmpl as one item,
-  // nesting it inside the body's wrapping tmpl.
+  // For a multi-item value the query lands the whole tmpl as one item;
+  // a single-item body returns an already-structural Tmpl directly.
   assert.equal(
     punk('full:(*){*.name?}  full!{name:{Sally Smith}}'),
-    '{{Sally Smith}}',
+    '{Sally Smith}',
   );
 });
 
 test('`*` reflects the as-passed args even when context-match labelled them', () => {
   assert.equal(
-    punk('f:(name:[n]){*.name?}  f!{name:Sally}'),
+    punk('f:(name:[n]){*.name?}  f!{name:{Sally}}'),
     '{Sally}',
   );
 });

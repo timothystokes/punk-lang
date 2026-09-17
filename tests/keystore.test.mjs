@@ -10,7 +10,7 @@ function uniqueStoreBase() {
 
 test('serialize!/deserialize! round-trip a value', () => {
   assert.equal(
-    punk('v:{note:"hello world" done:FALSE}  d:deserialize!serialize!v?  =!{serialize!v? serialize!d?}'),
+    punk('v:{note:"hello world" done:{FALSE}}  d:deserialize!serialize!v?  =!{serialize!v? serialize!d?}'),
     'TRUE',
   );
 });
@@ -21,7 +21,7 @@ test('keystore open!/put!/get! returns immutable handles', () => {
   try {
     const src = `
       ks:import!punk.keystore
-      h0:ks.open!${base}
+      h0:ks.open!{${base}}
       h1:ks.put!{id-1 {note:"todo 1"} h0?}
       and!{
         =!{NULL ks.get!{id-1 h0?}}

@@ -49,8 +49,8 @@ test('a stray bare ! at top level is a syntax error', () => {
 });
 
 test('bare ! absorbed into a pipeline does NOT trigger the check', () => {
-  run('0->@counter!');
-  run('Hello->upper->log!');
+  run('{0}->@counter!');
+  run('{Hello}->upper->log!');
 });
 
 // ---------------------------------------------------------------------------
@@ -103,8 +103,8 @@ test("'xs: 5' (space) is a syntax error (dangling Named)", () => {
   assert.throws(() => run('xs: 5'), /xs:/);
 });
 
-test('xs:5 (glued) is fine', () => {
-  run('xs:5');
+test('xs:{5} (glued) is fine', () => {
+  run('xs:{5}');
 });
 
 // ---------------------------------------------------------------------------
@@ -131,7 +131,7 @@ test('error inside a Tmpl inside a Pattern slot is caught', () => {
 });
 
 test('error inside a Pipeline stage is caught', () => {
-  assert.throws(() => run('5->{!}->log!'), /stray '!'/);
+  assert.throws(() => run('{5}->{!}->log!'), /stray '!'/);
 });
 
 test('error inside a Text embed is caught', () => {

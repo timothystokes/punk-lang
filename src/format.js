@@ -18,11 +18,11 @@ export function format(value) {
     case 'Word':
       return value.text;
     case 'Tmpl':
-      return '{' + value.items.map(format).join(' ') + '}';
+      return '{' + value.items.map((it) => formatItem(it, false)).join(' ') + '}';
     case 'Pattern': {
-      const lhs = value.items.map(format).join(' ');
+      const lhs = value.items.map((it) => formatItem(it, true)).join(' ');
       if (value.suchThat && value.suchThat.length) {
-        const rhs = value.suchThat.map(format).join(' ');
+        const rhs = value.suchThat.map((it) => formatItem(it, true)).join(' ');
         return '(' + (lhs ? lhs + ' ' : '') + '| ' + rhs + ')';
       }
       return '(' + lhs + ')';
@@ -40,22 +40,7 @@ export function format(value) {
     case 'Regex':
       return '/' + value.body + '/' + (value.flags || '');
     case 'Named':
-      if (value._label) {
-        // `[label]`, `*[label]`, `[label/re/f]` — labelled pattern slot.
-        const v = value.value;
-        if (v && v.kind === 'Word' && v.subkind === 'variadic') {
-          return '*[' + value.name + ']';
-        }
-        if (v && v.kind === 'Word' && v.subkind === 'wildcard') {
-          return '[' + value.name + ']';
-        }
-        if (v && v.kind === 'Regex') {
-          return '[' + value.name + '/' + v.body + '/' + (v.flags || '') + ']';
-        }
-        // Fallback (shouldn't occur — only the above forms are produced).
-        return '[' + value.name + ']';
-      }
-      return value.name + ':' + format(value.value);
+      return formatNamed(value, false);
     case 'Query':
       return formatPath(value) + '?';
     case 'Exec':
@@ -93,6 +78,46 @@ const formatRange = ({ from, to }) => {
   const f = from === null || from === undefined ? '' : String(from);
   const t = to === null || to === undefined ? '' : String(to);
   return f + '~' + t;
+};
+
+// Format one Tmpl/Pattern item. `inPattern` distinguishes the two
+// contexts a Named node can appear in: inside a Pattern, `name:value`
+// is a literal match criterion (bare Words are fine, per parse.js's
+// Pattern exemption from rejectBareWord); inside a Tmpl, `name:value`
+// constructs data, so a bare value/number/reserved Word must be
+// printed wrapped in `{}` to stay re-parseable (see rejectBareWord).
+const formatItem = (it, inPattern) => {
+  if (it && it.kind === 'Named') return formatNamed(it, inPattern);
+  return format(it);
+};
+
+const formatNamed = (value, inPattern) => {
+  if (value._label) {
+    // `[label]`, `*[label]`, `[label/re/f]` — labelled pattern slot.
+    const v = value.value;
+    if (v && v.kind === 'Word' && v.subkind === 'variadic') {
+      return '*[' + value.name + ']';
+    }
+    if (v && v.kind === 'Word' && v.subkind === 'wildcard') {
+      return '[' + value.name + ']';
+    }
+    if (v && v.kind === 'Regex') {
+      return '[' + value.name + '/' + v.body + '/' + (v.flags || '') + ']';
+    }
+    // Fallback (shouldn't occur — only the above forms are produced).
+    return '[' + value.name + ']';
+  }
+  const v = value.value;
+  // Both a bare reserved-Word literal (as it exists during parsing)
+  // and the evaluated `Null` singleton print as the source token
+  // `NULL` — either way that's the same bare-value case rejectBareWord
+  // disallows, so both need the `{}` wrap to stay re-parseable.
+  const bareWord = v && (
+    (v.kind === 'Word' && (v.subkind === 'value' || v.subkind === 'number' || v.subkind === 'reserved'))
+    || v.kind === 'Null'
+  );
+  const rhs = (bareWord && !inPattern) ? format(mkTmpl([v])) : format(v);
+  return value.name + ':' + rhs;
 };
 
 const formatSegment = (seg) => {

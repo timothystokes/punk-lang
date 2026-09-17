@@ -14,29 +14,29 @@ import assert from 'node:assert/strict';
 import { punk, punkThrows } from './_punk.mjs';
 
 test('bare predicate — match returns TRUE', () => {
-  assert.equal(punk('number:5  number?(5)'), 'TRUE');
+  assert.equal(punk('number:{5}  number?(5)'), 'TRUE');
 });
 
 test('bare predicate — non-match returns FALSE', () => {
-  assert.equal(punk('number:5  number?(6)'), 'FALSE');
+  assert.equal(punk('number:{5}  number?(6)'), 'FALSE');
 });
 
 test('if-then on match returns the template result', () => {
   assert.equal(
-    punk('number:5  number?(5){Found five\\.}!'),
+    punk('number:{5}  number?(5){Found five\\.}!'),
     '{Found five\\.}'
   );
 });
 
 test('if-then on miss returns NULL', () => {
   assert.equal(
-    punk('number:5  number?(6){Found six\\.}!'),
+    punk('number:{5}  number?(6){Found six\\.}!'),
     'NULL'
   );
 });
 
 test('multi-branch dispatch — first matching pattern wins', () => {
-  const src = `number:5
+  const src = `number:{5}
     number??{
       (5){Found five\\.}
       (7){Found seven\\.}
@@ -46,7 +46,7 @@ test('multi-branch dispatch — first matching pattern wins', () => {
 });
 
 test('multi-branch falls through to wildcard', () => {
-  const src = `number:99
+  const src = `number:{99}
     number??{
       (5){Found five\\.}
       (7){Found seven\\.}
@@ -56,7 +56,7 @@ test('multi-branch falls through to wildcard', () => {
 });
 
 test('multi-branch with no matching branch is a runtime error', () => {
-  punkThrows(`number:99
+  punkThrows(`number:{99}
     number??{
       (5){five}
       (7){seven}
@@ -71,14 +71,14 @@ test('multi-branch matches `(*)` as a catch-all for any shape', () => {
 });
 
 test('truthiness — FALSE is falsy', () => {
-  const src = `x:FALSE  x??{(TRUE){t}(FALSE){f}}!`;
+  const src = `x:{FALSE}  x??{(TRUE){t}(FALSE){f}}!`;
   assert.equal(punk(src), '{f}');
 });
 
 test('truthiness — NULL is falsy', () => {
   // Using `(NULL)` as an explicit branch (any value is matchable).
   assert.equal(
-    punk('x:NULL  x??{(NULL){nope}(_){yep}}!'),
+    punk('x:{NULL}  x??{(NULL){nope}(_){yep}}!'),
     '{nope}'
   );
 });
@@ -86,7 +86,7 @@ test('truthiness — NULL is falsy', () => {
 test('truthiness — 0 is truthy', () => {
   // 0 is neither FALSE nor NULL; it falls to the catch-all.
   assert.equal(
-    punk('x:0  x??{(FALSE){f}(NULL){n}(_){truthy}}!'),
+    punk('x:{0}  x??{(FALSE){f}(NULL){n}(_){truthy}}!'),
     '{truthy}'
   );
 });
@@ -102,7 +102,7 @@ test('match template references pattern-bound name', () => {
   // `tagger` example: a regex slot named `n` bound inside the template.
   // The body has one Named item, so the function returns it wrapped.
   assert.equal(
-    punk('tagger:([n/^\\d+$/]){Number:n.1?}  tagger!42'),
+    punk('tagger:([n/^\\d+$/]){Number:n.1?}  tagger!{42}'),
     '{Number:"42"}'
   );
 });
@@ -113,7 +113,7 @@ test('match template references pattern-bound name', () => {
 // a reserved-word literal (TRUE/FALSE/NULL) is a syntax error.
 
 test('`???` is a syntax error', () => {
-  punkThrows('x:5  x???{(_){a}}!');
+  punkThrows('x:{5}  x???{(_){a}}!');
 });
 
 test('`???` standalone is a syntax error', () => {
@@ -143,4 +143,3 @@ test('`??` on a static template literal is valid', () => {
     '{h}'
   );
 });
-

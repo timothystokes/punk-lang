@@ -16,28 +16,28 @@ test('a template held in a name does nothing until triggered', () => {
   // We assert by checking the final REPL value is the binding's value when
   // queried, not some evaluated side-effect form.
   assert.equal(
-    punk('name:Bob  msg:"Hi {name?}"  msg?'),
+    punk('name:{Bob}  msg:"Hi {name?}"  msg?'),
     '"Hi {name?}"'
   );
 });
 
 test('`?` resolves exactly one level — embedded queries are not touched', () => {
   assert.equal(
-    punk('inner:World  outer:"Hello {inner?}"  outer?'),
+    punk('inner:{World}  outer:"Hello {inner?}"  outer?'),
     '"Hello {inner?}"'
   );
 });
 
 test('`!` cascades through nested templates', () => {
   assert.equal(
-    punk('inner:World  outer:"Hello {inner?}"  outer!'),
+    punk('inner:{World}  outer:"Hello {inner?}"  outer!'),
     '"Hello World"'
   );
 });
 
 test('`!` runs functions reached inside the template', () => {
   assert.equal(
-    punk('shout:([s]){upper!{s?}}  msg:"I said {shout!hi}"  msg!'),
+    punk('shout:([s]){upper!{s?}}  msg:"I said {shout!{hi}}"  msg!'),
     '"I said HI"'
   );
 });
@@ -45,14 +45,18 @@ test('`!` runs functions reached inside the template', () => {
 test('`!` cascades into nested unstructured templates inserted by substitution', () => {
   // outer expands to "Hello {inner?}" then continues to resolve {inner?}.
   assert.equal(
-    punk('inner:Earth  outer:"Hello {inner?}"  greet:"Say: {outer!}"  greet!'),
+    punk('inner:{Earth}  outer:"Hello {inner?}"  greet:"Say: {outer!}"  greet!'),
     '"Say: Hello Earth"'
   );
 });
 
 test('a query without `?` is just literal text', () => {
+  // A bare Word can no longer stand alone as a whole top-level
+  // statement (it must always be wrapped in `{...}`), so wrap the
+  // literal word explicitly to demonstrate it's inert text, not a
+  // query, once inside a template.
   assert.equal(
-    punk('name:Bob  name'),
+    punk('name:{Bob}  {name}'),
     '{name}'
   );
 });

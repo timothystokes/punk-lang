@@ -16,9 +16,9 @@ import { punk, punkThrows } from './_punk.mjs';
 
 const PEOPLE = `
   people:{
-    {fullname:"John Smith"  age:42  hair:black  birthday:"Sunday {11}-{March}-{1984}"}
-    {fullname:"Sally Green" age:51  hair:brown  birthday:"Monday {19}-{May}-{1975}"}
-    {fullname:"Ben Jones"   age:9   hair:blue   birthday:"Monday {22}-{Dec}-{2017}"}
+    {fullname:"John Smith"  age:{42}  hair:{black}  birthday:"Sunday {11}-{March}-{1984}"}
+    {fullname:"Sally Green" age:{51}  hair:{brown}  birthday:"Monday {19}-{May}-{1975}"}
+    {fullname:"Ben Jones"   age:{9}   hair:{blue}   birthday:"Monday {22}-{Dec}-{2017}"}
   }
 `;
 
@@ -53,10 +53,10 @@ test('index out of range returns NULL', () => {
   assert.equal(punk('xs:{a b c}  xs.99?'), 'NULL');
 });
 
-test('indexing a bare-value binding returns the (wrapped) value', () => {
-  // `x:42` is shorthand for `x:{42}`, so `x.1?` is the only item.
-  assert.equal(punk('x:42  x.1?'), '{42}');
-  assert.equal(punk('x:42  x.2?'), 'NULL');
+test('indexing a bound singleton template returns the value', () => {
+  // `x:{42}` has one item, so `x.1?` is that item.
+  assert.equal(punk('x:{42}  x.1?'), '{42}');
+  assert.equal(punk('x:{42}  x.2?'), 'NULL');
 });
 
 // ---------- Last item shorthand ----------
@@ -79,7 +79,7 @@ test('`.#?` of an unstructured template is character count', () => {
 });
 
 test('`.#?` of a record counts named items', () => {
-  assert.equal(punk('r:{a:1 b:2 c:3}  r.#?'), '{3}');
+  assert.equal(punk('r:{a:{1} b:{2} c:{3}}  r.#?'), '{3}');
 });
 
 // ---------- Range: n~ ----------
@@ -94,7 +94,7 @@ test('range names are stripped (path navigation never returns names)', () => {
   // Range returns the value side of each named slot.
   assert.equal(
     punk(withPeople('people.2.3~?')),
-    '{brown "Monday {19}-{May}-{1975}"}'
+    '{{brown} "Monday {19}-{May}-{1975}"}'
   );
 });
 
@@ -172,7 +172,7 @@ test('`._?` on a named pattern returns structured pattern info', () => {
 });
 
 test('`._?` of a non-function returns NULL', () => {
-  assert.equal(punk('x:42  x._?'), 'NULL');
+  assert.equal(punk('x:{42}  x._?'), 'NULL');
   assert.equal(punk('xs:{1 2 3}  xs._?'), 'NULL');
   assert.equal(punk('s:"hi"  s._?'), 'NULL');
 });
@@ -190,7 +190,7 @@ test('`.!?` returns a function reference for user functions and builtins', () =>
 });
 
 test('`.!?` of a non-function returns NULL', () => {
-  assert.equal(punk('x:42  x.!?'), 'NULL');
+  assert.equal(punk('x:{42}  x.!?'), 'NULL');
 });
 
 // ---------- `?` on function values returns the body/template ----------
@@ -220,10 +220,10 @@ test('querying a bare Word literal is a syntax error', () => {
   punkThrows('hello.1?');
 });
 
-test('querying a Word via a name returns the (wrapped) Word', () => {
-  // `n:hello` is shorthand for `n:{hello}`, so `n.1?` is the only item.
-  assert.equal(punk('n:hello   n.1?'), '{hello}');
-  assert.equal(punk('n:hello   n.2?'), 'NULL');
+test('querying a Word via a named singleton template returns the Word', () => {
+  // `n:{hello}` has one item, so `n.1?` is the only item.
+  assert.equal(punk('n:{hello}   n.1?'), '{hello}');
+  assert.equal(punk('n:{hello}   n.2?'), 'NULL');
 });
 
 test('querying into a Word literally wrapped in a template returns the Word', () => {
@@ -237,15 +237,15 @@ test('querying into a Word literally wrapped in a template returns the Word', ()
 // a number resolves to an index step. Anything else is a runtime error.
 
 test('dynamic step — name from a bound value', () => {
-  assert.equal(punk('x:{a:1 b:2 c:3} n:b   x.{n?}?'), '{2}');
+  assert.equal(punk('x:{a:{1} b:{2} c:{3}} n:{b}   x.{n?}?'), '{2}');
 });
 
 test('dynamic step — index from a bound number', () => {
-  assert.equal(punk('xs:{10 20 30 40}  i:3   xs.{i?}?'), '{30}');
+  assert.equal(punk('xs:{10 20 30 40}  i:{3}   xs.{i?}?'), '{30}');
 });
 
 test('dynamic step — literal Tmpl head', () => {
-  assert.equal(punk('k:b   {a:1 b:2 c:3}.{k?}?'), '{2}');
+  assert.equal(punk('k:{b}   {a:{1} b:{2} c:{3}}.{k?}?'), '{2}');
 });
 
 test('dynamic step — literal number expression as index', () => {
@@ -254,28 +254,28 @@ test('dynamic step — literal number expression as index', () => {
 
 test('dynamic step — chained with literal segments before and after', () => {
   assert.equal(
-    punk('x:{a:{b:{c:99}}} k:a   x.{k?}.b.c?'),
+    punk('x:{a:{b:{c:{99}}}} k:{a}   x.{k?}.b.c?'),
     '{99}',
   );
   assert.equal(
-    punk('x:{a:{b:{c:99}}} k:b   x.a.{k?}.c?'),
+    punk('x:{a:{b:{c:{99}}}} k:{b}   x.a.{k?}.c?'),
     '{99}',
   );
 });
 
 test('dynamic step — multiple dynamic steps in a row', () => {
   assert.equal(
-    punk('x:{a:{b:5}}  n:a  m:b   x.{n?}.{m?}?'),
+    punk('x:{a:{b:{5}}}  n:{a}  m:{b}   x.{n?}.{m?}?'),
     '{5}',
   );
 });
 
 test('dynamic step — name lookup that misses returns NULL', () => {
-  assert.equal(punk('x:{a:1 b:2} k:nope   x.{k?}?'), 'NULL');
+  assert.equal(punk('x:{a:{1} b:{2}} k:{nope}   x.{k?}?'), 'NULL');
 });
 
 test('dynamic step — error when result is a multi-item Tmpl', () => {
-  punkThrows('x:{a:1 b:2} bad:{1 2}   x.{bad?}?');
+  punkThrows('x:{a:{1} b:{2}} bad:{1 2}   x.{bad?}?');
 });
 
 test('dynamic step — closes over an outer name', () => {
@@ -283,7 +283,7 @@ test('dynamic step — closes over an outer name', () => {
   // name against the enclosing scope at call time, just like any other
   // query inside that body.
   assert.equal(
-    punk('f:([attribute]){([a]){a.{attribute?}?}}~  g:f!b  g!{{a:1 b:2 c:3}}'),
+    punk('f:([attribute]){([a]){a.{attribute?}?}}~  g:f!{b}  g!{{a:{1} b:{2} c:{3}}}'),
     '{2}',
   );
 });
@@ -297,10 +297,10 @@ test('dynamic step — closes over an outer name through a higher-order builtin'
       pick:([attribute] [items]){
         map!{([item]){item.{attribute?}?}~ items?}
       }~
-      ms:{Jan:{tokens:850} Feb:{tokens:870}}
+      ms:{Jan:{tokens:{850}} Feb:{tokens:{870}}}
       pick!{tokens ms?}
     `),
-    '{850 870}',
+    '{{850} {870}}',
   );
 });
 

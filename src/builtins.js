@@ -112,15 +112,6 @@ const WORD_ESCAPE_CHARS = new Set([
   ' ', '\t', '\n',
 ]);
 
-function escapeForWord(s) {
-  let out = '';
-  for (const ch of s) {
-    if (WORD_ESCAPE_CHARS.has(ch)) out += '\\' + ch;
-    else out += ch;
-  }
-  return out;
-}
-
 // Render a value to a JS string for text-flavoured builtins.
 // Tmpls join their items with a single space (matches "structured
 // input is implicitly joined with a single space" rule for text
@@ -427,7 +418,13 @@ export const builtins = {
     }
     const sep    = valueToText(xs[0]);
     const target = valueToText(xs[1]);
-    return mkTmpl(target.split(sep).map((s) => mkWord(escapeForWord(s))));
+    // Each piece is a value in its own right (one true value shape),
+    // so it lands as a singleton Tmpl, not a bare item spliced into
+    // the outer result. A piece may be arbitrary text — including
+    // whitespace, which a Word can never hold (no whitespace escape)
+    // — so the piece is stored as Text, the one representation that
+    // can losslessly carry any content without escaping tricks.
+    return mkTmpl(target.split(sep).map((s) => mkTmpl([mkTextLit(s)])));
   },
   'replace': (args, _env, ctx) => {
     const xs = argsItems(args);
@@ -559,6 +556,26 @@ export const builtins = {
     const needle = xs[0];
     const haystack = isTmplV(xs[1]) ? xs[1].items : [xs[1]];
     return boolValue(haystack.some((h) => equals(h, needle)));
+  },
+  // Punk source has no syntax for a dynamically-keyed Named entry —
+  // `name:value` requires a literal name token. `toRecord!` is the
+  // escape hatch: given a list of `{key value}` pairs (key text
+  // becomes the field name), it builds a proper Named record. Used
+  // by html.parseForm to turn parsed form pairs into `{note:"x" ...}`.
+  'toRecord': (args, _env, ctx) => {
+    const node = ctx && ctx.node;
+    const xs = argsItems(singleArg(args));
+    const items = xs.map((pair) => {
+      if (!isTmplV(pair) || pair.items.length !== 2) {
+        throw new PunkRuntimeError(
+          `toRecord!: each item must be a {key value} pair`,
+          node && node.line, node && node.col,
+        );
+      }
+      const [k, v] = pair.items;
+      return { kind: 'Named', name: valueToText(k), value: v };
+    });
+    return mkTmpl(items);
   },
 };
 
@@ -716,8 +733,16 @@ function methodNeedsBody(m) {
 function toRequestValue(req, bodyText) {
   const method = mkWord(String(req.method || 'GET'));
   const url = mkTextLit(String(req.url || '/'));
+  const headerItems = Object.entries(req.headers || {}).map(([k, v]) => ({
+    kind: 'Named', name: k, value: mkTextLit(String(v)),
+  }));
   const body = bodyText == null ? NULL : mkTextLit(bodyText);
-  return mkTmpl([method, url, body]);
+  return mkTmpl([
+    { kind: 'Named', name: 'method', value: mkTmpl([method]) },
+    { kind: 'Named', name: 'url', value: mkTmpl([url]) },
+    { kind: 'Named', name: 'headers', value: mkTmpl(headerItems) },
+    { kind: 'Named', name: 'body', value: body },
+  ]);
 }
 
 function toResponseParts(v, node) {

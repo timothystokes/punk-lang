@@ -22,7 +22,7 @@ test('`\\?` keeps `?` literal — no query is fired', () => {
   // Under the new model the escape is preserved verbatim, so the word
   // `name\?` is inert in a tmpl context — no path query triggers.
   assert.equal(
-    punk('name:Tim  {What is your name\\?}'),
+    punk('name:{Tim}  {What is your name\\?}'),
     '{What is your name\\?}'
   );
 });
@@ -147,7 +147,7 @@ test('`.` does not need escaping outside path tokens — 2 chars in "a."', () =>
 });
 
 test('decimal numbers have unescaped dots', () => {
-  assert.equal(punk('isnum!3.141'), 'TRUE');
+  assert.equal(punk('isnum!{3.141}'), 'TRUE');
 });
 
 test('`_` and `*` are ordinary text outside patterns', () => {
@@ -178,7 +178,7 @@ test('escaped dot in a path-shaped word does NOT separate segments', () => {
   // sub-segment, so the whole thing is an inert word and no query
   // resolves.
   assert.equal(
-    punk('name:Tim  {hello name\\.foo\\?}'),
+    punk('name:{Tim}  {hello name\\.foo\\?}'),
     '{hello name\\.foo\\?}'
   );
 });

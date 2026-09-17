@@ -38,7 +38,7 @@ test('map! — two-arg `([item] [index])` callback uses index', () => {
 
 test('map! — item arg preserves Named, so item.:? gets the name', () => {
   assert.equal(
-    punk('map!{([item]){item.:?}~ {x:1 y:2 z:3}}'),
+    punk('map!{([item]){item.:?}~ {x:{1} y:{2} z:{3}}}'),
     '{x y z}'
   );
 });
@@ -46,10 +46,10 @@ test('map! — item arg preserves Named, so item.:? gets the name', () => {
 test('map! — item arg preserves Named, so item.field? works', () => {
   assert.equal(
     punk(`
-      ms:{Jan:{tokens:850} Feb:{tokens:870} Mar:{tokens:830}}
+      ms:{Jan:{tokens:{850}} Feb:{tokens:{870}} Mar:{tokens:{830}}}
       map!{([m]){m.tokens?}~ ms?}
     `),
-    '{850 870 830}'
+    '{{850} {870} {830}}'
   );
 });
 

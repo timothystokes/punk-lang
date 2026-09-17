@@ -17,7 +17,7 @@ test('assert! — pass returns NULL', () => {
 });
 
 test('assert! — pass on text equality', () => {
-  assert.equal(punk('assert!{HELLO upper!hello}'), 'NULL');
+  assert.equal(punk('assert!{HELLO upper!{hello}}'), 'NULL');
 });
 
 test('assert! — fail raises a runtime error', () => {
@@ -27,13 +27,13 @@ test('assert! — fail raises a runtime error', () => {
 test('assert! — partials cleanly (expected first)', () => {
   // `assert'3` partials the 2-arg form, fixing the expected value to 3.
   // Then `is-three!actual` evaluates actual vs 3.
-  const src = `is-three:assert'3
+  const src = `is-three:assert'{3}
     is-three!+!{1 2}`;
   assert.equal(punk(src), 'NULL');
 });
 
 test("assert! — partials and fails when actual doesn't match", () => {
-  const src = `is-three:assert'3
+  const src = `is-three:assert'{3}
     is-three!+!{1 5}`;
   punkThrows(src);
 });
@@ -41,20 +41,20 @@ test("assert! — partials and fails when actual doesn't match", () => {
 // ---- single-arg form: assert truthy -----------------------------------
 
 test('assert! — truthy condition passes', () => {
-  assert.equal(punk('assert!TRUE'), 'NULL');
+  assert.equal(punk('assert!{TRUE}'), 'NULL');
 });
 
 test('assert! — FALSE raises a runtime error', () => {
-  punkThrows('assert!FALSE');
+  punkThrows('assert!{FALSE}');
 });
 
 test('assert! — NULL raises a runtime error', () => {
-  punkThrows('assert!NULL');
+  punkThrows('assert!{NULL}');
 });
 
 test('assert! — 0 is truthy and passes (per Punk truthiness)', () => {
   // Only FALSE and NULL are falsy; 0 / {} / () are all truthy.
-  assert.equal(punk('assert!0'), 'NULL');
+  assert.equal(punk('assert!{0}'), 'NULL');
 });
 
 test('assert! — empty template {} is truthy and passes', () => {

@@ -99,11 +99,8 @@ test('add! {1 2} (with space) does NOT attach args', () => {
   assert.equal(its[1].kind, 'Tmpl');
 });
 
-test('embedded args from add!5 short form are preserved', () => {
-  const [e] = items('add!5');
-  assert.equal(e.kind, 'Exec');
-  assert.equal(e.args.items.length, 1);
-  assert.equal(e.args.items[0].text, '5');
+test('bare value exec args now fail at parse time', () => {
+  assert.throws(() => items('add!5'));
 });
 
 // ---------------------------------------------------------------------------
@@ -151,7 +148,7 @@ test('a->b → Pipeline with 2 stages, not executed', () => {
 });
 
 test('Hello->upper->log! → Pipeline, executed (last is Exec)', () => {
-  const [p] = items('Hello->upper->log!');
+  const [p] = items('{Hello}->upper->log!');
   assert.equal(p.kind, 'Pipeline');
   assert.equal(p.stages.length, 3);
   assert.equal(p.execute, true);
@@ -159,7 +156,7 @@ test('Hello->upper->log! → Pipeline, executed (last is Exec)', () => {
 });
 
 test('0->@counter! → Pipeline ending in Atom, executed via bare !', () => {
-  const [p] = items('0->@counter!');
+  const [p] = items('{0}->@counter!');
   assert.equal(p.kind, 'Pipeline');
   assert.equal(p.stages.length, 2);
   assert.equal(p.stages[1].kind, 'Atom');
@@ -183,7 +180,7 @@ test('upper->trim → composed Pipeline, not executed', () => {
 test("5->double->log! with partial → Pipeline of 3 stages", () => {
   // double:times'2 then 5->double->log!
   // Just check the second line.
-  const [p] = items('5->double->log!');
+  const [p] = items('{5}->double->log!');
   assert.equal(p.kind, 'Pipeline');
   assert.equal(p.stages.length, 3);
   assert.equal(p.execute, true);
@@ -200,7 +197,7 @@ test('Fn body is recursed into (Pattern + Tmpl inside another Tmpl)', () => {
 });
 
 test('Pipeline inside Text embed', () => {
-  const text = items('"result: {x->double->log!}"')[0];
+  const text = items('"result: {{x}->double->log!}"')[0];
   assert.equal(text.kind, 'Text');
   const embed = text.parts.find((p) => 'embed' in p);
   assert.equal(embed.embed.kind, 'Tmpl');

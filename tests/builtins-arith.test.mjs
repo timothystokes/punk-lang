@@ -55,20 +55,20 @@ test('min! / max!', () => {
 });
 
 test('abs! / neg!', () => {
-  assert.equal(punk('abs!-5'),  '{5}');
-  assert.equal(punk('abs!5'),   '{5}');
-  assert.equal(punk('neg!5'),   '{-5}');
-  assert.equal(punk('neg!-5'),  '{5}');
+  assert.equal(punk('abs!{-5}'), '{5}');
+  assert.equal(punk('abs!{5}'),  '{5}');
+  assert.equal(punk('neg!{5}'),  '{-5}');
+  assert.equal(punk('neg!{-5}'), '{5}');
 });
 
 test('floor! / ceil! / round!', () => {
-  assert.equal(punk('floor!3.7'), '{3}');
-  assert.equal(punk('ceil!3.2'),  '{4}');
-  assert.equal(punk('round!3.5'), '{4}');
-  assert.equal(punk('round!3.4'), '{3}');
+  assert.equal(punk('floor!{3.7}'), '{3}');
+  assert.equal(punk('ceil!{3.2}'),  '{4}');
+  assert.equal(punk('round!{3.5}'), '{4}');
+  assert.equal(punk('round!{3.4}'), '{3}');
 });
 
 test('sqrt!', () => {
-  assert.equal(punk('sqrt!9'),  '{3}');
-  assert.equal(punk('sqrt!16'), '{4}');
+  assert.equal(punk('sqrt!{9}'),  '{3}');
+  assert.equal(punk('sqrt!{16}'), '{4}');
 });

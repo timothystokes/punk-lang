@@ -1517,12 +1517,12 @@ const passArgsAttach = (xs) => {
     n.kind === 'Text' || n.kind === 'Atom' || n.kind === 'Fn' ||
     n.kind === 'Pattern' || n.kind === 'Query' || n.kind === 'Exec' ||
     n.kind === 'Partial' || n.kind === 'Range' ||
-    // A glued value/number/op Word is the mid-bang RHS in the
-    // short-form chain `add!5` → tokens are now [add, !, 5]; reglue
-    // gives [Word add!, Word 5]; this pass attaches the Word as args.
-    (n.kind === 'Word' &&
-      (n.subkind === 'value' || n.subkind === 'number'
-       || n.subkind === 'op' || n.subkind === 'reserved'))
+    // An 'op' Word (e.g. `+`, `<=`) is a callable reference, not a
+    // bare value — it attaches directly like Fn/Pattern do (no
+    // template required). A value/number/reserved Word is NOT here:
+    // only a template `{...}` is a value, so `f!5` is rejected below
+    // with a clear error rather than silently attaching.
+    (n.kind === 'Word' && n.subkind === 'op')
   );
   // Drill down: if cur is an Exec/Partial whose args is a singleton
   // Tmpl wrapping another Exec/Partial-with-no-args, recurse into the
@@ -1578,7 +1578,22 @@ const passArgsAttach = (xs) => {
         i++;
         continue;
       }
-      if (!isSingleArg(next) && next.kind !== 'Tmpl') break;
+      if (!isSingleArg(next) && next.kind !== 'Tmpl') {
+        // A bare value/number/reserved Word glued right after an
+        // Exec/Partial that still needs args is the rejected
+        // short-form call (`f!5`, `f!Sally`) — give a precise error
+        // instead of leaving it dangling for a later pass to trip on.
+        if (next.kind === 'Word'
+            && (next.subkind === 'value' || next.subkind === 'number'
+                || next.subkind === 'reserved')
+            && innermostNeedingArgs(cur)) {
+          throw new PunkSyntaxError(
+            `call argument must be a template — write '{${next.text}}'`,
+            next.line, next.col,
+          );
+        }
+        break;
+      }
       const inner = innermostNeedingArgs(cur);
       if (!inner) break;
       // Don't eat a Pattern that will form a Fn with the next sibling.
@@ -1695,16 +1710,21 @@ const passPipeline = (xs) => {
         execute = true;
       }
       const cleanStages = stages.map(stripGlued);
-      // Short-form wrap on the pipe SEED: only for EXECUTING pipes
-      // (`Hello->upper!`). A non-executing pipe is a composed-function
-      // value where the seed is itself a callable reference — no wrap.
+      // A bare value/number/reserved Word is never a value — only a
+      // template `{...}` is. The pipe SEED (only checked for EXECUTING
+      // pipes; a non-executing pipe is a composed-function value where
+      // the seed is itself a callable reference) must already be a
+      // template.
       if (execute) {
         const seed = cleanStages[0];
         if (seed && seed.kind === 'Word'
             && (seed.subkind === 'value'
                 || seed.subkind === 'number'
                 || seed.subkind === 'reserved')) {
-          cleanStages[0] = mkTmpl([seed], seed.line, seed.col);
+          throw new PunkSyntaxError(
+            `pipe seed must be a template — write '{${seed.text}}->...'`,
+            seed.line, seed.col,
+          );
         }
       }
       const pipe = mkPipeline(cleanStages, execute, start.line, start.col);
@@ -1727,10 +1747,6 @@ const passPipeline = (xs) => {
 };
 
 // Pass 5 — resolve `Named { value: null }` by absorbing the next glued sibling.
-// Short-form wrap is applied as a separate post-pass (see
-// passShortFormWrap below) which is context-aware: only Named items in
-// BINDING contexts (root Tmpl, Fn.body) get wrapped, not those inside
-// data Tmpls or Pattern slot decls.
 const passResolveNamed = (xs) => {
   const out = [];
   for (let i = 0; i < xs.length; i++) {
@@ -1751,74 +1767,70 @@ const passResolveNamed = (xs) => {
   return out;
 };
 
-// Short-form wrap: in BINDING contexts (root Tmpl items, Fn body items,
-// Match branch body items), a Named whose value is a bare Word
-// value/number/reserved is wrapped in a singleton Tmpl. In DATA
-// contexts (items inside a `{...}` tmpl literal that is not a fn/match
-// body, items inside an Atom-name, items inside a Pattern) the wrap is NOT
-// applied — those are data pairs / slot decls.
-//
-// Per copilot-instructions § "Short-form sugar": `n:5` ≡ `n:{5}` and
-// `ok:TRUE` ≡ `ok:{TRUE}` ONLY where Named is a binding. Inside a
-// data tmpl `{colour:blue}`, Named is a pair and round-trips as
-// written.
-const wrapBareWord = (v) => {
+// There is exactly one value shape: a template `{...}`. A bare
+// value/number/reserved Word is never itself a value — only content
+// inside a template's items. This applies uniformly to every Named
+// value inside every Tmpl literal, whether that Tmpl is a binding
+// context (root Tmpl items, Fn/Match body items) or plain data (e.g.
+// `{colour:blue}` used as a value elsewhere): `colour`'s value must
+// be written `{blue}`, not bare `blue`. The one exemption is Pattern
+// context — `(colour:blue)` there is a literal MATCH criterion, not a
+// value construction, and Pattern nodes never route through this
+// per-Tmpl-item check.
+const rejectBareWord = (v) => {
   if (v && v.kind === 'Word'
       && (v.subkind === 'value'
           || v.subkind === 'number'
           || v.subkind === 'reserved')) {
-    return mkTmpl([v], v.line, v.col);
+    throw new PunkSyntaxError(
+      `a bare value is not a template — write '{${v.text}}'`,
+      v.line, v.col,
+    );
   }
   return v;
 };
 
-// Walk the final AST, applying short-form wrap. `isBindingTmpl` is the
-// flag for the CURRENT node: when true and node is a Tmpl, its Named
-// items get wrap applied. Children Tmpls/Atoms inside a Tmpl's items
-// are data — recurse with isBindingTmpl=false. Fn.body and Match
-// branch bodies, when they are Tmpls, recurse with isBindingTmpl=true.
-const wrapWalk = (node, isBindingTmpl) => {
+// Walk the final AST, validating that every Named value inside a Tmpl
+// literal is template-shaped (see rejectBareWord above). Pattern items
+// are recursed separately and never subject to this check — pattern
+// `name:value` clauses are match criteria, not value construction.
+const validateWalk = (node) => {
   if (!node || typeof node !== 'object') return node;
   switch (node.kind) {
     case 'Tmpl': {
       const items = node.items.map((it) => {
         if (it && it.kind === 'Named') {
-          const value = wrapWalk(it.value, false);
-          return {
-            ...it,
-            value: isBindingTmpl ? wrapBareWord(value) : value,
-          };
+          const value = validateWalk(it.value);
+          return { ...it, value: rejectBareWord(value) };
         }
-        return wrapWalk(it, false);
+        return validateWalk(it);
       });
       return { ...node, items };
     }
     case 'Atom':
       return node;
     case 'Pattern': {
-      const items = node.items.map((it) => wrapWalk(it, false));
+      const items = node.items.map((it) => validateWalk(it));
       const out = { ...node, items };
       if (node.suchThat) {
-        out.suchThat = node.suchThat.map((c) => wrapWalk(c, false));
+        out.suchThat = node.suchThat.map((c) => validateWalk(c));
       }
       return out;
     }
     case 'Fn': {
-      const params = wrapWalk(node.params, false);
-      const body = node.body && node.body.kind === 'Tmpl'
-        ? wrapWalk(node.body, true)
-        : wrapWalk(node.body, false);
+      const params = validateWalk(node.params);
+      const body = validateWalk(node.body);
       return { ...node, params, body };
     }
     case 'Named': {
       // Reached only when a Named appears outside the Tmpl-items path
       // (e.g. embedded somewhere as the head of a Query). Treat value
-      // recursion as data — no wrap.
-      return { ...node, value: wrapWalk(node.value, false) };
+      // recursion as data — no check.
+      return { ...node, value: validateWalk(node.value) };
     }
     case 'Text': {
       const parts = node.parts.map((p) =>
-        'embed' in p ? { embed: wrapWalk(p.embed, false) } : p,
+        'embed' in p ? { embed: validateWalk(p.embed) } : p,
       );
       return { ...node, parts };
     }
@@ -1827,30 +1839,28 @@ const wrapWalk = (node, isBindingTmpl) => {
     case 'Partial': {
       const out = { ...node };
       if (node.head && typeof node.head === 'object') {
-        out.head = wrapWalk(node.head, false);
+        out.head = validateWalk(node.head);
       }
       if (node.segments && node.segments.some((s) => s.kind === 'dynamic')) {
         out.segments = node.segments.map((s) =>
-          s.kind === 'dynamic' ? { ...s, expr: wrapWalk(s.expr, false) } : s,
+          s.kind === 'dynamic' ? { ...s, expr: validateWalk(s.expr) } : s,
         );
       }
-      if (node.args) out.args = wrapWalk(node.args, false);
+      if (node.args) out.args = validateWalk(node.args);
       return out;
     }
     case 'Pipeline': {
-      const stages = node.stages.map((s) => wrapWalk(s, false));
+      const stages = node.stages.map((s) => validateWalk(s));
       return { ...node, stages };
     }
     case 'Match': {
       return {
         ...node,
-        subject: wrapWalk(node.subject, false),
+        subject: validateWalk(node.subject),
         branches: node.branches.map((br) => ({
           ...br,
-          pattern: wrapWalk(br.pattern, false),
-          body: br.body && br.body.kind === 'Tmpl'
-            ? wrapWalk(br.body, true)
-            : wrapWalk(br.body, false),
+          pattern: validateWalk(br.pattern),
+          body: validateWalk(br.body),
         })),
       };
     }
@@ -1873,9 +1883,26 @@ export function parseOperators(tree) {
     throw new TypeError('parseOperators: expected a Tmpl root');
   }
   const merged = opsWalk(tree);
-  // Apply context-aware short-form wrap on the final AST. The root
-  // Tmpl is a binding context (top-level Named items bind into env).
-  return wrapWalk(merged, true);
+  // A bare value/number/reserved Word standing as a whole top-level
+  // program statement is not a value — only a template `{...}` is.
+  // Unlike a Fn body or Match body (which already sit inside a
+  // source-visible `{...}` the user wrote), the program's root has no
+  // visible braces at all, so a bare Word item here is the user trying
+  // to use a bare Word AS a complete value, not as content already
+  // embedded in an authored template. Reject it the same way the
+  // other three value positions (binding RHS, call arg, pipe seed) do.
+  for (const item of merged.items) {
+    if (item && item.kind === 'Word'
+        && (item.subkind === 'value' || item.subkind === 'number'
+            || item.subkind === 'reserved')) {
+      throw new PunkSyntaxError(
+        `a bare value is not a template — write '{${item.text}}'`,
+        item.line, item.col,
+      );
+    }
+  }
+  // Validate that every Named value in the program is template-shaped.
+  return validateWalk(merged);
 }
 
 // ---------------------------------------------------------------------------

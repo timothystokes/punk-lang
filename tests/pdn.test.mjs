@@ -4,8 +4,8 @@
 //   - A program *is* its data; same surface for source and serialised value.
 //   - Four ingredients: Things, Structured Templates, Unstructured Templates,
 //     Named things.
-//   - `age:42` is one named thing; `age: 42` is two separate things (name
-//     bound to nothing, then 42).
+//   - `age:{42}` is one named thing; `age:42` is now a syntax error, and
+//     `age: 42` is also invalid (a dangling name, then 42).
 //   - PDN has no separate dict/array/tuple — all are templates.
 //   - Function literals `(...){...}` / `(...)"..."` are also PDN — values
 //     you can write down, read back, treat as data. Nothing runs without
@@ -18,21 +18,21 @@ import { punk, punkThrows } from './_punk.mjs';
 
 test('a record-shaped value round-trips through display', () => {
   assert.equal(
-    punk('{name:"Jane Green" age:42 location:Sydney}'),
-    '{name:"Jane Green" age:42 location:Sydney}'
+    punk('{name:"Jane Green" age:{42} location:{Sydney}}'),
+    '{name:"Jane Green" age:{42} location:{Sydney}}'
   );
 });
 
 test('a list of records is just a template of templates', () => {
   const src = `{
-    {name:"John Smith" age:39 location:"New York"}
-    {name:"Jane Green" age:42 location:Sydney}
+    {name:"John Smith" age:{39} location:"New York"}
+    {name:"Jane Green" age:{42} location:{Sydney}}
   }`;
   // Whitespace inside structured templates is purely separator — display
   // should normalise to single-space-separated.
   assert.equal(
     punk(src),
-    '{{name:"John Smith" age:39 location:"New York"} {name:"Jane Green" age:42 location:Sydney}}'
+    '{{name:"John Smith" age:{39} location:"New York"} {name:"Jane Green" age:{42} location:{Sydney}}}'
   );
 });
 
@@ -40,16 +40,16 @@ test('empty template `{}` is a valid value', () => {
   assert.equal(punk('{}'), '{}');
 });
 
-test('a single bare Word at the top level prints wrapped', () => {
-  assert.equal(punk('Sydney'), '{Sydney}');
+test('a single bare Word at the top level cannot stand alone', () => {
+  punkThrows('Sydney');
 });
 
-test('a single bare Number at the top level prints wrapped', () => {
-  assert.equal(punk('42'), '{42}');
+test('a single bare Number at the top level cannot stand alone', () => {
+  punkThrows('42');
 });
 
-test('`age:42` is one named thing — queryable by name', () => {
-  assert.equal(punk('age:42  age?'), '{42}');
+test('`age:{42}` is one named thing — queryable by name', () => {
+  assert.equal(punk('age:{42}  age?'), '{42}');
 });
 
 test('`age: 42` (space after colon) is a syntax error', () => {

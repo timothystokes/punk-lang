@@ -11,13 +11,13 @@ import assert from 'node:assert/strict';
 import { punk, punkThrows } from './_punk.mjs';
 
 test('single-stage pipeline executes', () => {
-  // upper!hello -> {HELLO}-ish. Pipeline form: Hello->upper!
-  assert.equal(punk('Hello->upper!'), '"HELLO"');
+  // upper!{hello} -> {HELLO}-ish. Pipeline form: {Hello}->upper!
+  assert.equal(punk('{Hello}->upper!'), '"HELLO"');
 });
 
 test('two-stage pipeline executes left-to-right', () => {
-  // Hello -> upper -> lower! → "hello"
-  assert.equal(punk('Hello->upper->lower!'), '"hello"');
+  // {Hello} -> upper -> lower! → "hello"
+  assert.equal(punk('{Hello}->upper->lower!'), '"hello"');
 });
 
 test('pipeline without `!` is a value — a composed function', () => {
@@ -32,21 +32,21 @@ test('composed pipeline can be called later with `!`', () => {
   // `shout:upper?` binds shout to the upper builtin (the `?` queries
   // the existing function; bare `upper` would just be the literal word).
   assert.equal(
-    punk('shout:upper?  shout!hello'),
+    punk('shout:upper?  shout!{hello}'),
     '"HELLO"'
   );
 });
 
 test('multi-stage composition executes when called', () => {
   assert.equal(
-    punk('clean:upper->lower  clean!Hello'),
+    punk('clean:upper->lower  clean!{Hello}'),
     '"hello"'
   );
 });
 
 test('composed pipeline is itself a stage of another pipeline', () => {
   assert.equal(
-    punk('shout:upper?  Hello->shout!'),
+    punk('shout:upper?  {Hello}->shout!'),
     '"HELLO"'
   );
 });
@@ -133,6 +133,6 @@ test('pipeline into a 1-remaining partial matches direct call', () => {
 
 test('scalar values still pipe through 1-arg stages unchanged', () => {
   // Regression: simple scalar pipelines must keep working.
-  assert.equal(punk('Hello->upper!'), '"HELLO"');
-  assert.equal(punk('double:X\'2  5->double!'), '{10}');
+  assert.equal(punk('{Hello}->upper!'), '"HELLO"');
+  assert.equal(punk('double:X\'{2}  {5}->double!'), '{10}');
 });

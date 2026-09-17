@@ -4,7 +4,7 @@
 //   - Names attach directly to a thing with no space between `:` and value.
 //   - A name on its own is naming nothing; querying it returns NULL.
 //   - At the REPL, a named binding echoes back the named thing (with the
-//     same auto-wrap rule on the inner value).
+//     same explicit inner template value).
 //   - Names are immutable once bound in a given scope.
 
 import { test } from 'node:test';
@@ -20,12 +20,20 @@ test('binding a named structured template echoes the binding', () => {
   assert.equal(punk('xs:{1 2 3}'), 'xs:{1 2 3}');
 });
 
-test('binding a named Word wraps the inner Word', () => {
-  assert.equal(punk('name:Tim'), 'name:{Tim}');
+test('binding a named bare Word is a syntax error', () => {
+  punkThrows('name:Tim');
 });
 
-test('binding a named Number wraps the inner Number', () => {
-  assert.equal(punk('age:42'), 'age:{42}');
+test('binding a named singleton template containing a Word echoes the binding', () => {
+  assert.equal(punk('name:{Tim}'), 'name:{Tim}');
+});
+
+test('binding a named bare Number is a syntax error', () => {
+  punkThrows('age:42');
+});
+
+test('binding a named singleton template containing a Number echoes the binding', () => {
+  assert.equal(punk('age:{42}'), 'age:{42}');
 });
 
 test('binding a named pattern echoes bare (no inner wrap)', () => {
@@ -36,11 +44,16 @@ test('binding a named function echoes bare', () => {
   assert.equal(punk('id:([x]){x?}'), 'id:([x]){x?}');
 });
 
-test('binding a reserved value wraps it on the value side', () => {
-  // Reserved words wrap like any value Word: `ok:TRUE` ≡ `ok:{TRUE}`.
-  assert.equal(punk('ok:TRUE'),    'ok:{TRUE}');
-  assert.equal(punk('done:FALSE'), 'done:{FALSE}');
-  assert.equal(punk('miss:NULL'),  'miss:{NULL}');
+test('binding a named bare reserved value is a syntax error', () => {
+  punkThrows('ok:TRUE');
+  punkThrows('done:FALSE');
+  punkThrows('miss:NULL');
+});
+
+test('binding a named explicit reserved singleton template works', () => {
+  assert.equal(punk('ok:{TRUE}'),    'ok:{TRUE}');
+  assert.equal(punk('done:{FALSE}'), 'done:{FALSE}');
+  assert.equal(punk('miss:{NULL}'),  'miss:{NULL}');
 });
 
 test('a name attached with a space between `:` and value is a syntax error', () => {
@@ -56,7 +69,7 @@ test('a dangling `name:` at the end of input is a syntax error', () => {
 });
 
 test('querying a bound name returns its value', () => {
-  assert.equal(punk('x:7  x?'),                '{7}');
+  assert.equal(punk('x:{7}  x?'),              '{7}');
   assert.equal(punk('msg:"hi"  msg?'),         '"hi"');
   assert.equal(punk('xs:{a b c}  xs?'),        '{a b c}');
 });
@@ -67,19 +80,19 @@ test('querying an unbound name returns NULL', () => {
 
 test('rebinding the same name in the same scope is an error', () => {
   // Names are immutable — a second `x:` in the same scope is a sad path.
-  punkThrows('x:1  x:2');
+  punkThrows('x:{1}  x:{2}');
 });
 
 test('a name can contain hyphens, digits, underscores and `$`', () => {
   assert.equal(punk('first-name:"Tim"  first-name?'),  '"Tim"');
-  assert.equal(punk('x1:1  x1?'),                       '{1}');
-  assert.equal(punk('snake_name:9  snake_name?'),       '{9}');
-  assert.equal(punk('$jsThing:7  $jsThing?'),           '{7}');
+  assert.equal(punk('x1:{1}  x1?'),                     '{1}');
+  assert.equal(punk('snake_name:{9}  snake_name?'),     '{9}');
+  assert.equal(punk('$jsThing:{7}  $jsThing?'),         '{7}');
 });
 
 test('names are case-sensitive', () => {
-  assert.equal(punk('Foo:1  foo:2  Foo?'), '{1}');
-  assert.equal(punk('Foo:1  foo:2  foo?'), '{2}');
+  assert.equal(punk('Foo:{1}  foo:{2}  Foo?'), '{1}');
+  assert.equal(punk('Foo:{1}  foo:{2}  foo?'), '{2}');
 });
 
 test('a name cannot start with a digit', () => {

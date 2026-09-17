@@ -29,14 +29,14 @@ test('unstructured template with embedded query — executed with `!`', () => {
 test('querying a name returns the bound value but does not run nested queries', () => {
   // greeting?  resolves only `greeting`; the inner {name?} is left alone.
   assert.equal(
-    punk('greeting:"Hello {name?}"  name:Bob  greeting?'),
+    punk('greeting:"Hello {name?}"  name:{Bob}  greeting?'),
     '"Hello {name?}"'
   );
 });
 
 test('executing a name with `!` cascades — every reachable query/function runs', () => {
   assert.equal(
-    punk('greeting:"Hello {name?}"  name:Bob  greeting!'),
+    punk('greeting:"Hello {name?}"  name:{Bob}  greeting!'),
     '"Hello Bob"'
   );
 });
@@ -44,16 +44,16 @@ test('executing a name with `!` cascades — every reachable query/function runs
 test('function inside a template is inert until the template is executed', () => {
   // `shout` is just sitting in source; without `!` on the enclosing template
   // nothing runs. The embed round-trips through its canonical form: the
-  // shorthand `shout!hi` is parsed and re-displayed as `shout!{hi}`.
+  // explicit `shout!{hi}` is preserved as-is.
   assert.equal(
-    punk('shout:([s]){upper!{s?}}  "I said {shout!hi}"'),
+    punk('shout:([s]){upper!{s?}}  "I said {shout!{hi}}"'),
     '"I said {shout!{hi}}"'
   );
 });
 
 test('function inside an unstructured template runs when the template is executed', () => {
   assert.equal(
-    punk('shout:([s]){upper!{s?}}  "I said {shout!hi}"!'),
+    punk('shout:([s]){upper!{s?}}  "I said {shout!{hi}}"!'),
     '"I said HI"'
   );
 });
@@ -86,14 +86,14 @@ test('a query in a structured template is also inert until the surrounding templ
   // Structured template containing a query — the query is not resolved
   // just because we display the template.
   assert.equal(
-    punk('name:Bob  {hi name?}'),
+    punk('name:{Bob}  {hi name?}'),
     '{hi name?}'
   );
 });
 
 test('executing a structured template resolves embedded queries', () => {
   assert.equal(
-    punk('name:Bob  {hi name?.?}!'),
+    punk('name:{Bob}  {hi name?.?}!'),
     '{hi Bob}'
   );
 });

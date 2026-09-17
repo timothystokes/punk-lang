@@ -68,6 +68,12 @@ renderNamedFn:([tag] [attrs] [body]){
 }~
 
 render:(*[items]){
+  # `render` is variadic: `items` is the already-decomposed set of
+  sibling elements to render — NOT one structured content-tree. A
+  caller holding one content value (e.g. body? or page?, itself
+  {}-shaped, one thing) must decompose it into that sibling set
+  explicitly via .? before calling — see render!body.? below
+  and renderPage's own call. #
   map!{(*[wrap]){
     tag:wrap.1.:?
     isFn:isfn!wrap.1.!?
@@ -91,26 +97,49 @@ render:(*[items]){
   }~ items?}
 }~
 
+renderPage:(*[items]){
+  # Same contract as render: items must already be the decomposed
+  sibling elements of the page content, hence the .? when calling
+  render below and when callers pass a single content value in
+  (e.g. html.renderPage!{indexPage!.?}). #
+  body:join!{" " render!items.?}
+  "<!DOCTYPE html>\n{body?}"
+}~
+
+# split! already returns each piece as a proper Tmpl-wrapped Text
+value, so parts.1?/parts.2? are ready to drop straight into the pair
+below with no extra coercion. #
 parseLine:([line]){
   parts:split!{\= line?}
   parts.#??{
     (1){{parts.1? {}}}
-    (___){{parts.1? parts.2?}}
+    (_){{parts.1? parts.2?}}
   }!
 }~
 
+# Raw `key=value` lines as a list of pairs: {{note "x"} {description "y"}}. #
 parsePost:([body]){
   lines:split!{\n body?}
   map!{([line]){parseLine!line?}~ lines?}
 }~
 
+# Same `text/plain` form body, as a proper record: {note:"x" description:"y"}.
+`toRecord!` is a core builtin — Punk source has no way to construct a
+Named entry with a runtime-computed key, so building a record out of
+parsed field pairs needs that escape hatch. #
+parseForm:([body]){
+  toRecord!parsePost!body?
+}~
+
 module:(){
   {
     render:render.!?
+    renderPage:renderPage.!?
     escText:escText.!?
     escAttr:escAttr.!?
     parsePost:parsePost.!?
+    parseForm:parseForm.!?
   }
-}~
+}
 
 module!
