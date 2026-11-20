@@ -14,6 +14,13 @@ is the bug — flag it and ask before reinterpreting.
 - CLI: `npm start <file.punk>` runs a file silently (only `print!` writes
   to stdout). REPL prints the full result tmpl per top-level expression.
 
+## README is frozen for now
+
+`README.md` has just been updated and is the source for a full Punk
+language specification (a new spec `.md` file) that is being generated
+from it. **Do not modify `README.md`** until the spec is complete,
+unless the user explicitly asks.
+
 ## Core language rules
 
 ### One value shape — `{...}` only (no short-form sugar)
