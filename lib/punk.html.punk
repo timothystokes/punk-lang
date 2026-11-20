@@ -1,0 +1,48 @@
+## punk.html: code is data.
+##
+## An element is a named function that is never called. Its name is the
+## tag, its pattern holds the attributes and its body holds the children:
+##
+##   html.page![
+##     head:()[title:()[My page]]
+##     body:()[h1:(color:red)[Welcome]]
+##   ]
+##
+## render introspects the functions (patternOf, bodyOf) to build the text.
+## Anything in a body that is not an element is text.
+
+pair:(k:_ v:_)[cat![{k?}="{v?}"]]
+attrOf:(_)[pair![nameOf!.? valueOf!.?]]
+attrsOf:(#)[filter![isnamed? .?] > map!attrOf?]
+attrTextOf:(e:_)[e? > patternOf! > attrsOf!]
+kidsOf:(e:_)[e? > bodyOf! > map!render?]
+isVoid:(t:_)[
+  t?
+  -> (meta)[TRUE]
+  -> (br)[TRUE]
+  -> (hr)[TRUE]
+  -> (img)[TRUE]
+  -> (input)[TRUE]
+  -> (link)[TRUE]
+  -> (#)[FALSE]
+]
+joinAttrs:(#)[join![space! .?]]
+openAttrs:(n:_ a:#)[cat![< n? space! joinAttrs!a? \>]]
+open:(n:_ a:#)[
+  a?
+  -> ()[cat![< n? \>]]
+  -> (#)[openAttrs![n? a?]]
+]
+build:(n:_ e:_)[
+  isVoid!n?
+  -> (TRUE)[open![n? attrTextOf!e?]]
+  -> (#)[cat![open![n? attrTextOf!e?] kidsOf!e? </ n? \>]]
+]
+element:(_)[build![nameOf!.? valueOf!.?]]
+render:(_)[
+  [isnamed!.? .?]
+  -> (TRUE _)[element!.2?]
+  -> (_ _)[.2?]
+]
+page:(#)[cat![<\!DOCTYPE space! html\> <html space! lang="en"\> kidsText!.? </html\>]]
+kidsText:(#)[map![render? .?]]

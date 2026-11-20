@@ -1,47 +1,49 @@
-// Lexical environment for Punk.
-//
-// Names are immutable once bound. Rebinding within the same scope
-// is a runtime error. Lookups walk outward through enclosing scopes.
+// Namespace contexts (NAME-2a..2e). Each function body and each file is
+// its own context; lookups cascade outward to the global context.
+// Names are immutable within a context: `define` returns false (and keeps
+// the original) when the name is already bound there.
 
-import { PunkRuntimeError } from './errors.js';
+// fnInfo is { arg } for a function-call context, else null.
+export function newEnv(parent = null, fnInfo = null) {
+  const vars = new Map();
+  const env = {
+    parent,
+    vars,
+    fn: fnInfo,
 
-export class Env {
-  constructor(parent = null) {
-    this.parent = parent;
-    this.bindings = new Map();
-    // Atoms live outside the lexical namespace. The root env owns the
-    // shared store; children walk up to reach it.
-    this.atoms = parent ? null : new Map();
-  }
+    define(name, value) {
+      if (vars.has(name)) return false;
+      vars.set(name, value);
+      return true;
+    },
 
-  rootAtoms() {
-    let e = this;
-    while (e.parent) e = e.parent;
-    return e.atoms;
-  }
+    lookup(name) {
+      for (let e = env; e; e = e.parent) {
+        if (e.vars.has(name)) return e.vars.get(name);
+      }
+      return undefined;
+    },
 
-  bind(name, value, node) {
-    if (this.bindings.has(name)) {
-      throw new PunkRuntimeError(
-        `name '${name}' is already bound in this scope`,
-        node?.line, node?.col,
-      );
-    }
-    this.bindings.set(name, value);
-  }
+    root() {
+      let e = env;
+      while (e.parent) e = e.parent;
+      return e;
+    },
 
-  lookup(name) {
-    if (this.bindings.has(name)) return this.bindings.get(name);
-    if (this.parent) return this.parent.lookup(name);
-    return undefined;
-  }
+    // Atoms are the only mutable state; they live in the global context.
+    atoms() {
+      const r = env.root();
+      if (!r.atomStore) r.atomStore = new Map();
+      return r.atomStore;
+    },
 
-  has(name) {
-    if (this.bindings.has(name)) return true;
-    return this.parent ? this.parent.has(name) : false;
-  }
-
-  child() {
-    return new Env(this);
-  }
+    // The nearest enclosing function-call context, for `.` references.
+    localFn() {
+      for (let e = env; e; e = e.parent) {
+        if (e.fn) return e;
+      }
+      return null;
+    },
+  };
+  return env;
 }

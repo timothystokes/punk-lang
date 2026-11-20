@@ -1,0 +1,6 @@
+todos:[[note:milk done:FALSE] [note:code done:TRUE] [note:sleep done:FALSE]]
+isOpen:(t:_)[=![t.done? FALSE]]
+noteOf:(t:_)[t.note?]
+open:todos? > filter!isOpen? > map!noteOf?
+open? > print!
+open? > count! > print!

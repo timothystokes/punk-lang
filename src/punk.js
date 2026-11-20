@@ -1,23 +1,21 @@
-// The Punk entry point used by the test harness.
-//
-// `run(source)` takes a string of Punk source, parses it, evaluates
-// it, and returns the REPL-style formatted value of the final
-// top-level expression (or throws on a syntax/runtime error).
+// Punk entry point: source text in, formatted result out.
+// Only syntax errors throw (ERR-1); everything else evaluates to [] (ERR-3).
 
-import { tokenize } from './tokenize.js';
-import {
-  parseTree, parseWords, parseOperators, parseValidate,
-} from './parse.js';
-import { evalProgram } from './eval.js';
-import { Env } from './env.js';
-import { formatRepl } from './format.js';
+import { parse } from './parse.js';
+import { createGlobal, evalProgram, setOutput } from './eval.js';
+import { formatResult } from './format.js';
+import { newEnv } from './env.js';
 
+export { setOutput };
+
+// One-shot: a file is its own namespace context under the global one.
 export function run(source) {
-  const tokens = tokenize(source);
-  const tree = parseValidate(
-    parseOperators(parseWords(parseTree(tokens))),
-  );
-  const env = new Env();
-  const value = evalProgram(tree, env);
-  return formatRepl(value);
+  const program = parse(source);
+  return formatResult(evalProgram(program, newEnv(createGlobal())));
+}
+
+// REPL session: one shared context across lines.
+export function createSession() {
+  const env = newEnv(createGlobal());
+  return { evalLine: (source) => formatResult(evalProgram(parse(source), env)) };
 }

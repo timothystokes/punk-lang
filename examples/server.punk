@@ -1,84 +1,44 @@
-# Import reusable Punk modules. #
-html:import!{punk.html}
-keystore:import!{punk.keystore}
+## A tiny todo web app. Run it with: npm start examples/server.punk
+## then open http://localhost:8080
+##
+## HTML is code as data: elements are named functions that are never
+## called. punk.html reads their pattern (attributes) and body (children).
 
-# Open append-only todo store and keep the current handle in atom @db. #
-keystore.open!{todo}->@db!
+http:import!punk.http
+html:import!punk.html
 
-# Add a todo: append new {key value} entry and write the returned handle back to @db. #
-createTodo:([note] [desc]){
-  @db->keystore.put'{
-    keystore.newKey!
-    {note:note? desc:desc?}
-  }->@db!
-}
+## state lives in an atom: the list of todo notes
+[] > @todos!
 
-# Page template as DATA (functions as data):
-`indexPage` returns an element-tree value (html/head/body/etc).
-Nothing renders here; this is just structured data.
-`html.renderPage!` later consumes this function-produced data, prefixes it with
-a doctype declaration, and turns it into text/HTML. #
-indexPage:(){
-  html:(lang:en){
-    head:{
-      title:{punk-todo}
-    }
-    body:{
-      h1:{Todo}
-      form:(method:POST action:\/todo enctype:text\/plain){
-        input:(name:note type:text){}
-        input:(name:description type:text){}
-        button:(type:submit){Add Item}
-      }
-      ul:{}
-    }
-  }
-}
+page:(#)[
+  html.page![
+    head:()[
+      title:()[Todos]
+    ]
+    body:()[
+      h1:()[Todos]
+      ul:()[@todos > map!(note:_)[
+        li:()[{note?}]
+      ]]
+      form:(method:POST action:/add)[
+        input:(name:note)[]
+        button:()[Add]
+      ]
+    ]
+  ]
+]
 
-# GET / -> render the page data into HTML text and return HTTP response. #
-index:([req]){
-  status:{200} headers:{Content-Type:text\/html} body:html.renderPage!{indexPage!.?}
-}
+## the request is [method:.. url:.. headers:[..] body:..]; serve parses a
+## form body so it can be queried as body.note?
+route:(method:_ url:_ headers:_ body:_)[
+  [method? url?]
+  -> (GET /)[page! > http.ok!]
+  -> (POST /add)[
+    body.note? > push![@todos] > @todos!
+    http.redirect!/
+  ]
+  -> (_ _)[http.notFound![Not found]]
+]
 
-# Parse a request body according to its Content-Type header, returning
-a proper record (e.g. {note:"x" description:"y"}) so handlers can
-query fields directly (req.body.note?) instead of hand-rolling
-lookups. Only `text/plain` (the punk-todo form encoding) is
-supported today; anything else is left as raw text. TODO:
-`application/json` support (see README's session TODO list). #
-parseBody:([req]){
-  req.headers.content-type??{
-    ([ct/^text\/plain/]){html.parseForm!req.body?}
-    (*){req.body?}
-  }!
-}~
-
-# POST /todo -> parse form body, persist new todo, redirect to /. #
-createTodoHandler:([req]){
-  createTodo!{req.body.note? req.body.description?}
-  {status:{303} headers:{Location:\/} body:{}}
-}~
-
-# Fallback route response. #
-notFound:([req]){
-  status:{404} headers:{Content-Type:text\/plain} body:{Not Found}
-}
-
-# Route dispatcher for request shape {method url headers body}. #
-dispatch:([req]){
-  and!{=!{req.method? GET} =!{req.url? "/"}}??{
-    (TRUE){index!req?}
-    (FALSE){
-      and!{=!{req.method? POST} =!{req.url? "/todo"}}??{
-        (TRUE){
-          createTodoHandler!{{method:req.method? url:req.url? headers:req.headers? body:parseBody!req?}}
-        }
-        (FALSE){notFound!req?}
-      }!
-    }
-  }!
-}~
-
-# Start server by passing callable dispatch reference to core httpServe!. #
-httpServe!{8080 dispatch.!?}
-print!{listening on port 8080}
+serve![8080 route?]
+print![Listening on port 8080]

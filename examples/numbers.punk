@@ -1,0 +1,7 @@
+double:*![2]
+isBig:(n:_)[gt![.n? 3]]
+numbers:[1 2 3 4 5]
+numbers? > map!double? > print!
+numbers? > filter!isBig? > print!
+numbers? > reduce![+? 0] > print!
+4 > -!8 > *!7 > print!

@@ -1,0 +1,6 @@
+welcome:(name:_)[Hello .name?]
+upperWelcome:> welcome! > upper!
+Sally > welcome! > print!
+Jim > upperWelcome! > print!
+env:prod
+[{env?}-database]! > print!

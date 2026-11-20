@@ -8,7 +8,7 @@
 
 # Punk
 
-Punk is an interpreted functional very loosely typed immutable programming language. It has unique concepts and syntax. This implementation uses node.js as it's runtime.
+Punk is an interpreted functional very loosely typed immutable programming language. This implementation uses node.js as it's runtime.
 
 ## Getting Started
 
@@ -41,9 +41,13 @@ The reserved symbols used by Punk include:
 `>` - a segment of a pipe
 `->` - a case to in a match case
 `()` - a pattern
+`{}` - embeds a query's result into text inside an evaluated template
 `|` - a 'such that' condition within a pattern
 `_` - a single placeholder in a pattern
 `#` - an any placeholder in a pattern
+`@` - an atom, a global place for state
+`\` - makes the next character plain text
+`##` - a comment to the end of the line
 
 ### Things
 
@@ -78,6 +82,8 @@ When there are multiple things you want to treat as a thing then you can group t
 ```
 **`[Paul is 42]`**
 
+A thing with a single element is the same thing as that element, so `Paul` and `[Paul]` are identical. The [ ] are only needed to keep two or more things together, and results with a single element are never wrapped. The empty group `[]` is the non-thing: what you get back when something doesn't match or can't be found.
+
 ### Named Things
 
 You can name a thing using colon `:`.
@@ -94,7 +100,7 @@ message:[Hello world]
 ```
 **`message:[Hello world]`**
 
-> NOTE: Punk treats names as immutable. Once you have attached a name to a thing within a namespace context then it sticks. You can't  attach that name to another thing.
+> NOTE: Punk treats names as immutable. Once you have attached a name to a thing within a namespace context then it sticks. Attaching it again in the same context is a syntax error.
 
 
 ### Querying Named Things
@@ -153,7 +159,7 @@ Queries are also a thing so you can embed a query inside another thing.
 ```punk
 person:[Paul]
 ```
-**`person:[Paul]`**
+**`person:Paul`**
 
 ```punk
 message:[Hello person?]
@@ -168,6 +174,54 @@ Evaluating a thing with nested queries is essentially a template. Using the thin
 message!
 ```
 **`[Hello Paul]`**
+
+Templates can also contain function calls. Every call written with ! inside an evaluated template is evaluated too, and its result lands in the template as one thing.
+
+```punk
+total:[Total +![1 2]]
+total!
+```
+**`[Total 3]`**
+
+A function's [ ] is a template like this. There is no return keyword: the caller receives the whole resulting expression of the template, including any named things defined in it.
+
+```punk
+g:(n:_)[x:+![n? 1] x? *![x? 2]]
+g!3
+```
+**`[x:4 4 8]`**
+
+### Embeds
+
+Inside a template that is being evaluated, { } embeds the result of a query into surrounding text without Punk's native space delimiter. It is concatenation.
+
+```punk
+env:prod
+[{env?}-database]!
+```
+**`prod-database`**
+
+If the embedded thing has several elements, its spaces are kept and the result is re-read, so it can end up as a different number of things.
+
+```punk
+name:[Paul Jones]
+[Dr-{name?}]!
+```
+**`[Dr-Paul Jones]`**
+
+`{name!}` calls a function that takes no parameters and embeds its result, so `[the time is {time!}]!` gives the current time in milliseconds.
+
+Embeds also work in names, so a name can be computed. The embeds are evaluated first and the result is then attached.
+
+```punk
+k:colour
+v:red
+x:{k?}:{v?}
+x.colour?
+```
+**`red`**
+
+A failed query embeds as nothing. { } cannot be nested, and in a thing that isn't evaluated the { } stay as written.
 
 ### Patterns
 
@@ -259,6 +313,12 @@ Like other things functions can also be named so they can be used later. Here is
 welcome:(name:_)[Hello .name?]
 ```
 
+A function with an empty pattern `()` takes no parameters. It only matches when nothing (`[]`) is passed, so it is called with a bare `!`.
+
+```punk
+now:()[the time is {time!}]
+```
+
 ### Evaluating a Function
 
 To evaluate a function in in punk we use ! so using the named function above we can do this.
@@ -276,6 +336,26 @@ welcome![Jim]
 **`[Hello Jim]`**
 
 > NOTE: If the pattern of a fuction doesn't match the thing being passed to it then it returns [] which is essentially a non-thing.
+
+### Names and Scope
+
+Names are immutable: once a name is attached inside a context it can't be changed. Each function body and each file is its own context, and names are looked up from the current context outwards to the global one. An inner context can reuse a name from an outer one (shadowing) without changing it. Inside a function, the . prefix always refers to the thing passed in and never looks outward.
+
+```punk
+x:1
+f:(_)[x:2 x?]
+0 > f!
+```
+**`[x:2 2]`**
+
+### Errors
+
+Syntax errors are the only errors. They stop the program and report where they happened. Everything else, such as a failed match, a missing query result, the wrong number of arguments or dividing by zero, simply evaluates to [].
+
+```punk
+\![5 0]
+```
+**`[]`**
 
 ### Pipes
 
@@ -350,6 +430,76 @@ which is equivelent to
 *![-![8 4] 7]
 ```
 **`28`**
+
+### Comments
+
+`##` starts a comment that runs to the end of the line.
+
+```punk
+x:[a ## this is ignored
+b]
+x?
+```
+**`[a b]`**
+
+### Escapes
+
+A `\` makes the next character plain text, so reserved symbols can be used inside words. `\n` is a newline and `\t` is a tab. A space cannot be escaped.
+
+```punk
+a\:b
+```
+**`a:b`**
+
+A `\` at the start of a word followed by `!` is the division function (`\![6 3]`).
+
+### Atoms
+
+An atom is a global place to keep state that changes while a program runs. Write one with a pipe and read it by naming it.
+
+```punk
+[1 2] > @list!
+@list
+```
+**`[1 2]`**
+
+An atom that has never been written is `[]`.
+
+```punk
+@nothingYet
+```
+**`[]`**
+
+Writing returns the stored thing, so a counter is a pipe from the atom back into itself.
+
+```punk
+1 > @count!
+@count > +![5] > @count!
+@count
+```
+**`6`**
+
+### Modules
+
+`import!name` evaluates the file `name.punk` (beside your program, then in the `lib` folder) and returns everything it names. Name the result and query it.
+
+```punk
+http:import!punk.http
+http.parseForm!a=1&b=hello+x
+```
+**`[a:1 b:hello x]`**
+
+A module is evaluated once. It cannot see the importer's names. A missing module is `[]`.
+
+The `lib` folder holds `punk.http` (response and form helpers) and `punk.html`. In `punk.html` code is data: an element is a named function that is never called. Its name is the tag, its pattern holds the attributes and its body holds the children. The library reads them with `patternOf` and `bodyOf`.
+
+```punk
+html:import!punk.html
+html.page![head:()[title:()[My page]] body:()[h1:(color:red)[Welcome]]]
+```
+**`<!DOCTYPE html><html lang="en"><head><title>My page</title></head><body><h1 color="red">Welcome</h1></body></html>`**
+
+The core library provides `serve` to run a server. It parses a form post's body into named things, so a handler can query it as `body.note?`. `examples/server.punk` is a todo web app written in Punk.
 
 ### The Library
 
@@ -432,6 +582,14 @@ Here is a full list of functions, their patterns and what they do. Functions are
 
 ### Higher Order Functions
 
+The function always comes first and the data last, so partially applied higher order functions work as pipeline stages.
+
+```punk
+double:*![2]
+[1 2 3] > map!double?
+```
+**`[2 4 6]`**
+
 - `map(_ #)` - applies a function to every item and returns the results.
 - `filter(_ #)` - keeps only the items for which a function returns TRUE.
 - `find(_ #)` - the first item for which a function returns TRUE.
@@ -439,6 +597,20 @@ Here is a full list of functions, their patterns and what they do. Functions are
 - `reduce(_ _ #)` - combines all items into one using a function and a starting value.
 - `any(_ #)` - TRUE if a function returns TRUE for any item.
 - `all(_ #)` - TRUE if a function returns TRUE for every item.
+- `flatMap(_ #)` - maps a function over every item and joins the results.
+- `sortBy(_ #)` - sorts items by the result of a function.
+- `partition(_ #)` - splits items into `[[matching] [others]]` using a function.
+
+A function is passed by reference with `?`, as in `map!double?`. A bare `double` is just text; functions only see what they are explicitly given.
+
+The function can ask for more than the item. With two parameters it also gets the key (the name of a named item, or `[]`), and with three it also gets the position, starting at 1. A function with `#` gets all three.
+
+```punk
+[a:1 b:2] > map!(v:_ k:_ i:_)[{k?}-{v?}-{i?}]
+```
+**`[a-1-1 b-2-2]`**
+
+Only a result of TRUE counts as true for these functions. `reduce` calls its function with `[accumulator item]`.
 
 ### Input, Output and Files
 
@@ -450,7 +622,20 @@ Here is a full list of functions, their patterns and what they do. Functions are
 
 ### Utility
 
-- `assert(_ #)` - fails with a message if the first thing is not TRUE.
+- `time()` - the current time in milliseconds. It takes no parameters, so it is called as `time!`.
+- `assert(_ #)` - returns TRUE if the first thing is TRUE, otherwise prints the remaining things as a message and returns [].
 - `serialize(_)` - converts a thing to text.
 - `deserialize(_)` - converts text back to a thing.
-- `import(_)` - loads the functions from another Punk file.
+- `import(_)` - loads a module and returns the names it defines.
+- `nameOf(_)` / `valueOf(_)` - the name and the value of a named thing.
+- `isnamed(_)` - TRUE if the thing is a named thing.
+- `isfn(_)` - TRUE if the thing is a function.
+- `patternOf(_)` / `bodyOf(_)` - read a function's pattern slots and body items without calling it.
+- `cat(#)` / `space()` - join text with no delimiter; a single space.
+- `push(_ #)` - adds the remaining things to the end of the first thing; as a pipe stage the piped thing is added last (`item > push![list]`).
+- `pop(#)`, `shift(#)` - the things without the last / first one.
+- `unshift(_ #)` - adds the first thing to the front of the remaining things (`unshift![x [a b]]` is `[x a b]`).
+- `take(n #)`, `drop(n #)`, `remove(n #)` - the first `n` things, all but the first `n`, or without position `n`. Like every function these return new things and never change their input.
+- `pick(_ #)` - the value of the named thing called the first thing.
+- `urlencode(_ #)` / `urldecode(_ #)` - percent encode and decode text.
+- `serve(_ _)` - `serve![port handler]` starts an HTTP server. The handler gets `[method:.. url:.. headers:[..] body:..]` and returns `[status:.. headers:[..] body:..]`.

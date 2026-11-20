@@ -1,979 +1,273 @@
-// Built-in functions.
-//
-// Each builtin is a JS function `(args, env, helpers) -> value`.
-// `args` is a Tmpl value (already cascaded). Helpers are kept minimal
-// for now — most builtins just read/produce values.
+// Standard library (spec section 11). Data is always the LAST argument and
+// the function (if any) the first, so partial application gives pipeline
+// stages (HOF-1). Library functions never throw and never mutate (LIB-3, LIB-5):
+// a non-number is treated as 0, a number as a word.
 
-import { PunkRuntimeError } from './errors.js';
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
+import { createServer } from 'node:http';
 import {
-  mkTmpl, mkText, mkWord, NULL, TRUE, FALSE,
-  isTrue, isFalse, equals,
+  NONE, TRUE, FALSE, mkWord, mkGroup, mkBool, mkNamed, itemsOf, unwrapNamed,
+  isNone, isTrue, equals, toNum, numWord, isNumericText,
 } from './values.js';
-import { format } from './format.js';
-import { slotIsRest } from './slot.js';
-import * as fs from 'node:fs';
-import * as http from 'node:http';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import { tokenize } from './tokenize.js';
-import {
-  parseTree, parseWords, parseOperators, parseValidate,
-} from './parse.js';
-import { Env } from './env.js';
+import { fmt, textOf } from './format.js';
 
-// ---------- Helpers ----------
+const INF = Infinity;
+const list = [];
+const def = (name, min, max, fn) => list.push({ name, min, max, fn });
 
-const fmtNum = (n) => {
-  // Integer when exact, decimal otherwise. Avoid scientific.
-  if (Number.isInteger(n)) return String(n);
-  return String(+n.toFixed(12)).replace(/\.?0+$/, '');
+const textFrom = (items) => items.map((x) => textOf(unwrapNamed(x))).join(' ');
+const dataOf = (items, from) => {
+  const rest = items.slice(from);
+  return rest.length === 1 ? itemsOf(rest[0]) : rest;
+};
+const mapText = (v, f) => {
+  if (v.kind === 'Word') return mkWord(f(v.text ?? fmt(v)));
+  if (v.kind === 'Group') return mkGroup(v.items.map((x) => mapText(x, f)));
+  if (v.kind === 'Named') return { ...v, value: mapText(v.value, f) };
+  return v;
+};
+const wholeThing = (items) => mkGroup(items);
+const cmpValues = (a, b) => {
+  const x = textOf(unwrapNamed(a)), y = textOf(unwrapNamed(b));
+  if (isNumericText(x) && isNumericText(y)) return Number(x) - Number(y);
+  return x < y ? -1 : x > y ? 1 : 0;
 };
 
-const isNum = (v) =>
-  v && v.kind === 'Word' && v.subkind === 'number';
+// Maths
+def('+', 2, INF, (a) => numWord(a.reduce((s, x) => s + toNum(x), 0)));
+def('-', 2, 2, (a) => numWord(toNum(a[0]) - toNum(a[1])));
+def('*', 2, INF, (a) => numWord(a.reduce((s, x) => s * toNum(x), 1)));
+def('\\', 2, 2, (a) => (toNum(a[1]) === 0 ? NONE : numWord(toNum(a[0]) / toNum(a[1]))));
+def('mod', 2, 2, (a) => (toNum(a[1]) === 0 ? NONE : numWord(toNum(a[0]) % toNum(a[1]))));
+def('pow', 2, 2, (a) => numWord(toNum(a[0]) ** toNum(a[1])));
+def('sqrt', 1, 1, (a) => numWord(Math.sqrt(toNum(a[0]))));
+def('abs', 1, 1, (a) => numWord(Math.abs(toNum(a[0]))));
+def('neg', 1, 1, (a) => numWord(-toNum(a[0])));
+def('floor', 1, 1, (a) => numWord(Math.floor(toNum(a[0]))));
+def('ceil', 1, 1, (a) => numWord(Math.ceil(toNum(a[0]))));
+def('round', 1, 1, (a) => numWord(Math.round(toNum(a[0]))));
+def('min', 2, INF, (a) => numWord(Math.min(...a.map(toNum))));
+def('max', 2, INF, (a) => numWord(Math.max(...a.map(toNum))));
+def('sum', 0, INF, (a) => numWord(a.reduce((s, x) => s + toNum(x), 0)));
+def('rand', 2, 2, (a) => numWord(toNum(a[0]) + Math.random() * (toNum(a[1]) - toNum(a[0]))));
 
-// Coerce a value to a JS number. A singleton-Tmpl wrapping a number
-// counts as that number (this is how `x:5` then `x?` flows through
-// arithmetic — short-form wrap put it in a Tmpl).
-function toNum(v, node) {
-  if (v && v.kind === 'Named') return toNum(v.value, node);
-  if (isNum(v)) return Number(v.text);
-  if (v && v.kind === 'Tmpl' && v.items.length === 1) {
-    return toNum(v.items[0], node);
-  }
-  const loc = (v && v.line) ? v : node;
-  throw new PunkRuntimeError(
-    'expected a number',
-    loc && loc.line, loc && loc.col,
-  );
-}
+// Comparison
+const allEqual = (a) => a.every((x) => equals(unwrapNamed(a[0]), unwrapNamed(x)));
+def('=', 2, INF, (a) => mkBool(allEqual(a)));
+def('~=', 2, INF, (a) => mkBool(!allEqual(a)));
+def('lt', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) < 0));
+def('gt', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) > 0));
+def('lte', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) <= 0));
+def('gte', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) >= 0));
 
-const numWord = (n) => mkWord(fmtNum(n), 'number');
+// Logic
+def('~', 1, INF, (a) => mkBool(!a.every((x) => isTrue(unwrapNamed(x)))));
+def('&', 2, INF, (a) => mkBool(a.every((x) => isTrue(unwrapNamed(x)))));
+def('^', 2, INF, (a) => mkBool(a.some((x) => isTrue(unwrapNamed(x)))));
+def('xor', 2, 2, (a) => mkBool(isTrue(unwrapNamed(a[0])) !== isTrue(unwrapNamed(a[1]))));
 
-const argsItems = (args) =>
-  (args && args.kind === 'Tmpl') ? args.items : [];
+// Type checks
+def('isnum', 1, 1, (a) => mkBool(isNumericText(textOf(unwrapNamed(a[0])))));
+def('istext', 1, 1, (a) => {
+  const x = unwrapNamed(a[0]);
+  return mkBool(x.kind === 'Word' && !isNumericText(textOf(x)));
+});
+def('isempty', 0, INF, (a) => mkBool(a.length === 0));
+def('isfn', 1, 1, (a) => mkBool(['Fn', 'Builtin', 'Partial', 'PipeFn'].includes(a[0].kind)));
+def('num', 1, 1, (a) => {
+  const t = textOf(unwrapNamed(a[0]));
+  return isNumericText(t) ? mkWord(String(Number(t))) : NONE;
+});
 
-// Resolve word-source escapes to actual chars for string contexts
-// (join, embeds in `"..."`, etc.). The two-char sequences `\n` and
-// `\t` are preserved verbatim — they're handy split delimiters and
-// the user explicitly wrote them; only the real-IO boundary turns
-// them into actual newline/tab bytes. Every other `\X` resolves to
-// bare `X` (so `\?` → `?`, `\\` → `\`, `\<space>` → space).
-function resolveWordEscapes(s) {
-  let out = '';
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === '\\' && i + 1 < s.length) {
-      const nx = s[i + 1];
-      if (nx === 'n' || nx === 't') {
-        out += '\\' + nx;
-      } else {
-        out += nx;
-      }
-      i++;
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
+// Text
+def('upper', 0, INF, (a) => mapText(wholeThing(a), (s) => s.toUpperCase()));
+def('lower', 0, INF, (a) => mapText(wholeThing(a), (s) => s.toLowerCase()));
+def('trim', 0, INF, (a) => mapText(wholeThing(a), (s) => s.trim()));
+def('length', 0, INF, (a) => numWord(textFrom(a).length));
+def('chars', 0, INF, (a) => mkGroup([...textFrom(a)].filter((c) => !/\s/.test(c)).map(mkWord)));
+def('split', 2, INF, (a) => {
+  const sep = textOf(a[0]);
+  return mkGroup(textFrom(a.slice(1)).split(sep).filter((x) => x !== '').map(mkWord));
+});
+def('cat', 0, INF, (a) => mkWord(a.flatMap((x) => itemsOf(x)).map((x) => textOf(unwrapNamed(x))).join('')));
+def('space', 0, 0, () => mkWord(' '));
+def('join', 2, INF, (a) => mkWord(dataOf(a, 1).map((x) => textOf(unwrapNamed(x))).join(textOf(a[0]))));
+def('replace', 3, INF, (a) => mkWord(textFrom(a.slice(2)).split(textOf(a[0])).join(textOf(a[1]))));
+def('sub', 3, INF, (a) => {
+  const t = textFrom(a.slice(2));
+  return mkWord(t.slice(Math.max(toNum(a[0]) - 1, 0), toNum(a[1])));
+});
+def('startsWith', 2, INF, (a) => mkBool(textFrom(a.slice(1)).startsWith(textOf(a[0]))));
+def('endsWith', 2, INF, (a) => mkBool(textFrom(a.slice(1)).endsWith(textOf(a[0]))));
+def('repeat', 2, INF, (a) => mkWord(textFrom(a.slice(1)).repeat(Math.max(0, Math.floor(toNum(a[0]))))));
+def('pad', 3, INF, (a) => mkWord(textFrom(a.slice(2)).padStart(Math.max(0, toNum(a[0])), textOf(a[1]) || ' ')));
 
-// Resolve `\n` → newline (0x0A) and `\t` → tab (0x09) in a string.
-// Used by stdio/file IO at the moment chars leave Punk's world. Does
-// not touch any other escapes — those must already be resolved (or
-// kept literal) by the time they reach IO.
-function resolveForIO(s) {
-  let out = '';
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === '\\' && i + 1 < s.length) {
-      const nx = s[i + 1];
-      if (nx === 'n') { out += '\n'; i++; continue; }
-      if (nx === 't') { out += '\t'; i++; continue; }
-    }
-    out += ch;
-  }
-  return out;
-}
-
-// Chars that have struct-context meaning and so must be escaped when
-// a chunk of arbitrary text is forced into Word storage (split, etc.)
-// so the resulting Word is inert and round-trips back through join.
-//
-// Notably `-` is NOT in this set (only `>` is — it forms `->` with a
-// preceding `-`; escaping `>` blocks pipeline-arrow formation). `<`
-// is included alongside `>` so angle-bracket pairs look consistent
-// to the programmer (e.g. HTML/XML written in words: `\<p\>`).
-// Digits are not escaped either: `42` is already a valid Word.
-const WORD_ESCAPE_CHARS = new Set([
-  '{', '}', '(', ')', '[', ']', '"', '\\', '#',
-  '!', '?', "'", '.', '~', ':', '<', '>',
-  ' ', '\t', '\n',
-]);
-
-// Render a value to a JS string for text-flavoured builtins.
-// Tmpls join their items with a single space (matches "structured
-// input is implicitly joined with a single space" rule for text
-// builtins). Text concatenates its parts. Words/numbers/reserved use
-// their text directly. Null → "NULL".
-// Walk a stored string by *logical char*: an escape `\X` counts as
-// one logical char (returned as the 2-char string `\X`); any other
-// char is returned on its own. Used by `chars!`, `length!`, and
-// anywhere a Punk "char-of-the-string" is needed (which differs from
-// a JS code unit/point because escapes are 2-char sequences but one
-// logical thing in Punk's view).
-function logicalChars(s) {
+// Collections
+def('count', 0, INF, (a) => numWord(a.length));
+def('first', 0, INF, (a) => a[0] ?? NONE);
+def('last', 0, INF, (a) => a[a.length - 1] ?? NONE);
+def('rev', 0, INF, (a) => mkGroup([...a].reverse()));
+def('sort', 0, INF, (a) => mkGroup([...a].sort(cmpValues)));
+def('unique', 0, INF, (a) => mkGroup(a.filter((x, i) => a.findIndex((y) => equals(x, y)) === i)));
+def('contains', 2, INF, (a) => mkBool(dataOf(a, 1).some((x) => equals(unwrapNamed(a[0]), unwrapNamed(x)))));
+def('push', 1, INF, (a) => mkGroup(a.flatMap(itemsOf)));
+def('pop', 0, INF, (a) => mkGroup(a.slice(0, -1)));
+def('shift', 0, INF, (a) => mkGroup(a.slice(1)));
+def('unshift', 1, INF, (a) => mkGroup([a[0], ...a.slice(1).flatMap(itemsOf)]));
+def('take', 1, INF, (a) => mkGroup(dataOf(a, 1).slice(0, Math.max(toNum(a[0]), 0))));
+def('drop', 1, INF, (a) => mkGroup(dataOf(a, 1).slice(Math.max(toNum(a[0]), 0))));
+def('remove', 1, INF, (a) => mkGroup(dataOf(a, 1).filter((_, i) => i !== toNum(a[0]) - 1)));
+def('concat', 2, INF, (a) => mkGroup(a.flatMap(itemsOf)));
+def('slice', 3, INF, (a) => {
+  const d = dataOf(a, 2);
+  return mkGroup(d.slice(Math.max(toNum(a[0]) - 1, 0), toNum(a[1])));
+});
+def('range', 2, 2, (a) => {
+  const from = toNum(a[0]), to = toNum(a[1]);
   const out = [];
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === '\\' && i + 1 < s.length) {
-      out.push('\\' + s[i + 1]);
-      i++;
-    } else {
-      out.push(ch);
-    }
-  }
-  return out;
-}
+  const step = from <= to ? 1 : -1;
+  for (let i = from; step > 0 ? i <= to : i >= to; i += step) out.push(mkWord(String(i)));
+  return mkGroup(out);
+});
+def('zip', 2, 2, (a) => {
+  const x = itemsOf(a[0]), y = itemsOf(a[1]);
+  const n = Math.min(x.length, y.length);
+  return mkGroup(Array.from({ length: n }, (_, i) => ({ kind: 'Group', items: [x[i], y[i]] })));
+});
+def('flatten', 0, INF, (a) => mkGroup(a.flatMap(itemsOf)));
 
-// Render a logical char (as returned by `logicalChars`) into a Word's
-// text-storage form. If the logical char is already an escape `\X`,
-// it's preserved verbatim. Otherwise the bare char gets escaped if
-// it's struct-special in word context, so the resulting Word is
-// inert when slotted back into struct context.
-function logicalCharToWordText(lc) {
-  if (lc.length === 2 && lc[0] === '\\') return lc;
-  return WORD_ESCAPE_CHARS.has(lc) ? '\\' + lc : lc;
-}
+// Higher order: f first, data last (HOF-1)
+const call = (ctx, f, x, i = 0) => (f.kind === 'Fn'
+  ? ctx.callEach(f, x, x.kind === 'Named' ? x.value : x, x.kind === 'Named' ? mkWord(x.name) : NONE, numWord(i + 1))
+  : ctx.callFn(f, x));
+const hof = (name, min, fn) => def(name, min, INF, (a, ctx) => fn(a[0], dataOf(a, 1), ctx, a));
+hof('map', 2, (f, d, c) => mkGroup(d.map((x, i) => call(c, f, x, i))));
+hof('flatMap', 2, (f, d, c) => mkGroup(d.flatMap((x, i) => itemsOf(call(c, f, x, i)))));
+hof('filter', 2, (f, d, c) => mkGroup(d.filter((x, i) => isTrue(call(c, f, x, i)))));
+hof('find', 2, (f, d, c) => d.find((x, i) => isTrue(call(c, f, x, i))) ?? NONE);
+hof('each', 2, (f, d, c) => { d.forEach((x, i) => call(c, f, x, i)); return mkGroup(d); });
+hof('any', 2, (f, d, c) => mkBool(d.some((x, i) => isTrue(call(c, f, x, i)))));
+hof('all', 2, (f, d, c) => mkBool(d.every((x, i) => isTrue(call(c, f, x, i)))));
+hof('sortBy', 2, (f, d, c) => {
+  const keyed = d.map((x, i) => ({ x, k: call(c, f, x, i) }));
+  return mkGroup(keyed.sort((p, q) => cmpValues(p.k, q.k)).map((p) => p.x));
+});
+hof('partition', 2, (f, d, c) => {
+  const yes = [], no = [];
+  d.forEach((x, i) => (isTrue(call(c, f, x, i)) ? yes : no).push(x));
+  return { kind: 'Group', items: [mkGroup(yes), mkGroup(no)] };
+});
+def('reduce', 3, INF, (a, c) => {
+  let acc = a[1];
+  for (const x of dataOf(a, 2)) acc = call(c, a[0], { kind: 'Group', items: [acc, x] });
+  return acc;
+});
 
-// `chars!` and `length!` need the raw stored form of a value, not the
-// resolved-to-JS-chars form (which would split `\n` into `\` + `n`).
-function storageString(v) {
-  if (!v) return '';
-  if (v.kind === 'Word') return v.text;
-  if (v.kind === 'Text') {
-    return v.parts.map((p) => 'lit' in p ? p.lit : storageString(p.embed)).join('');
-  }
-  if (v.kind === 'Tmpl') return v.items.map(storageString).join(' ');
-  if (v.kind === 'Null') return 'NULL';
-  throw new PunkRuntimeError(`cannot take chars of ${v.kind}`);
-}
-//
-// Word: stored text is in struct-source form; resolve word escapes
-//   (drop `\` for everything except `\n`/`\t`) so the result is the
-//   chars the user meant.
-// Text: lit storage IS the chars-of-the-string already (text→text
-//   is identity — user-written escapes are not stripped). Embeds
-//   recurse. NB: this means `\n` inside a Text remains the two-char
-//   sequence `\n` here too; it only becomes a real newline at the
-//   stdio/file IO boundary.
-// Tmpl: each item rendered and joined with a single space.
-// Null → "NULL".
-function valueToText(v) {
-  if (!v) return '';
-  switch (v.kind) {
-    case 'Text':
-      return v.parts.map((p) => 'lit' in p ? resolveWordEscapes(p.lit) : valueToText(p.embed)).join('');
-    case 'Word':
-      return resolveWordEscapes(v.text);
-    case 'Null':
-      return 'NULL';
-    case 'Tmpl':
-      return v.items.map(valueToText).join(' ');
-    default:
-      throw new PunkRuntimeError(`cannot convert ${v.kind} to text`);
-  }
-}
+// Input, output, files
+def('print', 0, INF, (a, c) => { c.print(textFrom(a)); return NONE; });
+def('read', 1, 1, (a) => { try { return mkWord(readFileSync(textOf(a[0]), 'utf8')); } catch { return NONE; } });
+def('write', 2, INF, (a) => { try { writeFileSync(textOf(a[0]), textFrom(a.slice(1))); return TRUE; } catch { return NONE; } });
+def('append', 2, INF, (a) => { try { appendFileSync(textOf(a[0]), textFrom(a.slice(1))); return TRUE; } catch { return NONE; } });
+def('exists', 1, 1, (a) => mkBool(existsSync(textOf(a[0]))));
 
-// Chars that ARE structural inside `"..."` and must be `\`-prefixed
-// when a raw JS string is stored into Text-lit form.
-const TEXT_STRUCTURAL = new Set(['{', '}', '"', '\\']);
+// Utility
+def('assert', 1, INF, (a, c) => {
+  if (isTrue(unwrapNamed(a[0]))) return TRUE;
+  c.print(textFrom(a.slice(1)));
+  return NONE;
+});
+def('serialize', 1, 1, (a) => mkWord(fmt(a[0])));
+def('deserialize', 1, 1, (a, c) => c.evalSource(textOf(a[0])));
+def('import', 1, 1, (a, c) => c.importFile(textOf(a[0])));
 
-function escapeForText(s) {
-  let out = '';
-  for (const ch of s) {
-    if (TEXT_STRUCTURAL.has(ch)) out += '\\' + ch;
-    else out += ch;
-  }
-  return out;
-}
+def('urldecode', 1, INF, (a) => {
+  try { return mkWord(decodeURIComponent(textFrom(a).replace(/\+/g, ' '))); } catch { return NONE; }
+});
+def('urlencode', 1, INF, (a) => mkWord(encodeURIComponent(textFrom(a))));
 
-const mkTextLit = (s) => s === '' ? mkText([]) : mkText([{ lit: escapeForText(s) }]);
-
-const boolValue = (b) => b ? TRUE : FALSE;
-
-// The "value being operated on" by a 1-arg builtin. Callers write
-// `f!X` (shortcut for `f!{X}`), `f!"text"`, or `f!{x y z}`. In the
-// first two cases the args Tmpl is a singleton wrapper — unwrap it.
-// In the multi-item case, the whole Tmpl IS the value (a list/struct).
-const singleArg = (args, _env, ctx) => {
-  const xs = argsItems(args);
-  if (xs.length === 1) return xs[0];
-  return args || mkTmpl([]);
-};
-
-const isTextV = (v) => v && v.kind === 'Text';
-const isTmplV = (v) => v && v.kind === 'Tmpl';
-const isFnV   = (v) => v && v.kind === 'Fn';
-const isAtom  = (v) => v && v.kind === 'Atom';
-
-// ---------- Builtin registry ----------
-
-// Arity metadata for builtins that have a fixed pattern. Used by
-// partial application (`fn'{...}`) to validate prefilled-arg counts
-// and to know how many args remain for the resulting partial.
-// `variadic: true` means the last slot soaks up 0+ extras (target
-// behaves like `(... *)`), so a partial of it always keeps a trailing
-// variadic and any number of prefills below `slots` is fine.
-// Builtins not listed here are treated as fully variadic — partials
-// of them simply spread later args into the call.
-export const builtinArity = {
-  'map':    { slots: 2, variadic: false },
-  'filter': { slots: 2, variadic: false },
-  'find':   { slots: 2, variadic: false },
-  'each':   { slots: 2, variadic: false },
-  'count':  { slots: 2, variadic: false },
-  'reduce': { slots: 3, variadic: false },
-  'sort':   { slots: 2, variadic: false },
-  'replace':{ slots: 3, variadic: false },
-  'split':  { slots: 2, variadic: false },
-  'join':   { slots: 2, variadic: false },
-};
-
-export const builtins = {
-  // ----- Arithmetic ---------------------------------------------------
-  '+': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    return numWord(xs.reduce((a, b) => a + b, 0));
-  },
-  'X': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    return numWord(xs.reduce((a, b) => a * b, 1));
-  },
-  '-': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`-! expects 2 arguments, got ${xs.length}`);
-    }
-    return numWord(xs[0] - xs[1]);
-  },
-  '/': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`/! expects 2 arguments, got ${xs.length}`);
-    }
-    return numWord(xs[0] / xs[1]);
-  },
-  '^': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`^! expects 2 arguments, got ${xs.length}`);
-    }
-    return numWord(Math.pow(xs[0], xs[1]));
-  },
-  '%': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`%! expects 2 arguments, got ${xs.length}`);
-    }
-    return numWord(xs[0] % xs[1]);
-  },
-  'min': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    return numWord(Math.min(...xs));
-  },
-  'max': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    return numWord(Math.max(...xs));
-  },
-  'abs':   (args, _env, ctx) => numWord(Math.abs(toNum(argsItems(args)[0], ctx && ctx.node))),
-  'neg':   (args, _env, ctx) => numWord(-toNum(argsItems(args)[0], ctx && ctx.node)),
-  'floor': (args, _env, ctx) => numWord(Math.floor(toNum(argsItems(args)[0], ctx && ctx.node))),
-  'ceil':  (args, _env, ctx) => numWord(Math.ceil(toNum(argsItems(args)[0], ctx && ctx.node))),
-  'round': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    const n = toNum(xs[0], ctx && ctx.node);
-    if (xs.length < 2) return numWord(Math.round(n));
-    const d = toNum(xs[1], ctx && ctx.node);
-    const f = Math.pow(10, d);
-    return numWord(Math.round(n * f) / f);
-  },
-  'sqrt':  (args, _env, ctx) => numWord(Math.sqrt(toNum(argsItems(args)[0], ctx && ctx.node))),
-  'rand':  () => {
-    // Float in [0, 1] inclusive. 21+32 = 53 bits of randomness divided
-    // by (2^53 - 1) so both endpoints are reachable.
-    const MAX = 2 ** 53 - 1;
-    const hi = Math.floor(Math.random() * 0x200000);   // 2^21
-    const lo = Math.floor(Math.random() * 0x100000000); // 2^32
-    const n = hi * 0x100000000 + lo;
-    return numWord(n / MAX);
-  },
-
-  // ----- Comparison ---------------------------------------------------
-  '=': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`=! expects 2 arguments, got ${xs.length}`);
-    }
-    return boolValue(equals(xs[0], xs[1]));
-  },
-  '<>': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`<>! expects 2 arguments, got ${xs.length}`);
-    }
-    return boolValue(!equals(xs[0], xs[1]));
-  },
-  '<': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`<! expects 2 arguments, got ${xs.length}`);
-    }
-    return boolValue(xs[0] < xs[1]);
-  },
-  '>': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`>! expects 2 arguments, got ${xs.length}`);
-    }
-    return boolValue(xs[0] > xs[1]);
-  },
-  '<=': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`<=! expects 2 arguments, got ${xs.length}`);
-    }
-    return boolValue(xs[0] <= xs[1]);
-  },
-  '>=': (args, _env, ctx) => {
-    const xs = argsItems(args).map((v) => toNum(v, ctx && ctx.node));
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`>=! expects 2 arguments, got ${xs.length}`);
-    }
-    return boolValue(xs[0] >= xs[1]);
-  },
-
-  // ----- Boolean ------------------------------------------------------
-  'and': (args, _env, ctx) => {
-    for (const v of argsItems(args)) {
-      if (isTrue(v))  continue;
-      if (isFalse(v)) return FALSE;
-      throw new PunkRuntimeError('and!: expected TRUE or FALSE');
-    }
-    return TRUE;
-  },
-  'or': (args, _env, ctx) => {
-    for (const v of argsItems(args)) {
-      if (isFalse(v)) continue;
-      if (isTrue(v))  return TRUE;
-      throw new PunkRuntimeError('or!: expected TRUE or FALSE');
-    }
-    return FALSE;
-  },
-  'not': (args, _env, ctx) => {
-    const v = singleArg(args);
-    if (isTrue(v))  return FALSE;
-    if (isFalse(v)) return TRUE;
-    throw new PunkRuntimeError('not!: expected TRUE or FALSE');
-  },
-  'xor': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`xor! expects 2 arguments, got ${xs.length}`);
-    }
-    const a = isTrue(xs[0]), b = isTrue(xs[1]);
-    return boolValue(a !== b);
-  },
-
-  // ----- Type checks --------------------------------------------------
-  'isnum':   (args) => boolValue(isNum(singleArg(args))),
-  'istext':  (args) => boolValue(isTextV(singleArg(args))),
-  'islist':  (args, _env, ctx) => {
-    const v = singleArg(args);
-    if (!isTmplV(v)) return FALSE;
-    // True for empty or multi-item; a singleton came from short-form wrap.
-    return boolValue(v.items.length !== 1);
-  },
-  'isfn':    (args) => boolValue(isFnV(singleArg(args))),
-  'isempty': (args, _env, ctx) => {
-    const v = singleArg(args);
-    if (isTmplV(v)) return boolValue(v.items.length === 0);
-    if (isTextV(v)) return boolValue(valueToText(v).length === 0);
-    return FALSE;
-  },
-
-  // ----- Text ---------------------------------------------------------
-  'upper': (args) => mkTextLit(valueToText(singleArg(args)).toUpperCase()),
-  'lower': (args) => mkTextLit(valueToText(singleArg(args)).toLowerCase()),
-  'trim':  (args) => mkTextLit(valueToText(singleArg(args)).trim()),
-  'chars': (args, _env, ctx) => {
-    const s = storageString(singleArg(args));
-    return mkTmpl(logicalChars(s).map((lc) => mkWord(logicalCharToWordText(lc))));
-  },
-  'split': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`split! expects 2 arguments, got ${xs.length}`);
-    }
-    const sep    = valueToText(xs[0]);
-    const target = valueToText(xs[1]);
-    // Each piece is a value in its own right (one true value shape),
-    // so it lands as a singleton Tmpl, not a bare item spliced into
-    // the outer result. A piece may be arbitrary text — including
-    // whitespace, which a Word can never hold (no whitespace escape)
-    // — so the piece is stored as Text, the one representation that
-    // can losslessly carry any content without escaping tricks.
-    return mkTmpl(target.split(sep).map((s) => mkTmpl([mkTextLit(s)])));
-  },
-  'replace': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 3) {
-      throw new PunkRuntimeError(`replace! expects 3 arguments, got ${xs.length}`);
-    }
-    const old = valueToText(xs[0]);
-    const neu = valueToText(xs[1]);
-    const target = valueToText(xs[2]);
-    if (old === '') return mkTextLit(target);
-    return mkTextLit(target.split(old).join(neu));
-  },
-  'join': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`join! expects 2 arguments, got ${xs.length}`);
-    }
-    const sep   = valueToText(xs[0]);
-    const items = isTmplV(xs[1]) ? xs[1].items : [xs[1]];
-    return mkTextLit(items.map(valueToText).join(sep));
-  },
-  // ----- Conversion ---------------------------------------------------
-  'num': (args, _env, ctx) => {
-    const s = valueToText(singleArg(args));
-    if (s === '' || !/^-?\d+(\.\d+)?$/.test(s.trim())) {
-      throw new PunkRuntimeError(`num!: cannot parse '${s}' as a number`);
-    }
-    return numWord(Number(s));
-  },
-
-  // ----- Assertions ---------------------------------------------------
-  'assert': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length === 2) {
-      if (equals(xs[0], xs[1])) return NULL;
-      throw new PunkRuntimeError(
-        `assertion failed: expected ${describe(xs[0])}, got ${describe(xs[1])}`,
-      );
-    }
-    // 1-arg form: truthy check. Only FALSE and NULL are falsy.
-    const v = singleArg(args);
-    if (isFalse(v)) throw new PunkRuntimeError('assertion failed: FALSE');
-    if (v && v.kind === 'Null') throw new PunkRuntimeError('assertion failed: NULL');
-    return NULL;
-  },
-
-  // ----- IO -----------------------------------------------------------
-  'print': (args, _env, ctx) => {
-    const v = singleArg(args);
-    // Text values print as raw chars (verbatim stored content, with
-    // `\n`/`\t` finally turning into real newline/tab at the IO
-    // boundary). Other shapes print in struct form via `format` —
-    // they're structured data, not a string.
-    const out = (v && v.kind === 'Text')
-      ? resolveForIO(valueToText(v))
-      : format(v);
-    // eslint-disable-next-line no-console
-    console.log(out);
-    return NULL;
-  },
-  'exists': (args, _env, ctx) => {
-    const path = resolveForIO(valueToText(singleArg(args)));
-    return boolValue(fs.existsSync(path));
-  },
-  'read': (args, _env, ctx) => {
-    const path = resolveForIO(valueToText(singleArg(args)));
-    const txt = fs.readFileSync(path, 'utf8');
-    return mkTmpl(txt.split(/\r?\n/).map((l) => mkTextLit(l)));
-  },
-  'write': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`write! expects 2 arguments, got ${xs.length}`);
-    }
-    const path = resolveForIO(valueToText(xs[0]));
-    fs.writeFileSync(path, resolveForIO(valueToText(xs[1])));
-    return NULL;
-  },
-  'append': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`append! expects 2 arguments, got ${xs.length}`);
-    }
-    const path = resolveForIO(valueToText(xs[0]));
-    fs.appendFileSync(path, resolveForIO(valueToText(xs[1])));
-    return NULL;
-  },
-  'serialize': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    const v = xs.length === 1 ? xs[0] : args;
-    return mkTextLit(format(v));
-  },
-  'deserialize': (args, _env, ctx) => deserializeBuiltin(args, ctx),
-  'import': (args, env, ctx) => importBuiltin(args, env, ctx),
-  'httpServe': (args, env, ctx) => httpServeBuiltin(args, env, ctx),
-
-  // ----- Collections --------------------------------------------------
-  // HOFs take behaviour first, data last (so `'`-partial is useful).
-  // Iteration callbacks see (value index key):
-  //   - value: the unwrapped value of a Named item, or the item itself
-  //   - index: 1-based position
-  //   - key:   Word(name) for Named items, else NULL
-  // Callbacks must accept the full 3-arg call (use `___` if ignoring).
-  // reduce! is special: its callback is (acc value).
-  'map':    (args, env, ctx) => collMap(args, ctx),
-  'filter': (args, env, ctx) => collFilter(args, ctx),
-  'find':   (args, env, ctx) => collFind(args, ctx),
-  'each':   (args, env, ctx) => collEach(args, ctx),
-  'count':  (args, env, ctx) => collCount(args, ctx),
-  'reduce': (args, env, ctx) => collReduce(args, ctx),
-  'sort':   (args, env, ctx) => collSort(args, ctx),
-  'rev':    (args, _env, ctx) => {
-    const xs = argsItems(singleArg(args));
-    return mkTmpl(xs.slice().reverse());
-  },
-  'unique': (args, _env, ctx) => {
-    const xs = argsItems(singleArg(args));
-    const out = [];
-    for (const it of xs) {
-      if (!out.some((o) => equals(o, it))) out.push(it);
-    }
-    return mkTmpl(out);
-  },
-  'contains': (args, _env, ctx) => {
-    const xs = argsItems(args);
-    if (xs.length !== 2) {
-      throw new PunkRuntimeError(`contains! expects 2 arguments, got ${xs.length}`);
-    }
-    const needle = xs[0];
-    const haystack = isTmplV(xs[1]) ? xs[1].items : [xs[1]];
-    return boolValue(haystack.some((h) => equals(h, needle)));
-  },
-  // Punk source has no syntax for a dynamically-keyed Named entry —
-  // `name:value` requires a literal name token. `toRecord!` is the
-  // escape hatch: given a list of `{key value}` pairs (key text
-  // becomes the field name), it builds a proper Named record. Used
-  // by html.parseForm to turn parsed form pairs into `{note:"x" ...}`.
-  'toRecord': (args, _env, ctx) => {
-    const node = ctx && ctx.node;
-    const xs = argsItems(singleArg(args));
-    const items = xs.map((pair) => {
-      if (!isTmplV(pair) || pair.items.length !== 2) {
-        throw new PunkRuntimeError(
-          `toRecord!: each item must be a {key value} pair`,
-          node && node.line, node && node.col,
-        );
-      }
-      const [k, v] = pair.items;
-      return { kind: 'Named', name: valueToText(k), value: v };
-    });
-    return mkTmpl(items);
-  },
-};
-
-const STDLIB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'lib');
-const moduleCache = new Map();
-const importStack = [];
-
-function resolveImportPath(spec, node) {
-  const cleaned = spec.endsWith('.') ? spec.slice(0, -1) : spec;
-  if (cleaned.startsWith('./') || cleaned.startsWith('../')) {
-    const base = importStack.length > 0
-      ? path.dirname(importStack[importStack.length - 1])
-      : process.cwd();
-    return path.resolve(base, cleaned.endsWith('.punk') ? cleaned : `${cleaned}.punk`);
-  }
-
-  function deserializeBuiltin(args, ctx) {
-    const node = ctx && ctx.node;
-    const src = resolveForIO(valueToText(singleArg(args)));
-    if (src.trim() === '') return NULL;
-    const tokens = tokenize(src);
-    const tree = parseValidate(parseOperators(parseWords(parseTree(tokens))));
-    if (!tree || !Array.isArray(tree.items) || tree.items.length === 0) return NULL;
-    if (tree.items.length !== 1) {
-      throw new PunkRuntimeError(`deserialize!: expected exactly one value`, node && node.line, node && node.col);
-    }
-    const env = new Env();
-    return ctx.evalItem(tree.items[0], env);
-  }
-  if (cleaned.startsWith('punk.')) {
-    const parts = cleaned.slice('punk.'.length).split('.').filter(Boolean);
-    if (parts.length === 0) {
-      throw new PunkRuntimeError(`import: empty stdlib path 'punk.'`, node && node.line, node && node.col);
-    }
-    return path.join(STDLIB_DIR, ...parts) + '.punk';
-  }
-  const dot = cleaned.indexOf('.');
-  if (dot > 0) {
-    const pkg = cleaned.slice(0, dot);
-    const parts = cleaned.slice(dot + 1).split('.').filter(Boolean);
-    if (parts.length === 0) {
-      throw new PunkRuntimeError(`import: empty module path '${cleaned}'`, node && node.line, node && node.col);
-    }
-    const base = importStack.length > 0
-      ? path.dirname(importStack[importStack.length - 1])
-      : process.cwd();
-    const req = createRequire(path.join(base, 'noop.js'));
-    let pkgJson;
-    try {
-      pkgJson = req.resolve(`${pkg}/package.json`);
-    } catch (e) {
-      throw new PunkRuntimeError(
-        `import: cannot resolve package '${pkg}': ${e.message}`,
-        node && node.line, node && node.col,
-      );
-    }
-    const pkgDir = path.dirname(pkgJson);
-    return path.join(pkgDir, 'lib', ...parts) + '.punk';
-  }
-  throw new PunkRuntimeError(
-    `import: cannot resolve module '${cleaned}' (use './X', '../X', or 'pkg.X')`,
-    node && node.line, node && node.col,
-  );
-}
-
-function deserializeBuiltin(args, ctx) {
-  const node = ctx && ctx.node;
-  const src = resolveForIO(valueToText(singleArg(args)));
-  if (src.trim() === '') return NULL;
-  const tokens = tokenize(src);
-  const tree = parseValidate(parseOperators(parseWords(parseTree(tokens))));
-  if (!tree || !Array.isArray(tree.items) || tree.items.length === 0) return NULL;
-  if (tree.items.length !== 1) {
-    throw new PunkRuntimeError(
-      `deserialize!: expected exactly one value`,
-      node && node.line,
-      node && node.col,
-    );
-  }
-  const env = new Env();
-  return ctx.evalItem(tree.items[0], env);
-}
-
-function importBuiltin(args, _env, ctx) {
-  const node = ctx && ctx.node;
-  const spec = resolveForIO(valueToText(singleArg(args)));
-  const absPath = resolveImportPath(spec, node);
-  if (moduleCache.has(absPath)) return moduleCache.get(absPath);
-  let source;
-  try {
-    source = fs.readFileSync(absPath, 'utf8');
-  } catch (e) {
-    throw new PunkRuntimeError(`import: cannot read '${absPath}': ${e.message}`, node && node.line, node && node.col);
-  }
-  const tokens = tokenize(source);
-  const tree = parseValidate(parseOperators(parseWords(parseTree(tokens))));
-  const modEnv = new Env();
-  importStack.push(absPath);
-  let last = NULL;
-  try {
-    for (const item of tree.items) {
-      last = ctx.evalItem(item, modEnv);
-    }
-  } finally {
-    importStack.pop();
-  }
-  moduleCache.set(absPath, last);
-  return last;
-}
-
-function getNamedField(tmpl, name) {
-  if (!tmpl || tmpl.kind !== 'Tmpl') return null;
-  for (const it of tmpl.items) {
-    if (it && it.kind === 'Named' && it.name === name) return it.value;
-  }
-  return null;
-}
-
-function unwrapSingleton(v) {
-  let cur = v;
-  while (cur && cur.kind === 'Tmpl' && cur.items.length === 1) {
-    cur = cur.items[0];
-  }
-  return cur;
-}
-
-function isCallable(v) {
-  if (!v) return false;
-  return v.kind === 'Fn'
-    || v.kind === 'Builtin'
-    || v.kind === 'PartialFn'
-    || v.kind === 'Pipeline'
-    || v.kind === 'Tmpl'
-    || v.kind === 'Text';
-}
-
-function asHeaderObject(v, node) {
-  if (v == null || (v && v.kind === 'Null')) return {};
-  if (!v || v.kind !== 'Tmpl') {
-    throw new PunkRuntimeError(`httpServe: headers must be a template`, node && node.line, node && node.col);
-  }
-  const out = {};
-  for (const it of v.items) {
-    if (it && it.kind === 'Named') {
-      out[it.name] = resolveForIO(valueToText(it.value));
-    }
-  }
-  return out;
-}
-
-function methodNeedsBody(m) {
-  return m === 'POST' || m === 'PUT' || m === 'PATCH';
-}
-
-function toRequestValue(req, bodyText) {
-  const method = mkWord(String(req.method || 'GET'));
-  const url = mkTextLit(String(req.url || '/'));
-  const headerItems = Object.entries(req.headers || {}).map(([k, v]) => ({
-    kind: 'Named', name: k, value: mkTextLit(String(v)),
-  }));
-  const body = bodyText == null ? NULL : mkTextLit(bodyText);
-  return mkTmpl([
-    { kind: 'Named', name: 'method', value: mkTmpl([method]) },
-    { kind: 'Named', name: 'url', value: mkTmpl([url]) },
-    { kind: 'Named', name: 'headers', value: mkTmpl(headerItems) },
-    { kind: 'Named', name: 'body', value: body },
-  ]);
-}
-
-function toResponseParts(v, node) {
-  let r = unwrapSingleton(v);
-  if (!r || r.kind !== 'Tmpl') {
-    throw new PunkRuntimeError(`httpServe: handler must return a template response`, node && node.line, node && node.col);
-  }
-  const statusV = getNamedField(r, 'status');
-  const headersV = getNamedField(r, 'headers');
-  const bodyV = getNamedField(r, 'body');
-  const status = statusV == null ? 200 : Number(toNum(statusV, node));
-  const headers = asHeaderObject(headersV, node);
-  const body = bodyV == null || (bodyV && bodyV.kind === 'Null')
-    ? ''
-    : resolveForIO(valueToText(bodyV));
-  return { status, headers, body };
-}
-
-function httpServeBuiltin(args, _env, ctx) {
-  const node = ctx && ctx.node;
-  const xs = argsItems(args);
-  if (xs.length !== 2) {
-    throw new PunkRuntimeError(`httpServe! expects 2 arguments, got ${xs.length}`, node && node.line, node && node.col);
-  }
-  const port = Number(toNum(xs[0], node));
-  const handler = unwrapSingleton(xs[1]);
-  if (!isCallable(handler)) {
-    throw new PunkRuntimeError(`httpServe: second argument must be callable`, node && node.line, node && node.col);
-  }
-  const invoke = (req, res, bodyText) => {
-    const requestValue = toRequestValue(req, bodyText);
-    const result = ctx.callFn(handler, mkTmpl([requestValue]), node);
-    const response = toResponseParts(result, node);
-    res.writeHead(response.status, response.headers);
-    res.end(response.body);
+// Named things
+def('nameOf', 1, 1, (a) => (a[0].kind === 'Named' ? mkWord(a[0].name) : NONE));
+def('valueOf', 1, 1, (a) => unwrapNamed(a[0]));
+def('pick', 2, INF, (a) => {
+  const hit = dataOf(a, 1).find((x) => x.kind === 'Named' && x.name === textOf(a[0]));
+  return hit ? hit.value : NONE;
+});
+def('time', 0, 0, () => mkWord(String(Date.now())));
+// Introspection: a function is data. Its pattern and body can be read
+// without calling it.
+def('patternOf', 1, 1, (a) => {
+  const f = a[0];
+  if (f.kind !== 'Fn') return NONE;
+  const slotThing = (s) => {
+    const t = s.type === 'lit' ? s.thing : mkWord(s.type === 'rest' ? '#' : '_');
+    return s.label ? mkNamed(s.label, t) : t;
   };
-  const server = http.createServer((req, res) => {
-    if (methodNeedsBody(String(req.method || 'GET'))) {
-      const chunks = [];
-      req.on('data', (chunk) => { chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))); });
-      req.on('end', () => invoke(req, res, Buffer.concat(chunks).toString('utf8')));
-      return;
-    }
-    invoke(req, res, null);
+  return mkGroup(f.pattern.left.map(slotThing));
+});
+// Consecutive items that are not named things are one run of text.
+def('bodyOf', 1, 1, (a, c) => {
+  if (a[0].kind !== 'Fn') return NONE;
+  const out = [];
+  let run = [];
+  const flush = () => { if (run.length) out.push(mkWord(run.join(' '))); run = []; };
+  for (const x of c.bodyItems(a[0]).flatMap((i) => (i.kind === 'Group' ? i.items : [i]))) {
+    if (x.kind === 'Named') { flush(); out.push(x); } else run.push(textOf(x));
+  }
+  flush();
+  return mkGroup(out);
+});
+def('isnamed', 1, 1, (a) => mkBool(a[0].kind === 'Named'));
+
+// HTTP: `serve![port handler]`. The handler receives
+// [method:.. url:.. headers:[..] body:..] and returns [status:.. headers:[..] body:..].
+export const servers = [];
+// Response things may nest (a handler's template can hold the result of
+// another call), so look through nested groups.
+const flat = (t) => itemsOf(t).flatMap((x) => (x.kind === 'Group' ? flat(x) : [x]));
+const pick = (t, name) => flat(t).find((x) => x.kind === 'Named' && x.name === name)?.value;
+// A urlencoded form body is parsed into named things so a handler can query body.note?
+const formBody = (type, body) => {
+  if (!/^application\/x-www-form-urlencoded/i.test(type ?? '') || !body) return mkWord(body);
+  const dec = (s) => decodeURIComponent(s.replace(/\+/g, ' '));
+  return mkGroup(body.split('&').filter(Boolean).map((p) => {
+    const i = p.indexOf('=');
+    return i < 0 ? mkNamed(dec(p), NONE) : mkNamed(dec(p.slice(0, i)), mkWord(dec(p.slice(i + 1))));
+  }));
+};
+
+def('serve', 2, 2, (a, c) => {
+  const port = toNum(a[0]);
+  const handler = a[1];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (d) => { body += d; });
+    req.on('end', () => {
+      const headers = Object.entries(req.headers).map(([k, v]) => mkNamed(k, mkWord(String(v))));
+      const reqThing = mkGroup([
+        mkNamed('method', mkWord(req.method)),
+        mkNamed('url', mkWord(req.url)),
+        mkNamed('headers', mkGroup(headers)),
+        mkNamed('body', formBody(req.headers['content-type'], body)),
+      ]);
+      let status = 200, outHeaders = {}, outBody = '';
+      try {
+        const r = c.callFn(handler, reqThing);
+        const st = pick(r, 'status');
+        if (st) status = toNum(st) || 200;
+        for (const h of itemsOf(pick(r, 'headers') ?? NONE)) {
+          if (h.kind === 'Named') outHeaders[h.name] = textOf(h.value);
+        }
+        const b = pick(r, 'body');
+        if (b) outBody = textOf(b);
+      } catch { status = 500; }
+      res.writeHead(status, outHeaders);
+      res.end(outBody);
+    });
   });
   server.listen(port);
-  return NULL;
-}
+  servers.push(server);
+  return TRUE;
+});
 
-// ---------- Collection helpers ----------
-
-// Pull `fn` and `data` out of an HOF args Tmpl. HOF args are
-// `{fn ...data}` where ...data is one item if it's a Tmpl, or all
-// trailing items collectively forming the data list.
-function takeFnAndData(args, name, ctx) {
-  const node = ctx && ctx.node;
-  const xs = argsItems(args);
-  if (xs.length < 2) {
-    throw new PunkRuntimeError(
-      `${name}! expects at least 2 arguments`,
-      node && node.line, node && node.col,
-    );
-  }
-  const fn = xs[0];
-  if (!isFnV(fn)) {
-    throw new PunkRuntimeError(
-      `${name}!: first argument must be a function`,
-      node && node.line, node && node.col,
-    );
-  }
-  // Data is the last item (must be a Tmpl).
-  const last = xs[xs.length - 1];
-  if (!isTmplV(last)) {
-    throw new PunkRuntimeError(
-      `${name}!: last argument must be a template`,
-      node && node.line, node && node.col,
-    );
-  }
-  return { fn, data: last.items, middle: xs.slice(1, -1) };
-}
-
-// Inspect a callback's *positional* arity for HOF dispatch.
-// Returns the number of positional slots (1 or 2). Variadic-trailing slot
-// counts as the upper bound (still legal to call with item-only).
-// For Builtins / non-Fn callables, defaults to 1.
-function hofArity(fn, hofName) {
-  let target = fn;
-  let prefilled = 0;
-  while (target && target.kind === 'PartialFn') {
-    prefilled += target.prefilled.length;
-    target = target.target;
-  }
-  if (!target || target.kind !== 'Fn') return 1;
-  const items = (target.params && target.params.items) || [];
-  const remaining = items.length - prefilled;
-  // Detect variadic trailing slot (last slot is `*` or `name:*`).
-  let variadic = false;
-  if (items.length > 0) {
-    variadic = slotIsRest(items[items.length - 1]);
-  }
-  // Effective non-variadic slot count we must satisfy.
-  const fixed = variadic ? remaining - 1 : remaining;
-  if (variadic) {
-    // Variadic callbacks: pass (item) — variadic captures zero extras.
-    if (fixed > 1) {
-      throw new PunkRuntimeError(
-        `${hofName}!: callback takes (item) or (item index), got ${remaining} slots`,
-      );
-    }
-    return 1;
-  }
-  if (remaining === 1) return 1;
-  if (remaining === 2) return 2;
-  throw new PunkRuntimeError(
-    `${hofName}!: callback takes (item) or (item index), got ${remaining} slots`,
-  );
-}
-
-// Build the args Tmpl for a HOF callback call, respecting the callback's
-// declared arity. Item is passed as-is (Named-preserved).
-function cbArgs(item, i, fn, hofName) {
-  const arity = hofArity(fn, hofName);
-  if (arity === 2) return mkTmpl([item, numWord(i)]);
-  return mkTmpl([item]);
-}
-
-function collMap(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'map', ctx);
-  const out = [];
-  for (let i = 0; i < data.length; i++) {
-    out.push(ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'map'), null));
-  }
-  return mkTmpl(out);
-}
-
-function collFilter(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'filter', ctx);
-  const out = [];
-  for (let i = 0; i < data.length; i++) {
-    const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'filter'), null);
-    if (isTrue(r)) out.push(data[i]);
-  }
-  return mkTmpl(out);
-}
-
-function collFind(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'find', ctx);
-  for (let i = 0; i < data.length; i++) {
-    const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'find'), null);
-    if (isTrue(r)) return data[i];
-  }
-  return NULL;
-}
-
-function collEach(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'each', ctx);
-  for (let i = 0; i < data.length; i++) {
-    ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'each'), null);
-  }
-  return NULL;
-}
-
-function collCount(args, ctx) {
-  const { fn, data } = takeFnAndData(args, 'count', ctx);
-  let n = 0;
-  for (let i = 0; i < data.length; i++) {
-    const r = ctx.callFn(fn, cbArgs(data[i], i + 1, fn, 'count'), null);
-    if (isTrue(r)) n++;
-  }
-  return numWord(n);
-}
-
-function collReduce(args, ctx) {
-  // `reduce!{fn seed data}` — callback is (acc value).
-  const xs = argsItems(args);
-  if (xs.length !== 3) {
-    throw new PunkRuntimeError(`reduce! expects 3 arguments, got ${xs.length}`);
-  }
-  const [fn, seed, dataT] = xs;
-  if (!isFnV(fn)) throw new PunkRuntimeError(`reduce!: first argument must be a function`);
-  if (!isTmplV(dataT)) throw new PunkRuntimeError(`reduce!: third argument must be a template`);
-  let acc = seed;
-  for (const it of dataT.items) {
-    const v = it && it.kind === 'Named' ? it.value : it;
-    acc = ctx.callFn(fn, mkTmpl([acc, v]), null);
-  }
-  return acc;
-}
-
-function collSort(args, ctx) {
-  const xs = argsItems(args);
-  // Unary: sort!{data}; with comparator: sort!{fn data}.
-  let fn = null;
-  let data;
-  if (xs.length === 1 && isTmplV(xs[0])) {
-    data = xs[0].items.slice();
-  } else if (xs.length === 2 && isFnV(xs[0]) && isTmplV(xs[1])) {
-    fn = xs[0];
-    data = xs[1].items.slice();
-  } else {
-    // Treat whole args as a list of items to sort.
-    data = xs.slice();
-  }
-  const cmp = fn
-    ? (a, b) => {
-        const r = ctx.callFn(fn, mkTmpl([a, b]), null);
-        // TRUE means a comes before b.
-        return isTrue(r) ? -1 : 1;
-      }
-    : defaultCompare;
-  data.sort(cmp);
-  return mkTmpl(data);
-}
-
-function defaultCompare(a, b) {
-  if (isNum(a) && isNum(b)) return Number(a.text) - Number(b.text);
-  const sa = valueToText(a), sb = valueToText(b);
-  return sa < sb ? -1 : sa > sb ? 1 : 0;
-}
-
-// Compact debug-style description of a value for assertion messages.
-function describe(v) {
-  try {
-    // Avoid circular import — formatting fallback.
-    if (!v) return '?';
-    if (v.kind === 'Null') return 'NULL';
-    if (v.kind === 'Word') return v.text;
-    if (v.kind === 'Tmpl') return '{' + v.items.map(describe).join(' ') + '}';
-    if (v.kind === 'Text') return '"' + v.parts.map((p) => 'lit' in p ? p.lit : describe(p.embed)).join('') + '"';
-    return v.kind;
-  } catch {
-    return '?';
-  }
-}
+export const builtins = list;
+void FALSE; void isNone;
