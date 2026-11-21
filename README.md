@@ -8,7 +8,7 @@
 
 # Punk
 
-Punk is an interpreted functional very loosely typed immutable programming language. This implementation uses node.js as it's runtime.
+Punk is an interpreted functional very loosely typed immutable programming language. This implementation uses node.js as its runtime.
 
 ## Getting Started
 
@@ -107,7 +107,7 @@ message:[Hello world]
 
 ### Querying Named Things
 
-You can retrieve a thing from it's name using a ? query.
+You can retrieve a thing from its name using a ? query.
 
 ```punk
 message?
