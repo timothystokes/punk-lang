@@ -415,7 +415,7 @@ f:(_)[x:2 x?]
 Syntax errors are the only errors. They stop the program and report where they happened. Everything else, such as a failed match, a missing query result, the wrong number of arguments or dividing by zero, simply evaluates to [].
 
 ```punk
-\![5 0]
+/![5 0]
 ```
 **`[]`**
 
@@ -520,7 +520,7 @@ a\:b
 ```
 **`a:b`**
 
-A `\` at the start of a word followed by `!` is the division function (`\![6 3]`).
+Division is the function `/`, as in `/![6 3]`.
 
 ### Atoms
 

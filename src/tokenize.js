@@ -75,7 +75,7 @@ export function tokenize(src) {
     while (i < src.length) {
       const ch = src[i];
       if (isWs(ch) || DELIMS.has(ch)) break;
-      if (ch === '\\' && i + 1 < src.length && !isWs(src[i + 1]) && (src[i + 1] !== '!' || lit !== '' || parts.length > 0)) {
+      if (ch === '\\' && i + 1 < src.length && !isWs(src[i + 1])) {
         // Escape: the next character is plain text (LEX-8).
         const e = src[i + 1];
         advance(2);

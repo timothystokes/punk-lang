@@ -37,7 +37,7 @@ const cmpValues = (a, b) => {
 def('+', 2, INF, (a) => numWord(a.reduce((s, x) => s + toNum(x), 0)));
 def('-', 2, 2, (a) => numWord(toNum(a[0]) - toNum(a[1])));
 def('*', 2, INF, (a) => numWord(a.reduce((s, x) => s * toNum(x), 1)));
-def('\\', 2, 2, (a) => (toNum(a[1]) === 0 ? NONE : numWord(toNum(a[0]) / toNum(a[1]))));
+def('/', 2, 2, (a) => (toNum(a[1]) === 0 ? NONE : numWord(toNum(a[0]) / toNum(a[1]))));
 def('mod', 2, 2, (a) => (toNum(a[1]) === 0 ? NONE : numWord(toNum(a[0]) % toNum(a[1]))));
 def('pow', 2, 2, (a) => numWord(toNum(a[0]) ** toNum(a[1])));
 def('sqrt', 1, 1, (a) => numWord(Math.sqrt(toNum(a[0]))));

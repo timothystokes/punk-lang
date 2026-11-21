@@ -25,7 +25,7 @@ Status: draft. Derived from `README.md`; rules not stated there are listed in
 | [x] LEX-5 | `->` MAY be lengthened (`-->`, `--->`, …) to denote deeper case levels (see CASE-4). |
 | [x] LEX-6 | Function names MUST NOT contain `>`, `<` or `\|`. `^` is allowed as a function name (logical or). (`>` is the pipe symbol; `\|` is such-that.) |
 | [x] LEX-7 | `TRUE` and `FALSE` MUST be ordinary words with no special evaluation. They are used by convention for logical results. |
-| [x] LEX-8 | A `\` MUST make the next character plain text, so `a\:b` is the word `a:b`. `\n` is a newline and `\t` is a tab. A space cannot be escaped. A `\` at the start of a word followed by `!` is the division function, not an escape. |
+| [x] LEX-8 | A `\` MUST make the next character plain text, so `a\:b` is the word `a:b`. `\n` is a newline and `\t` is a tab. A space cannot be escaped. |
 | [x] LEX-9 | `##` at the start of a word MUST begin a comment that runs to the end of the line. Comments MUST be ignored. |
 | [x] LEX-10 | A cases chain (`->`) MUST be allowed inside a bracketed body. The things before the first `->` on that body are the subject. |
 

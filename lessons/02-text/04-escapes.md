@@ -7,4 +7,4 @@ a\:b
 ```
 **`a:b`**
 
-A `\` at the start of a word followed by `!` is the division function (`\![6 3]`).
+Division is the function `/`, as in `/![6 3]`.

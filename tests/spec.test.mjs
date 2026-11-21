@@ -27,7 +27,7 @@ rule('LEX-4', 'a_b #c', '[a_b #c]');
 rule('LEX-5', 'x:5\nx?\n-> (5)[five]!\n--> (5)[deep]!', 'deep');
 rule('LEX-6', '[1 2] > ^![TRUE FALSE]', 'TRUE');
 many('LEX-7', [['TRUE', 'TRUE'], ['x:TRUE\nx?', 'TRUE']]);
-many('LEX-8', [['a\\:b', 'a:b'], ['\\![6 3]', '2']]);
+many('LEX-8', [['a\\:b', 'a:b'], ['/![6 3]', '2'], ['\\!x', '!x']]);
 rule('LEX-9', 'x:[a ## note\nb]\nx?', '[a b]');
 rule('LEX-10', 'f:(_)[\n.?\n-> (5)[five]\n]\nf!5', 'five');
 // THING
@@ -187,14 +187,14 @@ rule('CURRY-5', '[1 2 3 4] > filter!lt!2', '[3 4]');
 syntax('ERR-1', '[a b');
 rule('ERR-2', 'nope!x', '[]');
 syntax('ERR-1a', '(_ _');
-many('ERR-3', [['\\![1 0]', '[]'], ['x? ', '[]'], ['+![a b]', '0']]);
+many('ERR-3', [['/![1 0]', '[]'], ['x? ', '[]'], ['+![a b]', '0']]);
 // LIB
 rule('LIB-1', 'upper![a b]', '[A B]');
 rule('LIB-2', '-![1 2 3]', '[]');
 rule('LIB-3', 'x:[b a]\nsort!x?\nx?', '[b a]');
 many('LIB-4', [['=![[a b:1] [a b:1]]', 'TRUE'], ['=![[a b:1] [a b:2]]', 'FALSE'], ['~=![a b]', 'TRUE']]);
 many('LIB-5', [['+![1 x]', '1'], ['length!42', '2']]);
-rule('LIB-6', '\\![5 0]', '[]');
+rule('LIB-6', '/![5 0]', '[]');
 many('FN-9', [['f:()[hi]\nf!', 'hi'], ['f:()[hi]\nf![]', 'hi'], ['f:()[hi]\nf!x', '[]']]);
 many('EMB-12', [['f:()[7]\n[n{f!}]!', 'n7']]);
 test('EMB-12 time', () => assert.match(run('[a {time!}]!'), /^\[a \d+\]$/));
