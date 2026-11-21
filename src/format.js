@@ -55,3 +55,18 @@ function fmtBody(b) {
 export function formatResult(v) {
   return isNone(v) || v === NONE ? '[]' : fmt(v);
 }
+
+// Readable layout: a group holding other groups of several items puts each
+// item on its own indented line, recursively. Other groups stay on one line.
+const nests = (v) => (v.kind === 'Named' ? nests(v.value) : v.kind === 'Group' && v.items.length > 1);
+
+function pretty(v, pad) {
+  if (v.kind === 'Named') return `${v.name}:${pretty(v.value, pad)}`;
+  if (v.kind !== 'Group' || v.items.length < 2 || !v.items.some(nests)) return fmt(v);
+  const inner = pad + '  ';
+  return `[\n${v.items.map((x) => inner + pretty(x, inner)).join('\n')}\n${pad}]`;
+}
+
+export function formatPretty(v) {
+  return isNone(v) || v === NONE ? '[]' : pretty(v, '');
+}

@@ -15,6 +15,12 @@ test('web: the bundle runs Punk without Node', () => {
   assert.match(runPunk('x: 5').error, /A name can only be attached to a thing/);
 });
 
+test('web: nested groups are laid out on indented lines', () => {
+  assert.equal(runPunk('[[1 2] [3 4]]!').result, '[\n  [1 2]\n  [3 4]\n]');
+  assert.equal(runPunk('[a:[b c] d:e]!').result, '[\n  a:[b c]\n  d:e\n]');
+  assert.equal(runPunk('[Paul age:43]!').result, '[Paul age:43]');
+});
+
 test('web: file access evaluates to the non-thing', () => {
   assert.equal(runPunk('read![nope.txt]').result, '[]');
 });

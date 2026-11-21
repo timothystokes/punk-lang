@@ -107,7 +107,7 @@ message:[Hello world]
 
 ### Try it in the browser
 
-`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections, each example with editable code on the left and live output on the right, plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
+`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections, each example with editable code on the left and live output on the right (a group that holds groups of several items is laid out on indented lines to read more easily), plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
 
 ### Querying Named Things
 

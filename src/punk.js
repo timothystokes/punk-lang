@@ -3,15 +3,15 @@
 
 import { parse } from './parse.js';
 import { createGlobal, evalProgram, setOutput } from './eval.js';
-import { formatResult } from './format.js';
+import { formatResult, formatPretty } from './format.js';
 import { newEnv } from './env.js';
 
 export { setOutput };
 
 // One-shot: a file is its own namespace context under the global one.
-export function run(source) {
+export function run(source, { pretty = false } = {}) {
   const program = parse(source);
-  return formatResult(evalProgram(program, newEnv(createGlobal())));
+  return (pretty ? formatPretty : formatResult)(evalProgram(program, newEnv(createGlobal())));
 }
 
 // REPL session: one shared context across lines.
