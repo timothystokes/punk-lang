@@ -1,10 +1,6 @@
 # Welcome
 
-Punk is an interpreted, functional, very loosely typed programming language where everything is immutable. There are no reserved words, no keywords and no types to declare. Everything is a **thing**: a word, a group of things written in `[ ]`, a name attached to a thing, or a function. Space is the delimiter between things, and the symbols `:` `?` `!` and `>` attach names, ask queries, call functions and pipe results.
-
-A function is a pattern attached to a template, `(pattern)[template]`, and it returns its whole template. Failures don't raise errors: a failed match, a missing name or a bad argument all evaluate to the non-thing `[]`. Only syntax errors stop a program.
-
-Punk is a templating language at heart, so building text and structure from other things is as natural as arithmetic.
+Punk is an interpreted, immutable, functional, very loosely typed programming language. There are no reserved words, no keywords and no types. Everything is a **thing**. Space is the delimiter between things and a group of things bound by `[ ]` is just another thing.
 
 ## How to use this site
 
