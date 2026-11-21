@@ -107,7 +107,7 @@ message:[Hello world]
 
 ### Try it in the browser
 
-`npm run build:web` builds a static site into `site/`: the examples from `docs/punk-by-example.md` each with editable code on the left and live output on the right, plus a playground. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
+`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, each example with editable code on the left and live output on the right, plus a playground. To add a lesson, add a file named like `22-my-topic.md` that starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
 
 ### Querying Named Things
 

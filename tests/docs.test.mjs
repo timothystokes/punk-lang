@@ -1,9 +1,9 @@
 // Every example in the docs (a ```punk block followed by a **`output`** line) must produce that output.
 // The README is a running narrative, so its examples share one session and may rebind names.
-// The by-example examples are each self-contained and run in a fresh context.
+// The lessons (lessons/*.md) examples are each self-contained and run in a fresh context.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parse } from '../src/parse.js';
 import { createGlobal, evalProgram, setBaseDir } from '../src/eval.js';
@@ -36,4 +36,4 @@ function check(file, shared) {
 }
 
 check('../README.md', true);
-check('../docs/punk-by-example.md', false);
+for (const f of readdirSync(fileURLToPath(new URL('../lessons', import.meta.url))).filter((f) => f.endsWith('.md')).sort()) check(`../lessons/${f}`, false);

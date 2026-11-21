@@ -1,8 +1,8 @@
 // Builds the static site into site/: the interpreter bundled for browsers, the page,
-// and the examples taken from docs/punk-by-example.md.
+// and the lessons from the lessons/ folder.
 import { build } from 'esbuild';
 import { marked } from 'marked';
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
@@ -25,24 +25,31 @@ export const browserBuild = (options = {}) => build({
 
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// Splits the by-example markdown into sections of prose and runnable code blocks.
+// A lesson is one markdown file: a `# Title`, prose, and ```punk blocks.
 // The bold output line after a block is dropped: the page shows the real output.
-export function parseExamples(markdown) {
-  const [intro, ...parts] = markdown.split(/^## /m);
-  const sections = parts.map((part) => {
-    const [title, ...rest] = part.split('\n');
-    const body = rest.join('\n').replace(/^\*\*`.*`\*\*\n?/gm, '');
-    const blocks = [];
-    let last = 0;
-    for (const m of body.matchAll(/```punk\n([\s\S]*?)```/g)) {
-      blocks.push({ type: 'prose', html: marked.parse(body.slice(last, m.index)) });
-      blocks.push({ type: 'code', code: m[1].replace(/\n$/, '') });
-      last = m.index + m[0].length;
-    }
-    blocks.push({ type: 'prose', html: marked.parse(body.slice(last)) });
-    return { title: title.trim(), id: slug(title), blocks: blocks.filter((b) => b.type === 'code' || b.html.trim()) };
-  });
-  return { intro: marked.parse(intro.replace(/^# .*\n/, '')), sections };
+export function parseLesson(markdown) {
+  const [, title, ...rest] = /^# (.*)\n([\s\S]*)$/.exec(markdown) ?? [null, 'Untitled', markdown];
+  const body = rest.join('').replace(/^\*\*`.*`\*\*\n?/gm, '');
+  const blocks = [];
+  let last = 0;
+  for (const m of body.matchAll(/```punk\n([\s\S]*?)```/g)) {
+    blocks.push({ type: 'prose', html: marked.parse(body.slice(last, m.index)) });
+    blocks.push({ type: 'code', code: m[1].replace(/\n$/, '') });
+    last = m.index + m[0].length;
+  }
+  blocks.push({ type: 'prose', html: marked.parse(body.slice(last)) });
+  return { title: title.trim(), id: slug(title), blocks: blocks.filter((b) => b.type === 'code' || b.html.trim()) };
+}
+
+// lessons/README.md is the home page; the other files are lessons in filename order.
+export function loadLessons(dir = root('lessons')) {
+  const files = readdirSync(dir).filter((f) => f.endsWith('.md')).sort();
+  const read = (f) => readFileSync(`${dir}/${f}`, 'utf8');
+  const home = parseLesson(read('README.md'));
+  return {
+    intro: home.blocks.map((b) => b.html ?? '').join(''),
+    sections: files.filter((f) => f !== 'README.md').map((f) => parseLesson(read(f))),
+  };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -50,7 +57,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   await browserBuild({ outfile: `${out}/punk.js`, minify: true });
-  writeFileSync(`${out}/examples.json`, JSON.stringify(parseExamples(readFileSync(root('docs/punk-by-example.md'), 'utf8'))));
+  writeFileSync(`${out}/examples.json`, JSON.stringify(loadLessons()));
   for (const f of ['index.html', 'style.css', 'app.js']) copyFileSync(root(`web/${f}`), `${out}/${f}`);
   writeFileSync(`${out}/.nojekyll`, '');
   console.log('built site/');

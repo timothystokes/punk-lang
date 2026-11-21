@@ -2,9 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { browserBuild, parseExamples } from '../web/build.mjs';
+import { browserBuild, loadLessons } from '../web/build.mjs';
 
 const { outputFiles } = await browserBuild({ write: false });
 const sandbox = { console: { log() {} } };
@@ -21,9 +19,8 @@ test('web: file access evaluates to the non-thing', () => {
   assert.equal(runPunk('read![nope.txt]').result, '[]');
 });
 
-test('web: every by-example block runs', () => {
-  const md = readFileSync(fileURLToPath(new URL('../docs/punk-by-example.md', import.meta.url)), 'utf8');
-  const { sections } = parseExamples(md);
+test('web: every lesson block runs', () => {
+  const { sections } = loadLessons();
   assert.ok(sections.length > 10);
   for (const s of sections) {
     for (const b of s.blocks.filter((x) => x.type === 'code')) {
