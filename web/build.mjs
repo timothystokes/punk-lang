@@ -66,7 +66,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   mkdirSync(out, { recursive: true });
   await browserBuild({ outfile: `${out}/punk.js`, minify: true });
   writeFileSync(`${out}/examples.json`, JSON.stringify(loadLessons()));
-  for (const f of ['index.html', 'style.css', 'app.js']) copyFileSync(root(`web/${f}`), `${out}/${f}`);
+  for (const f of ['style.css', 'app.js']) copyFileSync(root(`web/${f}`), `${out}/${f}`);
+  // A version on each asset stops browsers showing a stale copy after a deploy.
+  const v = Date.now();
+  const html = readFileSync(root('web/index.html'), 'utf8').replace(/(style\.css|punk\.js|app\.js)"/g, `$1?v=${v}"`);
+  writeFileSync(`${out}/index.html`, html);
   writeFileSync(`${out}/.nojekyll`, '');
   console.log('built site/');
 }

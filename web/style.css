@@ -11,7 +11,7 @@ nav h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; 
 nav a { color: var(--muted); text-decoration: none; padding: 0.15rem 0; }
 nav a:hover, nav a.active { color: var(--accent); }
 main { flex: 1; min-width: 0; max-width: 60rem; padding: 1rem 2rem 4rem; }
-h1 { margin-top: 0.5rem; }
+h1 { margin-top: 0.5rem; color: var(--accent); }
 .prose code { background: var(--code); padding: 0.1em 0.3em; border-radius: 3px; }
 .prose pre { background: var(--code); padding: 0.75rem; overflow-x: auto; }
 .prose blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
@@ -21,8 +21,8 @@ textarea, .output { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; mar
 .gutter { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 0; padding: 0.75rem 0.5rem; text-align: right; color: #9a9aa8; user-select: none; overflow: hidden; border-right: 1px solid var(--line); min-width: 2.5ch; }
 .editor textarea { flex: 1; min-width: 0; resize: none; border: 0; border-radius: 0; background: transparent; color: var(--fg); tab-size: 2; overflow: auto; white-space: pre; }
 .editor textarea:focus { outline: none; }
-.output { background: #1d1d24; color: #e8e8ee; overflow-x: auto; white-space: pre-wrap; }
-.output .result { color: var(--accent); }
+.output { font-weight: normal; background: #1d1d24; color: #e8e8ee; overflow-x: auto; white-space: pre-wrap; }
+.output .result { color: #ff2d95; }
 .output .error { color: #ff8fa3; }
-.output .printed { color: #9ad4a1; }
+.output .printed { color: #39ff14; font-weight: normal; }
 @media (max-width: 800px) { .layout { flex-direction: column; } nav { position: static; width: auto; max-height: none; flex-direction: row; flex-wrap: wrap; gap: 0.75rem; } .example { grid-template-columns: 1fr; } }
