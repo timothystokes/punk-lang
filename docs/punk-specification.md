@@ -108,6 +108,11 @@ person:[name:[Paul Jones] age:42]
 | [x] QRY-10 | A **range segment** `a-b` MUST select the items from index `a` to index `b` inclusive, as a group. Either index MAY be negative (QRY-9). |
 | [x] QRY-11 | A range segment `a-` MUST select the items from index `a` to the last item. |
 | [x] QRY-12 | A range MUST be clamped to the items that exist, and MUST resolve to the non-thing if it selects none (an index of `0`, a start after the end, or a start after the stop). |
+| [x] QRY-14 | A segment MAY contain `{ }` embeds, as in `g.{k?}?`. The embeds MUST be evaluated first and the text of the result is the segment, used as a name, an index or a range exactly as if it had been written literally. This lets a name or position held in a thing select from a group. |
+| [x] QRY-15 | A segment MUST NOT be split again after its embeds are evaluated, so a result containing `.` is one name. Text adjacent to an embed joins to it as in EMB-4 (`g.item-{n?}?`). |
+| [x] QRY-16 | A query whose embedded segment fails, or evaluates to the non-thing, MUST resolve to the non-thing (QRY-7). |
+| [x] QRY-17 | The embeds in a segment are evaluated only where the query is evaluated (EMB-1), and a query written inside an embed MUST NOT itself contain an embed (EMB-8). |
+| [x] QRY-18 | A word with embeds followed by `!` MUST call the thing its evaluated text names, resolved as a query (QRY-14). `{k?}!5` calls the function named by `k`, and `m.{k?}!5` selects by path first. |
 | [x] QRY-6 | Segments MUST be resolved left to right, each applying to the result of the previous. |
 | [x] QRY-7 | A query MUST resolve to the non-thing if any segment fails to align (THING-8). |
 | [x] QRY-8 | A query is itself a thing and MAY appear inside another thing. |

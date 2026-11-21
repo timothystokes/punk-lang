@@ -88,6 +88,25 @@ test('QRY-12', () => {
   assert.equal(run('p:[x y z]\np.3-1?'), '[]');
   assert.equal(run('p:[x y z]\np.-9?'), '[]');
 });
+many('QRY-14', [
+  ['g:[a:1 b:2]\nk:b\ng.{k?}?', '2'],
+  ['xs:[x y z]\ni:2\nxs.{i?}?', 'y'],
+  ['xs:[w x y z]\nr:2-3\nxs.{r?}?', '[x y]'],
+  ['p:[a:[b:7]]\nk:b\np.a.{k?}?', '7'],
+  ['f:(_)[k:a\n.{k?}?]\nf![a:5]', '[k:a 5]'],
+  ['k:g\ng:[a:9]\n{k?}.a?', '9'],
+]);
+many('QRY-15', [
+  ['g:[a.b:1 c:2]\nk:a.b\ng.{k?}?', '1'],
+  ['g:[item-1:x item-2:y]\nn:2\ng.item-{n?}?', 'y'],
+]);
+many('QRY-16', [
+  ['g:[a:1]\ng.{nope?}?', '[]'],
+  ['g:[a:1]\nk:b\ng.{k?}?', '[]'],
+]);
+rule('QRY-18', 'h:(n:_)[+![n? 1]]\nk:h\n{k?}!5', '6');
+syntax('QRY-17', 'g:[a:1]\nk:a\n[{g.{k?}?}]!');
+
 // TMPL / EMB
 rule('TMPL-3', 'f:(n:_)[Total +![n? 1]]\nf!4', '[Total 5]');
 rule('TMPL-4', 'g:(n:_)[x:+![n? 1] x? *![x? 2]]\ng!3', '[x:4 4 8]');

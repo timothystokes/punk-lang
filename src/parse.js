@@ -19,6 +19,27 @@ export function parsePath(text, line, col) {
   return { kind: 'Query', local, segs };
 }
 
+// A word with embeds followed by `?` is a query whose segments may contain embeds (QRY-14).
+export function queryFromParts(allParts, line, col) {
+  let parts = allParts;
+  const first = parts[0];
+  const local = first.lit !== undefined && first.lit.startsWith('.');
+  if (local) parts = [{ lit: first.lit.slice(1) }, ...parts.slice(1)];
+  const segs = [];
+  let cur = [];
+  for (const part of parts) {
+    if (part.lit === undefined) { cur.push(part); continue; }
+    part.lit.split('.').forEach((piece, i) => {
+      if (i > 0) { segs.push(cur); cur = []; }
+      if (piece !== '') cur.push({ lit: piece });
+    });
+  }
+  segs.push(cur);
+  if (local && segs.length === 1 && segs[0].length === 0) return { kind: 'Query', local, segs: [] };
+  if (segs.some((s) => s.length === 0)) throw syntaxError('A query is names separated by \'.\'', line, col);
+  return { kind: 'Query', local, segs: segs.map((s) => (s.every((x) => x.lit !== undefined) ? s.map((x) => x.lit).join('') : { parts: s })) };
+}
+
 function parseTokens(t) {
   let p = 0;
   let opener;
@@ -193,9 +214,9 @@ function parseTokens(t) {
       const t = peek();
       if (!t.adj) break;
       if (t.type === 'QMARK') {
-        if (node.kind !== 'Word' || node.parts || node.queried) break;
+        if (node.kind !== 'Word' || node.queried) break;
         next();
-        const q = parsePath(node.text, t.line, t.col);
+        const q = node.parts ? queryFromParts(node.parts, t.line, t.col) : parsePath(node.text, t.line, t.col);
         node = q;
         continue;
       }

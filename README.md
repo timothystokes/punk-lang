@@ -185,6 +185,19 @@ person.name.2?
 ```
 **`Jones`**
 
+### Queries with embeds
+
+A segment of a query may be an embed, so a name or position held in a thing can select from a group. The embeds are evaluated first and their text is used as the segment, exactly as if it had been written out.
+
+```punk
+person:[name:Paul age:42]
+field:age
+[person.{field?}?]!
+```
+**`42`**
+
+A result is never split again, so a name containing `.` stays one name, and a segment that evaluates to nothing makes the whole query the non-thing. The embeds only run where the query is evaluated, and an embed cannot contain another embed, so `{g.{k?}?}` is a syntax error. A call target can embed too: with `k:h`, `{k?}!5` calls the function named `h`.
+
 ### Nested Queries
 
 Queries are also a thing so you can embed a query inside another thing. 

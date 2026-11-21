@@ -3,10 +3,10 @@
 A function is a thing like any other. You can name it, pass it to other functions and return it from one. `(params)[body]` makes a function and `:` names it.
 
 ```punk
-hello:()["Hello world"]
+hello:()[Hello world]
 hello!
 ```
-**`["Hello world"]`**
+**`[Hello world]`**
 
 A function can have several cases, tried in order, so one function can answer for no arguments, one, two or any number more. `argcount` counts its arguments with a case for each small size and `r:#` to take the rest.
 

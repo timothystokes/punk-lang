@@ -8,7 +8,8 @@ function wordText(w) {
 }
 
 function fmtQuery(q) {
-  return (q.local ? '.' : '') + q.segs.join(q.local && q.segs.length ? '.' : '.') + '?';
+  const seg = (s) => (typeof s === 'string' ? s : wordText({ text: null, parts: s.parts }));
+  return (q.local ? '.' : '') + q.segs.map(seg).join('.') + '?';
 }
 
 function fmtPattern(p) {

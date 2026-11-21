@@ -7,7 +7,7 @@ import {
   itemsOf, unwrapNamed, isNone, equals,
 } from './values.js';
 import { textOf } from './format.js';
-import { parse } from './parse.js';
+import { parse, queryFromParts } from './parse.js';
 import { builtins } from './builtins.js';
 import { syntaxError, isSyntaxError } from './errors.js';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -169,7 +169,15 @@ function applySegs(v, segs) {
   return v;
 }
 
-export function resolveQuery(q, env) {
+// Evaluates a segment's embeds to text (QRY-14); a failed embed gives '' (QRY-16).
+const segText = (seg, env) => (typeof seg === 'string'
+  ? seg
+  : seg.parts.map((p) => (p.lit !== undefined ? p.lit : textOf(embedValue(p.embed, env)))).join(''));
+
+export function resolveQuery(query, env) {
+  const segs = query.segs.map((s) => segText(s, env));
+  if (segs.some((s, i) => s === '' && typeof query.segs[i] !== 'string')) return NONE;
+  const q = { local: query.local, segs };
   if (q.local) {
     const fe = env.localFn(); // `.` is always local (NAME-2e)
     const arg = fe ? fe.fn.arg : NONE;
@@ -309,7 +317,7 @@ function targetOf(t, env) {
     case 'Pattern': return { f: t, literal: true };
     case 'Group': return { f: t, literal: false };
     case 'Word': {
-      if (t.parts) return { f: NONE, literal: false };
+      if (t.parts) return { f: resolveQuery(queryFromParts(t.parts), env), literal: false }; // g.{k?}! (QRY-18)
       if (isAtom(t)) return { f: { kind: 'Atom', name: t.text.slice(1) }, literal: true };
       if (t.text.includes('.')) {
         const segs = t.text.split('.');

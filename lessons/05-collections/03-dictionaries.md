@@ -56,3 +56,20 @@ person:[name:[Paul Jones] age:42]
 person.height?
 ```
 **`[]`**
+
+A name or position held in a thing can be used in a query by putting it in `{ }`. The embed is evaluated first, and its text is used as the segment.
+
+```punk
+person:[name:Paul age:42]
+field:age
+[person.{field?}?]!
+```
+**`42`**
+
+It also works inside a function, so a group of names can be mapped to their values.
+
+```punk
+person:[name:Paul age:42 city:Perth]
+[name age] > map!(k:_)[person.{k?}?]
+```
+**`[Paul 42]`**
