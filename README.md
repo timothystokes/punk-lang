@@ -250,6 +250,14 @@ name:[Paul Jones]
 ```
 **`[Dr-Paul Jones]`**
 
+An embed that stands alone in a template adds the contents of the embedded thing, without the [ ] around it. Any [ ] inside the thing are kept.
+
+```punk
+greet:(#)[Hello {.?}]
+[Punk Lang] > greet!
+```
+**`[Hello Punk Lang]`**
+
 `{name!}` calls a function that takes no parameters and embeds its result, so `[the time is {time!}]!` gives the current time in milliseconds.
 
 Embeds also work in names, so a name can be computed. The embeds are evaluated first and the result is then attached.

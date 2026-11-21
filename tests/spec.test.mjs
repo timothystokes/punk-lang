@@ -106,6 +106,12 @@ rule('EMB-7', '[a{nope?}b]!', 'ab');
 syntax('EMB-8', '[{a{b?}}]!');
 rule('EMB-9', 'n:[Paul Jones]\n[Dr-{n?}-x]!', '[Dr-Paul Jones-x]');
 rule('EMB-10', 'n:[Paul Jones]\n[Dr-{n?}]! > count!', '2');
+many('EMB-13', [
+  ['greet:(#)[Hello {.?}]\n[Punk Lang] > greet!', '[Hello Punk Lang]'],
+  ['p:[a [b c]]\n[Hello {p?}]!', '[Hello a [b c]]'],
+  ['p:Paul\n[Hello {p?}]!', '[Hello Paul]'],
+  ['p:[x:1]\n[Hello {p?}]!', '[Hello x:1]'],
+]);
 rule('EMB-11', 'n:Paul\n[Dr-{n?}]! > count!', '1');
 // PAT
 rule('PAT-1', '[a b](_ _)!', 'TRUE');

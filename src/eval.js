@@ -98,7 +98,8 @@ function embedItems(word, env) {
   const parts = word.parts;
   if (parts.length === 1 && parts[0].embed) {
     const v = embedValue(parts[0].embed, env);
-    return isNone(v) ? [] : [v];
+    // a whole-element embed contributes the items of its result, not the result's own [ ] (EMB-13)
+    return itemsOf(v);
   }
   const text = parts.map((p) => (p.lit !== undefined ? p.lit : textOf(embedValue(p.embed, env)))).join('');
   // EMB-10: re-read the result, so it may hold a different number of things

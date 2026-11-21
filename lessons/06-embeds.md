@@ -24,6 +24,22 @@ name:[Paul Jones]
 ```
 **`2`**
 
+An embed that stands alone in a template adds the contents of the
+embedded thing, without the `[ ]` around it. Any `[ ]` inside the thing
+are kept (EMB-13).
+
+```punk
+greet:(#)[Hello {.?}]
+[Punk Lang] > greet!
+```
+**`[Hello Punk Lang]`**
+
+```punk
+p:[a [b c]]
+[Hello {p?}]!
+```
+**`[Hello a [b c]]`**
+
 Embeds also work in names, so a name can be computed (NAME-8).
 
 ```punk

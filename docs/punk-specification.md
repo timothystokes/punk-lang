@@ -158,6 +158,7 @@ native space delimiter. It is concatenation where the boundary is not a space.
 | [x] EMB-8 | `{ }` MUST NOT be allowed to nest. |
 | [x] EMB-9 | A multi-element result MUST be concatenated with its internal spaces intact; only the first and last elements join to adjacent characters. |
 | [x] EMB-10 | The evaluated template MUST be re-read as source after embedding, so the result MAY contain a different number of things than the template had elements (`[Dr-{name?}]` ⇒ `[Dr-Paul Jones]`, two things). |
+| [x] EMB-13 | A `{ }` that is a whole element of a template (nothing adjacent) MUST contribute the items of its result, not the result's own `[ ]`; `[` `]` inside the result are kept. `[Hello {p?}]` with `p:[Punk Lang]` is `[Hello Punk Lang]`, and with `p:[a [b c]]` is `[Hello a [b c]]`. |
 | [x] EMB-12 | `{name!}` MUST call the named function with no arguments and embed its result. |
 | [x] EMB-11 | A single-element result joins to its neighbours as one word (GRP-1). |
 
