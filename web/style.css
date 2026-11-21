@@ -23,6 +23,7 @@ textarea, .output { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; mar
 .editor textarea:focus { outline: none; }
 .output { font-weight: normal; background: #1d1d24; color: #e8e8ee; overflow-x: auto; white-space: pre-wrap; }
 .output .result { color: var(--accent); }
-.output .error { color: #000; background: #ff0000; padding: 2px 6px; }
+.output.has-error { background: #ff0000; color: #000; border-color: #ff0000; }
+.output .error { color: #000; }
 .output .printed { color: #39ff14; font-weight: normal; }
 @media (max-width: 800px) { .layout { flex-direction: column; } nav { position: static; width: auto; max-height: none; flex-direction: row; flex-wrap: wrap; gap: 0.75rem; } .example { grid-template-columns: 1fr; } }

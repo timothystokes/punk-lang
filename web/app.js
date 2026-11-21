@@ -15,6 +15,7 @@ const el = (tag, cls, text) => {
 function showOutput(pane, source) {
   const { printed, result, error } = Punk.runPunk(source);
   pane.replaceChildren();
+  pane.classList.toggle('has-error', !!error);
   printed.forEach((line) => pane.append(el('div', 'printed', line)));
   if (error) pane.append(el('div', 'error', error));
   else pane.append(el('div', 'result', result));
