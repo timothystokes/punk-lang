@@ -1,10 +1,10 @@
 :root { --bg: #fff; --fg: #1d1d1f; --muted: #6b6b73; --line: #e2e2e8; --accent: #d6336c; --code: #f6f6f9; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.6 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--line); }
-header a { color: var(--muted); text-decoration: none; }
-.brand { color: var(--accent) !important; font-weight: 700; font-size: 1.25rem; }
-.brand span { color: var(--fg); font-weight: 400; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; background: var(--accent); }
+header a { color: #fff; text-decoration: none; }
+.brand { color: #fff !important; font-weight: 700; font-size: 1.25rem; }
+.brand span { color: #fff; font-weight: 400; }
 .layout { display: flex; align-items: flex-start; }
 nav { position: sticky; top: 0; width: 13rem; flex: none; padding: 1rem 0 1rem 1.5rem; display: flex; flex-direction: column; max-height: 100vh; overflow-y: auto; }
 nav h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg); margin: 1rem 0 0.25rem; }
@@ -22,7 +22,7 @@ textarea, .output { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; mar
 .editor textarea { flex: 1; min-width: 0; resize: none; border: 0; border-radius: 0; background: transparent; color: var(--fg); tab-size: 2; overflow: auto; white-space: pre; }
 .editor textarea:focus { outline: none; }
 .output { background: #1d1d24; color: #e8e8ee; overflow-x: auto; white-space: pre-wrap; }
+.output .result { color: var(--accent); }
 .output .error { color: #ff8fa3; }
 .output .printed { color: #9ad4a1; }
-.output .result::before { content: "= "; color: #8888a0; }
 @media (max-width: 800px) { .layout { flex-direction: column; } nav { position: static; width: auto; max-height: none; flex-direction: row; flex-wrap: wrap; gap: 0.75rem; } .example { grid-template-columns: 1fr; } }
