@@ -107,7 +107,7 @@ message:[Hello world]
 
 ### Try it in the browser
 
-`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, each example with editable code on the left and live output on the right, plus a playground. To add a lesson, add a file named like `22-my-topic.md` that starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
+`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections that follow [Python by Example](https://www.pythonbyexample.dev/), each example with editable code on the left and live output on the right, plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
 
 ### Querying Named Things
 
@@ -380,7 +380,7 @@ Sally > welcome!
 We can also call functions by providing the thing to process directly attached when not in a pipe.
 
 ```punk
-welcome![Jim]
+welcome!Jim
 ```
 **`[Hello Jim]`**
 
@@ -452,7 +452,7 @@ person?
 -> (_ _)[.?]!
 --> (n:_ vip)[.n?]! > upper!
 --> (n:_ _)[.n?]!
--> (_)[You need to provide two names]!
+-> (_)[You need to provide two things]!
 ```
 **`[JOHN SMITH]`**
 
@@ -473,7 +473,14 @@ By using Currying with directly a directly attached parameter in pipelines we ca
 ```
 **`28`**
 
-which is equivalent to 
+Calls attached to calls nest to the right, so a curried function can be given inline: `filter!lt!2` is `filter![lt!2]`.
+
+```punk
+[1 2 3 4] > filter!lt!2
+```
+**`[3 4]`**
+
+The earlier example is equivalent to 
 
 ```punk
 *![-![8 4] 7]
@@ -523,7 +530,7 @@ Writing returns the stored thing, so a counter is a pipe from the atom back into
 
 ```punk
 1 > @count!
-@count > +![5] > @count!
+@count > +!5 > @count!
 @count
 ```
 **`6`**
@@ -634,7 +641,7 @@ Here is a full list of functions, their patterns and what they do. Functions are
 The function always comes first and the data last, so partially applied higher order functions work as pipeline stages.
 
 ```punk
-double:*![2]
+double:*!2
 [1 2 3] > map!double?
 ```
 **`[2 4 6]`**
@@ -681,10 +688,32 @@ Only a result of TRUE counts as true for these functions. `reduce` calls its fun
 - `isfn(_)` - TRUE if the thing is a function.
 - `patternOf(_)` / `bodyOf(_)` - read a function's pattern slots and body items without calling it.
 - `cat(#)` / `space()` - join text with no delimiter; a single space.
-- `push(_ #)` - adds the remaining things to the end of the first thing; as a pipe stage the piped thing is added last (`item > push![list]`).
+- `push(_ #)` - adds the remaining things to the end of the first thing; as a pipe stage the piped thing is added last (`item > push!list`).
 - `pop(#)`, `shift(#)` - the things without the last / first one.
 - `unshift(_ #)` - adds the first thing to the front of the remaining things (`unshift![x [a b]]` is `[x a b]`).
 - `take(n #)`, `drop(n #)`, `remove(n #)` - the first `n` things, all but the first `n`, or without position `n`. Like every function these return new things and never change their input.
 - `pick(_ #)` - the value of the named thing called the first thing.
 - `urlencode(_ #)` / `urldecode(_ #)` - percent encode and decode text.
 - `serve(_ _)` - `serve![port handler]` starts an HTTP server. The handler gets `[method:.. url:.. headers:[..] body:..]` and returns `[status:.. headers:[..] body:..]`.
+
+## Features to Consider
+
+Lessons mirror [Python by Example](https://www.pythonbyexample.dev/). These Python topics have no Punk equivalent yet, so they have no lesson. Some may never belong in Punk, given its philosophy of immutable things and no hidden behaviour.
+
+- **Classes and objects**: classes, inheritance and `super`, class and static methods, dataclasses, properties, special methods, operator overloading, attribute access, bound methods, descriptors, metaclasses and abstract base classes. Named things and patterns cover plain data only.
+- **Context managers and `del`**: no resources to open and close, and no deleting of names.
+- **Iterators and generators**: `yield`, `yield from`, lazy evaluation, sentinel iteration and generator expressions. Every group is complete in memory.
+- **Loops**: `while`, `break`, `continue` and loop `else`. Only `map`, `filter`, `reduce` and recursion repeat work.
+- **Assignment expressions** (`:=`).
+- **Regular expressions**: the `/regex/` slot syntax was removed.
+- **Bytes and bytearrays**.
+- **Exceptions**: `try`/`except`/`finally`, chaining, exception groups, warnings and custom exceptions. Failure is the non-thing.
+- **Static typing**: type hints, aliases, generics, protocols as declarations, overloads, `NewType` and `Final`.
+- **Concurrency**: async/await, async iteration, threads and processes.
+- **Subprocesses**.
+- **Calendar dates and time formatting**: only `time` is available.
+- **A real JSON codec**: `serialize` and `deserialize` use Punk text and take a single thing.
+- **Logging levels**.
+- **Packages and virtual environments**: `import` loads one file.
+- **A set type**: `unique` and `contains` are used instead.
+- **Several things as one argument**: `f!g?` flattens a group variable into the call, so a function that needs a whole record can only take it through `#` and a such-that pattern.

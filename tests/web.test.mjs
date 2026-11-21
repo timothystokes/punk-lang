@@ -20,7 +20,7 @@ test('web: file access evaluates to the non-thing', () => {
 });
 
 test('web: every lesson block runs', () => {
-  const { sections } = loadLessons();
+  const sections = loadLessons().groups.flatMap((g) => g.lessons);
   assert.ok(sections.length > 10);
   for (const s of sections) {
     for (const b of s.blocks.filter((x) => x.type === 'code')) {

@@ -5,7 +5,7 @@ on memory; do not duplicate their content here.
 
 - `README.md`: the language tour and the source of truth for the language.
 - `docs/punk-specification.md`: numbered MUST/MUST NOT rules (checked `[x]` when implemented and tested).
-- `lessons/`: one markdown file per lesson (`NN-topic.md`, `README.md` is the intro) of worked examples with their outputs.
+- `lessons/`: section folders (`NN-section/`) holding one markdown file per lesson (`NN-topic.md`); `README.md` is the intro of worked examples with their outputs.
 - `examples/` and `lib/`: example programs and the standard Punk libraries.
 
 If code conflicts with the README or the specification, the code is the bug.

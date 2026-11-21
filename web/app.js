@@ -58,13 +58,18 @@ function render(section) {
   window.scrollTo(0, 0);
 }
 
-fetch('examples.json').then((r) => r.json()).then(({ intro, sections }) => {
-  const all = [PLAYGROUND, ...sections];
-  const home = { title: 'Punk by example', id: '', intro, blocks: [] };
-  all.forEach((s) => {
+fetch('examples.json').then((r) => r.json()).then(({ introTitle, intro, groups }) => {
+  const all = [PLAYGROUND, ...groups.flatMap((g) => g.lessons)];
+  const home = { title: introTitle, id: '', intro, blocks: [] };
+  const link = (s) => {
     const a = el('a', null, s.title);
     a.href = `#${s.id}`;
     nav.append(a);
+  };
+  link(PLAYGROUND);
+  groups.forEach((g) => {
+    nav.append(el('h2', null, g.title));
+    g.lessons.forEach(link);
   });
   const show = () => {
     const id = location.hash.slice(1);

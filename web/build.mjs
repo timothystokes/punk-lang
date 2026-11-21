@@ -41,15 +41,23 @@ export function parseLesson(markdown) {
   return { title: title.trim(), id: slug(title), blocks: blocks.filter((b) => b.type === 'code' || b.html.trim()) };
 }
 
-// lessons/README.md is the home page; the other files are lessons in filename order.
+const titleCase = (s) => s.replace(/^\d+-/, '').split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+// lessons/README.md is the home page. Each numbered folder is a section of lessons,
+// and each file in it is a lesson, both in name order.
 export function loadLessons(dir = root('lessons')) {
-  const files = readdirSync(dir).filter((f) => f.endsWith('.md')).sort();
   const read = (f) => readFileSync(`${dir}/${f}`, 'utf8');
   const home = parseLesson(read('README.md'));
-  return {
-    intro: home.blocks.map((b) => b.html ?? '').join(''),
-    sections: files.filter((f) => f !== 'README.md').map((f) => parseLesson(read(f))),
-  };
+  const groups = readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort()
+    .map((name) => ({
+      title: titleCase(name),
+      lessons: readdirSync(`${dir}/${name}`).filter((f) => f.endsWith('.md')).sort()
+        .map((f) => parseLesson(read(`${name}/${f}`))),
+    }));
+  return { introTitle: home.title, intro: home.blocks.map((b) => b.html ?? '').join(''), groups };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

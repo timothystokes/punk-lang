@@ -163,6 +163,7 @@ rule('CURRY-1', 'f:(_ _)[.?]\ng:f!1\n2 > g!', '[1 2]');
 rule('CURRY-2', 'f:(a:_ b:_)[a? b?]\ng:f!x\ny > g!', '[x y]');
 rule('CURRY-3', 'timesTwo:*![2]\n4 > timesTwo!', '8');
 rule('CURRY-4', '[8] > -!9', '1');
+rule('CURRY-5', '[1 2 3 4] > filter!lt!2', '[3 4]');
 // ERR
 syntax('ERR-1', '[a b');
 rule('ERR-2', 'nope!x', '[]');

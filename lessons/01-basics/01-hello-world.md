@@ -1,4 +1,4 @@
-# Running Punk
+# Hello World
 
 `npm start` opens the REPL, which prints the result of each top-level
 expression. `npm start file.punk` runs a file silently; only `print!`
@@ -15,5 +15,7 @@ npm start examples/server.punk
 `print!` is usually the last stage of a pipe.
 
 ```punk
+welcome:(name:_)[Hello .name?]
 Sally > welcome! > print!
 ```
+**`[]`**

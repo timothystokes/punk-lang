@@ -5,7 +5,7 @@ function is a pipeline stage (HOF-1). A predicate counts as true only
 when it returns `TRUE` (HOF-5).
 
 ```punk
-double:*![2]
+double:*!2
 [1 2 3] > map!double?
 ```
 **`[2 4 6]`**

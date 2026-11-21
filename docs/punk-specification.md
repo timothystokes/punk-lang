@@ -257,7 +257,7 @@ person? > (# | name:Sally)!           ⇒ FALSE
 ```punk
 welcome:(name:_)[Hello .name?]
 Sally > welcome!                     ⇒ [Hello Sally]
-welcome![Jim]                        ⇒ [Hello Jim]
+welcome!Jim                        ⇒ [Hello Jim]
 ```
 
 ## 8. Pipes (`PIPE`)
@@ -299,7 +299,7 @@ person?
 -> (_ _)[.?]!
 --> (n:_ vip)[.n?]! > upper!
 --> (n:_ _)[.n?]!
--> (_)[You need to provide two names]!   ⇒ [JOHN SMITH]
+-> (_)[You need to provide two things]!   ⇒ [JOHN SMITH]
 ```
 
 ## 9b. Atoms (`ATOM`)
@@ -318,7 +318,7 @@ An atom is a global, named place for state that changes while a program runs.
 | ID | Rule |
 |---|---|
 | [x] MOD-1 | `import!name` MUST evaluate the Punk file `name` or `name.punk`, looked up beside the running file and then in the standard `lib/` directory, and return a group of every name that file defines. |
-| [x] MOD-2 | The result is used by naming it (`m:import!name`) and then querying it (`m.f![x]`). |
+| [x] MOD-2 | The result is used by naming it (`m:import!name`) and then querying it (`m.f!x`). |
 | [x] MOD-3 | A module MUST be evaluated once per program. Repeat imports MUST return the same result. |
 | [x] MOD-4 | A module MUST NOT see the importer's names. A missing module or a module importing itself MUST return the non-thing. |
 
@@ -330,6 +330,7 @@ An atom is a global, named place for state that changes while a program runs.
 | [x] CURRY-2 | Supplied things MUST fill slots left to right. |
 | [x] CURRY-3 | A directly attached argument (`f!x`) MUST be usable mid-pipeline. |
 | [x] CURRY-4 | `a > f!b` MUST be equivalent to `f![b a]` (attached fills first, piped fills the rest). |
+| [x] CURRY-5 | A call attached directly to another call nests to the right: `f!g!x` MUST mean `f!(g!x)`, so `[1 2 3 4] > filter!lt!2` is `[1 2 3 4] > filter![lt!2]`. |
 
 ```punk
 timesTwo:*[2]!
@@ -422,7 +423,7 @@ timesTwo:*[2]!
 | `first(#)` `last(#)` | first / last item. |
 | `rev(#)` `sort(#)` `unique(#)` | reverse, sort ascending, remove duplicates. |
 | `contains(_ #)` | `TRUE` iff the thing contains the item. |
-| `push(_ #)` | add the remaining things to the end of the first thing. As a pipe stage the piped thing is the last argument, so `item > push![list]` appends `item` to `list`. An empty first argument is simply absent, so `item > push![[]]` is `item`. |
+| `push(_ #)` | add the remaining things to the end of the first thing. As a pipe stage the piped thing is the last argument, so `item > push!list` appends `item` to `list`. An empty first argument is simply absent, so `item > push![[]]` is `item`. |
 | `pop(#)` | the things without the last one (a new thing; nothing is mutated). |
 | `shift(#)` | the things without the first one. |
 | `unshift(_ #)` | add the first thing to the front of the remaining things. |

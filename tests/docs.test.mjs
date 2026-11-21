@@ -36,4 +36,7 @@ function check(file, shared) {
 }
 
 check('../README.md', true);
-for (const f of readdirSync(fileURLToPath(new URL('../lessons', import.meta.url))).filter((f) => f.endsWith('.md')).sort()) check(`../lessons/${f}`, false);
+const lessonFiles = (dir) => readdirSync(fileURLToPath(new URL(`../lessons/${dir}`, import.meta.url)), { withFileTypes: true })
+  .flatMap((d) => (d.isDirectory() ? lessonFiles(`${dir}/${d.name}`) : d.name.endsWith('.md') ? [`${dir}/${d.name}`] : []))
+  .sort();
+for (const f of lessonFiles('')) check(`../lessons/${f}`, false);

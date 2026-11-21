@@ -5,7 +5,7 @@ function waiting for the rest (CURRY-1, CURRY-2). In a pipe the attached
 things fill first and the piped thing fills the rest (CURRY-4).
 
 ```punk
-timesTwo:*![2]
+timesTwo:*!2
 4 > timesTwo!
 ```
 **`8`**

@@ -14,7 +14,7 @@ A function can also be called with its argument attached (FN-6).
 
 ```punk
 welcome:(name:_)[Hello .name?]
-welcome![Jim]
+welcome!Jim
 ```
 **`[Hello Jim]`**
 

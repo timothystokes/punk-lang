@@ -19,7 +19,7 @@ Writing returns the stored thing, so a counter is a pipe from the atom back into
 
 ```punk
 1 > @count!
-@count > +![5] > @count!
+@count > +!5 > @count!
 @count
 ```
 **`6`**

@@ -233,7 +233,7 @@ function parseTokens(t) {
         node = { kind: 'Call', target: node, args: null };
         const a = peek();
         if (a.adj && (a.type === 'CHUNK' || a.type === 'LB' || a.type === 'LP')) {
-          node.args = element(true);
+          node.args = element();
         }
         break;
       }
