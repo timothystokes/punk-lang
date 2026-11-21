@@ -64,7 +64,7 @@ Most software languages understand numbers implicitly. Punk is different. Punk d
 
 ### Words
 
-Where other languages usually don't accept words outside of strings, Punk doesn't differenciate between string type things or number type thing. To punk it's all just characters inside.
+Where other languages usually don't accept words outside of strings, Punk doesn't differentiate between string type things or number type things. To punk it's all just characters inside.
 
 ```punk
 Paul
@@ -147,7 +147,7 @@ person.age?
 
 > NOTE: Any query that doesn't align with the names or structures of the thing being queries will result in a non thing which is represented by [].
 
-Here is another example that queries the person's 'name' thing then refernces it's second thing.
+Here is another example that queries the person's 'name' thing then references its second thing.
 
 ```punk
 person.name.2?
@@ -227,7 +227,7 @@ A failed query embeds as nothing. { } cannot be nested, and in a thing that isn'
 
 ### Patterns
 
-Paterns are a way of defining the shape that can be compared to a thing. This provides a way to build conditions in our program. Patterns are defined by ( ) syntax where underscores _ are used to denote an item placement and # to denote any number of items.
+Patterns are a way of defining the shape that can be compared to a thing. This provides a way to build conditions in our program. Patterns are defined by ( ) syntax where underscores _ are used to denote an item placement and # to denote any number of items.
 
 **`(_)`** - A pattern that describes a thing shape that contains a single thing
 
@@ -260,7 +260,7 @@ name?(_)!
 ```
 **`FALSE`**
 
-> NOTE: TRUE and FALSE are not special things. They just happen to be used consistantly in punk.
+> NOTE: TRUE and FALSE are not special things. They just happen to be used consistently in punk.
 
 
 ### Pattern Matching with a specific outcome
@@ -337,7 +337,7 @@ welcome![Jim]
 ```
 **`[Hello Jim]`**
 
-> NOTE: If the pattern of a fuction doesn't match the thing being passed to it then it returns [] which is essentially a non-thing.
+> NOTE: If the pattern of a function doesn't match the thing being passed to it then it returns [] which is essentially a non-thing.
 
 ### Names and Scope
 
@@ -426,7 +426,7 @@ By using Currying with directly a directly attached parameter in pipelines we ca
 ```
 **`28`**
 
-which is equivelent to 
+which is equivalent to 
 
 ```punk
 *![-![8 4] 7]
