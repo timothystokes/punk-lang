@@ -104,6 +104,10 @@ person:[name:[Paul Jones] age:42]
 | [x] QRY-3 | A **name segment** MUST select the named thing of that name in the current thing. |
 | [x] QRY-4 | A **numeric segment** `n` MUST select the nth item of the current thing. |
 | [x] QRY-5 | Indexes MUST start at `1`. |
+| [x] QRY-9 | A negative numeric segment `-n` MUST select the nth item counting from the end, so `-1` is the last item. |
+| [x] QRY-10 | A **range segment** `a-b` MUST select the items from index `a` to index `b` inclusive, as a group. Either index MAY be negative (QRY-9). |
+| [x] QRY-11 | A range segment `a-` MUST select the items from index `a` to the last item. |
+| [x] QRY-12 | A range MUST be clamped to the items that exist, and MUST resolve to the non-thing if it selects none (an index of `0`, a start after the end, or a start after the stop). |
 | [x] QRY-6 | Segments MUST be resolved left to right, each applying to the result of the previous. |
 | [x] QRY-7 | A query MUST resolve to the non-thing if any segment fails to align (THING-8). |
 | [x] QRY-8 | A query is itself a thing and MAY appear inside another thing. |

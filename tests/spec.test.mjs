@@ -78,6 +78,16 @@ rule('QRY-5', 'p:[x y z]\np.1?', 'x');
 rule('QRY-6', 'p:[a:[x y]]\np.a.2?', 'y');
 rule('QRY-7', 'p:[a:1]\np.b.c?', '[]');
 rule('QRY-8', 'p:[1 2]\n[a p? b]!', '[a [1 2] b]');
+rule('QRY-9', 'p:[x y z]\np.-1?', 'z');
+rule('QRY-10', 'p:[w x y z]\n[p.1-2? p.2--1?]!', '[[w x] [x y z]]');
+rule('QRY-11', 'p:[w x y z]\np.3-?', '[y z]');
+test('QRY-12', () => {
+  assert.equal(run('p:[x y z]\np.2-9?'), '[y z]');
+  assert.equal(run('p:[x y z]\np.0-2?'), '[]');
+  assert.equal(run('p:[x y z]\np.4-?'), '[]');
+  assert.equal(run('p:[x y z]\np.3-1?'), '[]');
+  assert.equal(run('p:[x y z]\np.-9?'), '[]');
+});
 // TMPL / EMB
 rule('TMPL-3', 'f:(n:_)[Total +![n? 1]]\nf!4', '[Total 5]');
 rule('TMPL-4', 'g:(n:_)[x:+![n? 1] x? *![x? 2]]\ng!3', '[x:4 4 8]');

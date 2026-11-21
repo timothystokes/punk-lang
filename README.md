@@ -125,6 +125,33 @@ message.1?
 
 > NOTE: Indexes in most programming languages start with zero to get the first item. Punk is different. It uses 1 for the first item, 2 for the second etc..
 
+### Ranges and Counting from the End
+
+A negative index counts from the end, so -1 is the last thing. A range `a-b` returns the things from index a to index b, and `a-` returns everything from index a to the end.
+
+```punk
+letters:[a b c d]
+```
+**`letters:[a b c d]`**
+
+```punk
+letters.-1?
+```
+**`d`**
+
+```punk
+letters.1-2?
+```
+**`[a b]`**
+
+```punk
+letters.3-?
+```
+**`[c d]`**
+
+A range that goes past the end is cut back to the things that exist, and a range that selects nothing gives the non-thing []. A negative index can also end a range, so `letters.2--1?` is everything from the second thing to the last.
+
+
 ### Nested Named Things
 
 Things can contain other things including other named things.
@@ -192,6 +219,14 @@ g:(n:_)[x:+![n? 1] x? *![x? 2]]
 g!3
 ```
 **`[x:4 4 8]`**
+
+Because the caller receives the whole expression, a function or template that does some preparation returns that preparation too. To get just the final thing, name the result and query it from the end with `-1?`.
+
+```punk
+r:g!3
+r.-1?
+```
+**`8`**
 
 ### Embeds
 

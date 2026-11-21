@@ -142,14 +142,24 @@ function evalItem(node, env) {
 
 // ---------- queries ----------
 
-const isIndex = (s) => /^\d+$/.test(s);
+const isIndex = (s) => /^-?\d+$/.test(s);
+const RANGE = /^(-?\d+)-(-?\d+)?$/;
+
+// A negative index counts from the end: -1 is the last item (QRY-9).
+const absIndex = (n, len) => (n < 0 ? len + n + 1 : n);
 
 function applySegs(v, segs) {
   for (const s of segs) {
     const items = itemsOf(v);
+    const range = RANGE.exec(s);
     if (isIndex(s)) {
-      const i = Number(s);
+      const i = absIndex(Number(s), items.length);
       v = i >= 1 && i <= items.length ? items[i - 1] : NONE;
+    } else if (range) {
+      // a-b and a- select a clamped slice, or nothing (QRY-10..12)
+      const from = absIndex(Number(range[1]), items.length);
+      const to = range[2] === undefined ? items.length : absIndex(Number(range[2]), items.length);
+      v = from >= 1 && to >= from && from <= items.length ? mkGroup(items.slice(from - 1, Math.min(to, items.length))) : NONE;
     } else {
       const hit = items.find((x) => x.kind === 'Named' && x.name === s);
       v = hit ? hit.value : NONE;
@@ -162,7 +172,7 @@ export function resolveQuery(q, env) {
   if (q.local) {
     const fe = env.localFn(); // `.` is always local (NAME-2e)
     const arg = fe ? fe.fn.arg : NONE;
-    if (q.segs.length && !isIndex(q.segs[0]) && fe && fe.vars.has(q.segs[0])) {
+    if (q.segs.length && !isIndex(q.segs[0]) && !RANGE.test(q.segs[0]) && fe && fe.vars.has(q.segs[0])) {
       return applySegs(fe.vars.get(q.segs[0]), q.segs.slice(1));
     }
     return applySegs(arg, q.segs);
