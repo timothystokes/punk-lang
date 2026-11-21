@@ -1,6 +1,6 @@
 # Slices
 
-Python slices with `a[1:3]`. In Punk a query takes a range: `.1-2?` for the first two, `.-1?` for the last and `.3-?` for the third to the end. The `slice`, `take` and `drop` functions do the same by call.
+A query takes a range: `.1-2?` for the first two, `.-1?` for the last and `.3-?` for the third to the end. The `slice`, `take` and `drop` functions do the same by call.
 
 ```punk
 l:[a b c d e]

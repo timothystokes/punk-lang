@@ -1,6 +1,6 @@
 # Keyword arguments
 
-Python has keyword-only arguments. In Punk a name is part of the thing, so a function can ask for named things in any order with a such-that pattern: the part after `|` is matched by name.
+A name is part of the thing, so a function can ask for named things in any order with a such-that pattern: the part after `|` is matched by name.
 
 ```punk
 describe:(# | name:_ age:_)[{.name?} is {.age?}]

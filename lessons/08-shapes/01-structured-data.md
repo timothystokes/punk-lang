@@ -1,6 +1,6 @@
 # Structured data
 
-Where Python builds classes and dataclasses, Punk uses named things. A record is a group of named things and a function reads its fields with queries.
+A record is a group of named things, and a function reads its fields with queries.
 
 ```punk
 person:[name:Paul age:42]

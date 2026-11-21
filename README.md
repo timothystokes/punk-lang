@@ -107,7 +107,7 @@ message:[Hello world]
 
 ### Try it in the browser
 
-`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections that follow [Python by Example](https://www.pythonbyexample.dev/), each example with editable code on the left and live output on the right, plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
+`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections, each example with editable code on the left and live output on the right, plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
 
 ### Querying Named Things
 
@@ -698,22 +698,22 @@ Only a result of TRUE counts as true for these functions. `reduce` calls its fun
 
 ## Features to Consider
 
-Lessons mirror [Python by Example](https://www.pythonbyexample.dev/). These Python topics have no Punk equivalent yet, so they have no lesson. Some may never belong in Punk, given its philosophy of immutable things and no hidden behaviour.
+Capabilities a general-purpose language might offer that Punk does not have yet. Some may never belong in Punk, given its philosophy of immutable things and no hidden behaviour.
 
-- **Classes and objects**: classes, inheritance and `super`, class and static methods, dataclasses, properties, special methods, operator overloading, attribute access, bound methods, descriptors, metaclasses and abstract base classes. Named things and patterns cover plain data only.
-- **Context managers and `del`**: no resources to open and close, and no deleting of names.
-- **Iterators and generators**: `yield`, `yield from`, lazy evaluation, sentinel iteration and generator expressions. Every group is complete in memory.
-- **Loops**: `while`, `break`, `continue` and loop `else`. Only `map`, `filter`, `reduce` and recursion repeat work.
-- **Assignment expressions** (`:=`).
+- **Objects**: named types with their own behaviour, inheritance, custom operators and custom equality. Named things and patterns cover plain data only.
+- **Resource management**: opening and automatically closing things such as files, and deleting names.
+- **Lazy sequences**: generators, iterators and infinite sequences. Every group is complete in memory.
+- **General loops**: `while`, `break` and `continue`. Only `map`, `filter`, `reduce` and recursion repeat work.
+- **Assignment inside an expression**.
 - **Regular expressions**: the `/regex/` slot syntax was removed.
-- **Bytes and bytearrays**.
-- **Exceptions**: `try`/`except`/`finally`, chaining, exception groups, warnings and custom exceptions. Failure is the non-thing.
-- **Static typing**: type hints, aliases, generics, protocols as declarations, overloads, `NewType` and `Final`.
-- **Concurrency**: async/await, async iteration, threads and processes.
+- **Binary data**.
+- **Error handling**: catching, chaining and grouping failures, warnings and custom failures. Failure is the non-thing.
+- **Static typing**: declared types, aliases, generics and overloads.
+- **Concurrency**: async/await, threads and processes.
 - **Subprocesses**.
 - **Calendar dates and time formatting**: only `time` is available.
 - **A real JSON codec**: `serialize` and `deserialize` use Punk text and take a single thing.
 - **Logging levels**.
-- **Packages and virtual environments**: `import` loads one file.
+- **Packages and environments**: `import` loads one file.
 - **A set type**: `unique` and `contains` are used instead.
 - **Several things as one argument**: `f!g?` flattens a group variable into the call, so a function that needs a whole record can only take it through `#` and a such-that pattern.

@@ -1,6 +1,6 @@
 # Immutability
 
-Python lists and dictionaries change in place, so Punk's answer to "mutability" is that nothing mutates. Every library function returns a new thing and leaves its input alone (LIB-3).
+Nothing in Punk changes in place. Every library function returns a new thing and leaves its input alone (LIB-3).
 
 ```punk
 a:[3 1 2]

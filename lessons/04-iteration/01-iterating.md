@@ -1,6 +1,6 @@
 # Iterating
 
-Punk has no `for` loop. Instead a function is applied to every item: `map` transforms, `filter` selects, `each` is for side effects like printing.
+A function is applied to every item: `map` transforms, `filter` selects, `each` is for side effects like printing.
 
 ```punk
 [1 2 3] > map!(x:_)[*![x? x?]]

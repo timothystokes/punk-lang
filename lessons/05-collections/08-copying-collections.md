@@ -1,6 +1,6 @@
 # Copying collections
 
-Python needs `copy` and `deepcopy` because lists change in place. Punk never changes anything, so every name is already its own independent copy. There is nothing to copy.
+Because nothing changes in place, every name is already its own independent copy. There is nothing to copy.
 
 ```punk
 a:[1 2 3]

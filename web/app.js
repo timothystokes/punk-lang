@@ -20,21 +20,57 @@ function showOutput(pane, source) {
   else pane.append(el('div', 'result', result));
 }
 
+const INDENT = '  ';
+
+// Tab indents the selected lines (or inserts spaces), Shift+Tab removes one level.
+function indentKey(input, e) {
+  if (e.key !== 'Tab') return false;
+  e.preventDefault();
+  const { value, selectionStart: start, selectionEnd: end } = input;
+  const multi = value.slice(start, end).includes('\n');
+  if (!e.shiftKey && !multi) {
+    input.setRangeText(INDENT, start, end, 'end');
+    return true;
+  }
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  const block = value.slice(lineStart, end);
+  const lines = block.split('\n');
+  const changed = lines.map((l) => (e.shiftKey ? l.replace(/^( {1,2}|\t)/, '') : INDENT + l));
+  input.setRangeText(changed.join('\n'), lineStart, end, 'preserve');
+  const first = changed[0].length - lines[0].length;
+  const total = changed.join('\n').length - block.length;
+  input.setSelectionRange(Math.max(lineStart, start + first), end + total);
+  return true;
+}
+
 function editor(code) {
   const row = el('div', 'example');
+  const box = el('div', 'editor');
+  const gutter = el('pre', 'gutter');
   const input = el('textarea');
   input.value = code;
   input.spellcheck = false;
-  input.rows = Math.max(3, code.split('\n').length + 1);
+  input.wrap = 'off';
   const output = el('pre', 'output');
   let timer;
   const rerun = () => showOutput(output, input.value);
+  const resize = () => {
+    const n = input.value.split('\n').length;
+    input.rows = Math.max(3, n + 1);
+    gutter.textContent = Array.from({ length: input.rows }, (_, i) => (i < n ? i + 1 : '')).join('\n');
+  };
+  input.addEventListener('keydown', (e) => {
+    if (indentKey(input, e)) input.dispatchEvent(new Event('input'));
+  });
   input.addEventListener('input', () => {
-    input.rows = Math.max(3, input.value.split('\n').length + 1);
+    resize();
     clearTimeout(timer);
     timer = setTimeout(rerun, 150);
   });
-  row.append(input, output);
+  input.addEventListener('scroll', () => { gutter.scrollTop = input.scrollTop; });
+  box.append(gutter, input);
+  row.append(box, output);
+  resize();
   rerun();
   return row;
 }

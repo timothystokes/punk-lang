@@ -14,7 +14,7 @@ colour? > map!(v:_ k:_)[k?]
 ```
 **`[red green blue]`**
 
-Literals in a pattern restrict a function to a fixed set of values, much like `Literal`.
+Literals in a pattern restrict a function to a fixed set of values.
 
 ```punk
 mood:(happy)[smile]

@@ -1,6 +1,6 @@
 # The non-thing
 
-Punk has no `None` or `null`. Instead the absence of a thing is the empty group `[]`, the **non-thing**. It is what failed lookups, bad calls and unmatched cases give back (ERR-3).
+The absence of a thing is the empty group `[]`, the **non-thing**. It is what failed lookups, bad calls and unmatched cases give back (ERR-3).
 
 ```punk
 []

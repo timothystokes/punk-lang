@@ -1,6 +1,6 @@
 # Itertools
 
-The things Python needs `itertools` for are ordinary functions in Punk.
+Pairing, flattening, splitting and joining groups are all ordinary functions.
 
 ```punk
 zip![[1 2 3] [a b c]]

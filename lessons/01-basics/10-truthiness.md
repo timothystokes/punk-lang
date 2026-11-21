@@ -1,6 +1,6 @@
 # Truthiness
 
-Python decides whether things are truthy or falsy. Punk does not: only the word `TRUE` is true. Anything else, including `1`, `yes` and `[]`, is not (HOF-5).
+Only the word `TRUE` is true. Anything else, including `1`, `yes` and `[]`, is not (HOF-5).
 
 ```punk
 [1 2 3 4] > filter!(n:_)[n?]

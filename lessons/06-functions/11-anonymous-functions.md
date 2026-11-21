@@ -1,6 +1,6 @@
 # Anonymous functions
 
-Every function is anonymous until it is named, so there is no `lambda`. Write it where it is needed.
+A function does not need a name. Write it where it is needed.
 
 ```punk
 [1 2 3] > map!(x:_)[+![x? 1]]

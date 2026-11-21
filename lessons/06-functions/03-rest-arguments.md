@@ -1,6 +1,6 @@
 # Rest arguments
 
-`#` in a pattern takes any number of things, so it plays the part of `*args`. Labelled, it keeps them as a group.
+`#` in a pattern takes any number of things. Labelled, it keeps them as a group.
 
 ```punk
 count-all:(#)[count!.?]

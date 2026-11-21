@@ -4,9 +4,9 @@ A function can call itself by name. Put the finishing case first.
 
 ```punk
 fact:(n:_)[
-n?
--> (0)[1]!
--> (_)[*![n? fact![-![n? 1]]]]!
+  n?
+  -> (0)[1]!
+  -> (_)[*![n? fact![-![n? 1]]]]!
 ]
 fact!5
 ```
@@ -14,9 +14,9 @@ fact!5
 
 ```punk
 total:(n:_)[
-n?
--> (0)[0]!
--> (_)[+![n? total![-![n? 1]]]]!
+  n?
+  -> (0)[0]!
+  -> (_)[+![n? total![-![n? 1]]]]!
 ]
 total!4
 ```
@@ -26,9 +26,11 @@ Recursion suits nested data. A taxonomy is groups inside groups, and a function 
 
 ```punk
 leaves:(#)[
-.?
--> (_)[1]!
--> (_ _ #)[.? > map!(v:_)[leaves![v?]] > sum!]!
+  .?
+  -> (_)[1]!
+  -> (_ _ #)[
+    .? > map!(v:_)[leaves![v?]] > sum!
+  ]!
 ]
 leaves![animals:[mammals:[dog cat] birds:[owl hawk eagle]] plants:[oak fern]]
 ```

@@ -1,6 +1,6 @@
 # Constants
 
-Punk has no `const` keyword because every name is already a constant. A name cannot be defined twice in the same context (NAME-2), and nothing is ever changed in place.
+Every name is a constant. A name cannot be defined twice in the same context (NAME-2), and nothing is ever changed in place.
 
 ```punk
 pi:3.14159

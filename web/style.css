@@ -17,7 +17,10 @@ h1 { margin-top: 0.5rem; }
 .prose blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
 .example { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
 textarea, .output { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 0; padding: 0.75rem; border: 1px solid var(--line); border-radius: 6px; }
-textarea { resize: vertical; width: 100%; background: var(--code); color: var(--fg); tab-size: 2; }
+.editor { display: flex; border: 1px solid var(--line); border-radius: 6px; background: var(--code); overflow: hidden; }
+.gutter { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 0; padding: 0.75rem 0.5rem; text-align: right; color: #9a9aa8; user-select: none; overflow: hidden; border-right: 1px solid var(--line); min-width: 2.5ch; }
+.editor textarea { flex: 1; min-width: 0; resize: none; border: 0; border-radius: 0; background: transparent; color: var(--fg); tab-size: 2; overflow: auto; white-space: pre; }
+.editor textarea:focus { outline: none; }
 .output { background: #1d1d24; color: #e8e8ee; overflow-x: auto; white-space: pre-wrap; }
 .output .error { color: #ff8fa3; }
 .output .printed { color: #9ad4a1; }
