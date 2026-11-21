@@ -54,7 +54,7 @@ function render(section) {
       main.append(d);
     }
   }
-  nav.querySelectorAll('a').forEach((a) => a.classList.toggle('active', a.hash === `#${section.id}`));
+  nav.querySelectorAll('a').forEach((a) => a.classList.toggle('active', a.hash === (section.id ? `#${section.id}` : '')));
   window.scrollTo(0, 0);
 }
 
@@ -63,9 +63,10 @@ fetch('examples.json').then((r) => r.json()).then(({ introTitle, intro, groups }
   const home = { title: introTitle, id: '', intro, blocks: [] };
   const link = (s) => {
     const a = el('a', null, s.title);
-    a.href = `#${s.id}`;
+    a.href = s.id ? `#${s.id}` : '#';
     nav.append(a);
   };
+  link(home);
   link(PLAYGROUND);
   groups.forEach((g) => {
     nav.append(el('h2', null, g.title));
