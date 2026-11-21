@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { run } from '../src/punk.js';
 import { setBaseDir } from '../src/eval.js';
+import { isSyntaxError } from '../src/errors.js';
 import { servers } from '../src/builtins.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -51,6 +52,13 @@ rule('GRP-8', '=![[] x]', 'FALSE');
 rule('GRP-9', '[a b]', '[a b]');
 // NAME
 rule('NAME-1', 'x:1\nx?', '1');
+test('NAME-1a', () => { assert.throws(() => run('x: 5'), isSyntaxError); });
+test('LEX-11', () => {
+  assert.throws(() => run('xs:[1 2]\nxs ?'), isSyntaxError);
+  assert.throws(() => run('f:(_)[1]\nf !5'), isSyntaxError);
+  assert.equal(run('f:()[1]\nf! 2'), '[f! 2]');
+});
+test('FN-10', () => { assert.equal(run('(_) [1]'), '[(_) 1]'); });
 rule('NAME-8', 'k:colour\nv:red\nx:{k?}:{v?}\nx.colour?', 'red');
 syntax('NAME-2', 'x:1\nx:2\nx?');
 rule('NAME-2a', 'f:(_)[y:2 .?]\n1 > f!\ny?', '[]');

@@ -133,8 +133,8 @@ function parseTokens(t) {
     let node;
     switch (tok.type) {
       case 'NAME': {
-        skipWs(false);
-        if (peek().type === 'GT') {
+        // the value must be attached: `name: x` is a name with no value (NAME-1)
+        if (peek().type === 'GT' && peek().adj) {
           next();
           const stages = [];
           while (true) {

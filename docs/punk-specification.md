@@ -76,6 +76,9 @@ welcome!Jim                          ⇒ [Hello Jim]
 | ID | Rule |
 |---|---|
 | [x] NAME-1 | `name:thing` MUST attach `name` to `thing`, producing a **named thing**. |
+| [x] NAME-1a | A name MUST be attached to its value with no space: `name: thing` is a syntax error (ERR-1). |
+| [x] LEX-11 | `?` and `!` MUST be attached to the thing they apply to: a space before `?` or `!` is a syntax error, and `f! x` is `f!` followed by the separate thing `x`. Only `>` and `->` may have spaces around them. |
+| [x] FN-10 | A function MUST have no space between its pattern and template: `(p)[t]` is a function, `(p) [t]` is a pattern followed by a template. |
 | [x] NAME-2 | A name MUST be immutable within its namespace context: once attached, it MUST NOT be attached again. Attaching a name already attached in the same context MUST be a syntax error (ERR-1). |
 | [x] NAME-2a | Each function body and each file MUST be its own namespace context. |
 | [x] NAME-2b | Namespace contexts MUST form a chain up to the global namespace. |

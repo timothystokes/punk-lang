@@ -75,6 +75,8 @@ Paul
 
 Punk's primary delimiter between things is space.
 
+Because space separates things, the parts of one thing must be written with no space between them: `name:thing`, `thing?`, `f!x` and `(pattern)[template]`. `x: 5` is a syntax error, `xs ?` and `f !x` are syntax errors, and `(_) [1]` is a pattern followed by a template, not a function. Only `>` and `->` may have spaces around them (`p:> f! > g!` names a pipe).
+
 When there are multiple things you want to treat as a thing then you can group them with [ ]. In punk the [ ] don't mean anything at all except to group things together.
 
 ```punk
@@ -386,8 +388,8 @@ John > upperWelcome!
 Punk provides a way to specify multiple functions or pipes and then executes the first match only. This is done using ->.
 
 ```punk
-number: 43 
-number? 
+number:43
+number?
 -> (42)[This is Forty Two]!
 -> (n:_)[This is .n?]!
 ```
