@@ -1,4 +1,4 @@
-:root { --bg: #fff; --fg: #1d1d1f; --muted: #6b6b73; --line: #e2e2e8; --accent: #ff2d95; --code: #f6f6f9; }
+:root { --bg: #fff; --fg: #1d1d1f; --muted: #6b6b73; --line: #e2e2e8; --accent: #ff1177; --code: #f6f6f9; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.6 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
 header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.5rem; background: var(--accent); }
