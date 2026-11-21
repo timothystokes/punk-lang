@@ -6,7 +6,14 @@ The easiest way to avoid changing state is to use things that cannot change. "Ad
 my-vector:[1 2 3 4]
 my-map:[fred:ethel]
 my-list:[4 3 2 1]
-[push![my-vector? 5] [my-map? ricky:lucy]! unshift![5 my-list?] my-vector? my-map? my-list?]!
+[
+  push![my-vector? 5]
+  [my-map? ricky:lucy]!
+  unshift![5 my-list?]
+  my-vector?
+  my-map?
+  my-list?
+]!
 ```
 **`[[1 2 3 4 5] [fred:ethel ricky:lucy] [5 4 3 2 1] [1 2 3 4] fred:ethel [4 3 2 1]]`**
 

@@ -34,7 +34,11 @@ The function can ask for more than the item (HOF-9). With two parameters it also
 Each item is one value, so a record can be taken whole and queried.
 
 ```punk
-todos:[[note:milk done:FALSE] [note:code done:TRUE] [note:sleep done:FALSE]]
+todos:[
+  [note:milk done:FALSE]
+  [note:code done:TRUE]
+  [note:sleep done:FALSE]
+]
 isOpen:(t:_)[=![t.done? FALSE]]
 noteOf:(t:_)[t.note?]
 todos? > filter!isOpen? > map!noteOf?

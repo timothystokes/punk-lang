@@ -32,6 +32,12 @@ leaves:(#)[
     .? > map!(v:_)[leaves![v?]] > sum!
   ]!
 ]
-leaves![animals:[mammals:[dog cat] birds:[owl hawk eagle]] plants:[oak fern]]
+leaves![
+  animals:[
+    mammals:[dog cat]
+    birds:[owl hawk eagle]
+  ]
+  plants:[oak fern]
+]
 ```
 **`7`**

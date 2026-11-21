@@ -551,7 +551,10 @@ The `lib` folder holds `punk.http` (response and form helpers) and `punk.html`. 
 
 ```punk
 html:import!punk.html
-html.page![head:()[title:()[My page]] body:()[h1:(color:red)[Welcome]]]
+html.page![
+  head:()[title:()[My page]]
+  body:()[h1:(color:red)[Welcome]]
+]
 ```
 **`<!DOCTYPE html><html lang="en"><head><title>My page</title></head><body><h1 color="red">Welcome</h1></body></html>`**
 
