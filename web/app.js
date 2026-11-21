@@ -3,7 +3,7 @@
 const nav = document.getElementById('nav');
 const main = document.getElementById('main');
 
-const PLAYGROUND = { title: 'Playground', id: 'playground', blocks: [{ type: 'code', code: 'greet:(n:_)[Hello {n?}]\n[greet!Punk]!' }] };
+const PLAYGROUND = { title: 'Playground', id: 'playground', intro: '<p>The playground is a blank page to try your own Punk.</p><p>Type code in the <b>left</b> side. The <b>right</b> side shows the result of the last expression, and updates as you type. Anything printed with <code>print!</code> shows there too, and a syntax error appears there as a message. Press Tab to indent and Shift+Tab to outdent. Nothing is saved, and nothing here can touch your files.</p>', blocks: [{ type: 'code', code: 'greet:(n:_)[Hello {n?}]\n[greet!Punk]!' }] };
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);

@@ -1,4 +1,4 @@
-# Welcome to Punk by example
+# Welcome
 
 Punk is an interpreted, functional, very loosely typed programming language where everything is immutable. There are no reserved words, no keywords and no types to declare. Everything is a **thing**: a word, a group of things written in `[ ]`, a name attached to a thing, or a function. Space is the delimiter between things, and the symbols `:` `?` `!` and `>` attach names, ask queries, call functions and pipe results.
 
