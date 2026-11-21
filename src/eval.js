@@ -84,7 +84,7 @@ const nameOf = (node, env) => (node.nameParts
 function bindName(node, env, define) {
   const value = bindValue(node.value, env);
   const name = nameOf(node, env);
-  if (define && !env.define(name, value)) throw syntaxError(`'${name}' is already named in this context`, node.line, node.col); // NAME-2
+  if (define && !env.define(name, value)) throw syntaxError(`The name '${name}' is already attached in this context`, node.line, node.col); // NAME-2
   return mkNamed(name, value);
 }
 

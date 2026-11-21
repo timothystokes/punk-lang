@@ -52,6 +52,7 @@ rule('GRP-8', '=![[] x]', 'FALSE');
 rule('GRP-9', '[a b]', '[a b]');
 // NAME
 rule('NAME-1', 'x:1\nx?', '1');
+test('ERR-1b', () => { assert.throws(() => run('x: 5'), /A name can only be attached to a thing/); });
 test('NAME-1a', () => { assert.throws(() => run('x: 5'), isSyntaxError); });
 test('LEX-11', () => {
   assert.throws(() => run('xs:[1 2]\nxs ?'), isSyntaxError);

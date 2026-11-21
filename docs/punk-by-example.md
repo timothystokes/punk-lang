@@ -68,7 +68,7 @@ name in that context is a syntax error (NAME-2).
 x:1
 x:2
 ```
-**`'x' is already named in this context`**
+**`The name 'x' is already attached in this context`**
 
 ## Queries
 
@@ -470,7 +470,7 @@ position (ERR-1).
 ```punk
 (_ _
 ```
-**`unclosed '(' (line 1, col 1)`**
+**`A '(' must be closed with ')' (line 1, col 1)`**
 
 Everything else evaluates to the non-thing (ERR-3).
 

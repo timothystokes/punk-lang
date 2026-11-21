@@ -67,7 +67,7 @@ export function tokenize(src) {
       continue;
     }
 
-    if (c === '}') throw syntaxError("unexpected '}'", sl, sc);
+    if (c === '}') throw syntaxError("A '}' must close a matching '{'", sl, sc);
 
     // CHUNK: literal text and {embed} parts.
     const parts = [];
@@ -82,17 +82,17 @@ export function tokenize(src) {
         lit += e === 'n' ? escChar('\n') : e === 't' ? escChar('\t') : escChar(e);
         continue;
       }
-      if (ch === '}') throw syntaxError("unexpected '}'", line, col);
+      if (ch === '}') throw syntaxError("A '}' must close a matching '{'", line, col);
       if (ch === '{') {
         const el = line, ec = col;
         advance();
         let inner = '';
         while (i < src.length && src[i] !== '}') {
-          if (src[i] === '{') throw syntaxError('embeds cannot be nested', line, col);
+          if (src[i] === '{') throw syntaxError('An embed cannot contain another embed', line, col);
           inner += src[i];
           advance();
         }
-        if (i >= src.length) throw syntaxError("unclosed '{'", el, ec);
+        if (i >= src.length) throw syntaxError("A '{' must be closed with '}'", el, ec);
         advance();
         if (lit) { parts.push({ lit }); lit = ''; }
         parts.push({ embedText: inner.trim(), line: el, col: ec });

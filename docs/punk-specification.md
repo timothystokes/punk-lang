@@ -340,6 +340,7 @@ timesTwo:*[2]!
 | [x] ERR-1 | Syntax errors MUST abort the program with an error carrying a source location. |
 | [x] ERR-2 | Syntax errors MUST be the only kind of error. There MUST be no runtime errors. |
 | [x] ERR-1a | A syntax error message SHOULD name the location and the offending token; its exact wording is not normative. |
+| [x] ERR-1b | Syntax error messages SHOULD use Punk's own vocabulary (thing, name, group, pattern, query, call) and state what is required, e.g. `A name can only be attached to a thing`. |
 | [x] ERR-3 | Every other failure (failed match, failed query, wrong argument count or shape, division by zero, wrong type, file or I/O failure) MUST NOT abort and MUST evaluate to the non-thing, unless a rule degrades it gracefully (LIB-5). |
 | [x] LIB-1 | Library functions MUST obey FN-2 and PAT rules like any function. |
 | [x] LIB-2 | Signatures are written `name(pattern)`; a call MUST fail to match (THING-9) if the argument does not fit the pattern. |

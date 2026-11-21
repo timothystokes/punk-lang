@@ -14,8 +14,8 @@ export function parsePath(text, line, col) {
   const local = text.startsWith('.');
   const body = local ? text.slice(1) : text;
   const segs = body === '' ? [] : body.split('.');
-  if (segs.some((s) => s === '')) throw syntaxError(`invalid query path '${text}'`, line, col);
-  if (!local && segs.length === 0) throw syntaxError('empty query', line, col);
+  if (segs.some((s) => s === '')) throw syntaxError(`A query is names separated by '.', so '${text}' is not a query`, line, col);
+  if (!local && segs.length === 0) throw syntaxError('A query must name a thing', line, col);
   return { kind: 'Query', local, segs };
 }
 
@@ -70,7 +70,7 @@ function parseTokens(t) {
     while (true) {
       const t = peek();
       if (t.type === 'EOF') {
-        if (mode !== 'line') err(`unclosed '${mode === 'RB' ? '[' : '('}'`, opener || t);
+        if (mode !== 'line') err(`A '${mode === 'RB' ? '[' : '('}' must be closed with '${mode === 'RB' ? ']' : ')'}'`, opener || t);
         break;
       }
       if (t.type === 'WS') {
@@ -80,13 +80,13 @@ function parseTokens(t) {
         continue;
       }
       if (t.type === mode) break;
-      if (t.type === 'RB' || t.type === 'RP') err(`unexpected '${t.type === 'RB' ? ']' : ')'}'`);
+      if (t.type === 'RB' || t.type === 'RP') err(`A '${t.type === 'RB' ? ']' : ')'}' must close a matching '${t.type === 'RB' ? '[' : '('}'`);
       if (t.type === 'ARROW') {
         // cases inside a bracketed body: the elements so far are the subject (LEX-10)
-        if (mode !== 'RB' || elems.length === 0) err("'->' must start a new line");
+        if (mode !== 'RB' || elems.length === 0) err("A '->' case must start a new line");
         const entries = caseEntries();
         skipWs();
-        if (peek().type !== mode) err("unexpected token after cases");
+        if (peek().type !== mode) err("A cases chain must be the last thing in its group");
         const subject = elems.length === 1 ? elems[0] : mkGroup(elems);
         return { kind: 'Cases', subject, entries };
       }
@@ -97,7 +97,7 @@ function parseTokens(t) {
         const stages = [];
         while (true) {
           skipWs(false);
-          if (peek().type === 'EOF' || peek().type === 'WS') err("expected a pipe stage after '>'");
+          if (peek().type === 'EOF' || peek().type === 'WS') err("A '>' must be followed directly by the thing it pipes to");
           stages.push(element());
           skipWs(false);
           if (peek().type === 'GT') { next(); continue; }
@@ -148,16 +148,16 @@ function parseTokens(t) {
         }
         const t = peek();
         if (t.type === 'EOF' || t.type === 'WS' || t.type === 'RB' || t.type === 'RP') {
-          err(`'${tok.text}:' needs a value`, tok);
+          err(`A name can only be attached to a thing`, tok);
         }
         return named(tok, element());
       }
       case 'LB': p--; node = group(); break;
       case 'LP': node = pattern(tok); break;
       case 'CHUNK': node = word(tok); break;
-      case 'BANG': err("unexpected '!'", tok); break;
-      case 'QMARK': err("unexpected '?'", tok); break;
-      default: err(`unexpected ${tok.type}`, tok);
+      case 'BANG': err("A '!' must be attached to the thing it calls", tok); break;
+      case 'QMARK': err("A '?' must be attached to the thing it queries", tok); break;
+      default: err(`A ${tok.type} cannot start a thing here`, tok);
     }
     return chain(node, noBang);
   }
@@ -182,7 +182,7 @@ function parseTokens(t) {
         return { embed: { kind: 'Call', target: mkWord(p.embedText.slice(0, -1)), args: null } };
       }
       if (!p.embedText.endsWith('?')) {
-        throw syntaxError("an embed must be a query ending in '?' or a call ending in '!'", p.line, p.col);
+        throw syntaxError("An embed must be a query ending in '?' or a call ending in '!'", p.line, p.col);
       }
       return { embed: parsePath(p.embedText.slice(0, -1), p.line, p.col) };
     });
@@ -248,11 +248,11 @@ function parseTokens(t) {
     let side = 'left';
     while (true) {
       const t = peek();
-      if (t.type === 'EOF') err("unclosed '('", open);
+      if (t.type === 'EOF') err("A '(' must be closed with ')'", open);
       if (t.type === 'RP') { next(); break; }
       if (t.type === 'WS') { p++; continue; }
       if (t.type === 'CHUNK' && t.parts.length === 1 && t.parts[0].lit === '|') {
-        if (side === 'right') err("a pattern can contain only one '|'", t);
+        if (side === 'right') err("A pattern can contain only one '|'", t);
         side = 'right';
         next();
         continue;
@@ -266,18 +266,18 @@ function parseTokens(t) {
       else if (v.type === 'CHUNK' && v.parts.length === 1 && v.parts[0].lit === '#') slot = { type: 'rest' };
       else if (v.type === 'CHUNK') slot = { type: 'lit', thing: word(v) };
       else if (v.type === 'LB') { p--; slot = { type: 'lit', thing: group() }; }
-      else err('unexpected token in pattern', v);
+      else err('A pattern can only contain slots, words and groups', v);
       if (side === 'left') {
         left.push({ ...slot, label });
       } else {
-        if (!nameTok) err("clauses after '|' must be name:value", t);
-        if (slot.type === 'rest') err("'#' is not allowed after '|'", v);
+        if (!nameTok) err("Things after '|' must be named things", t);
+        if (slot.type === 'rest') err("A '#' cannot be used after '|'", v);
         right.push({ name: label, spec: slot });
       }
     }
     const rests = left.filter((s) => s.type === 'rest').length;
     if (rests > 1 || (rests === 1 && left[left.length - 1].type !== 'rest')) {
-      throw syntaxError("'#' must be the last slot and appear at most once in a pattern", open.line, open.col);
+      throw syntaxError("A '#' must be the last slot of a pattern and can appear only once", open.line, open.col);
     }
     return { kind: 'Pattern', left, right };
   }
