@@ -105,6 +105,10 @@ message:[Hello world]
 > NOTE: Punk treats names as immutable. Once you have attached a name to a thing within a namespace context then it sticks. Attaching it again in the same context is a syntax error.
 
 
+### Try it in the browser
+
+`npm run build:web` builds a static site into `site/`: the examples from `docs/punk-by-example.md` each with editable code on the left and live output on the right, plus a playground. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
+
 ### Querying Named Things
 
 You can retrieve a thing from its name using a ? query.

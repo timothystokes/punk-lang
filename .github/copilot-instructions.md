@@ -15,6 +15,7 @@ Flag any conflict and ask before reinterpreting a rule.
 
 - `src/`: tokenize, parse, eval (entry `src/punk.js`, CLI `src/cli.js`, library in `src/builtins.js`).
 - `tests/spec.test.mjs`: one test per spec rule ID. `tests/docs.test.mjs`: runs every example in the README and `docs/punk-by-example.md` against its stated output.
+- `web/`: the browser site (code left, output right) built from `docs/punk-by-example.md` by `npm run build:web` into `site/`; `tests/web.test.mjs` checks the bundle runs without Node. `.github/workflows/pages.yml` deploys it to GitHub Pages.
 
 ## Workflow
 

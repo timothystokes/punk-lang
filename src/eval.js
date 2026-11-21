@@ -21,7 +21,7 @@ export function createGlobal() {
   return g;
 }
 
-const io = { write: (s) => process.stdout.write(s + '\n'), baseDir: process.cwd() };
+const io = { write: (s) => console.log(s), baseDir: '.' };
 export function setOutput(fn) { io.write = fn; }
 export function setBaseDir(dir) { io.baseDir = resolve(dir); }
 
