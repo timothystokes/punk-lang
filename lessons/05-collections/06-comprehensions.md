@@ -17,7 +17,7 @@ double:*!2
 
 A function is passed by reference with `?`, as in `map!double?`. A bare word is just text (HOF-8).
 
-The function can ask for more than the item (HOF-9). With two parameters it also gets the key (the name of a named item, or `[]`), and with three it also gets the position, starting at 1. A function with `#` gets all three.
+The function can ask for more than the item (HOF-9). With two parameters it also gets the key (the name of a named item, or `[]`), and with three it also gets the position, starting at 1. A function with `-` gets all three.
 
 ```punk
 [a:1 b:2] > map!(v:_ k:_ i:_)[{k?}-{v?}-{i?}]

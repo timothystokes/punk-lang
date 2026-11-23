@@ -3,9 +3,9 @@
 A pattern describes what a thing contains, so any record with the right named things qualifies, whatever else it has. Cases give you overloads by trying one pattern after another.
 
 ```punk
-describe:(#)[
+describe:(-)[
   .?
-  -> (# | name:_)[named .name?]!
+  -> (- | name:_)[named .name?]!
   -> (_ _)[a pair]!
   -> (_)[something else]!
 ]

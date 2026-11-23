@@ -3,8 +3,8 @@
 ## [method:.. url:.. headers:[..] body:..] and expects
 ## [status:.. headers:[..] body:..] back.
 
-ok:(b:#)[status:200 headers:[Content-Type:text/html] body:b?]
-notFound:(b:#)[status:404 headers:[Content-Type:text/plain] body:b?]
+ok:(b:-)[status:200 headers:[Content-Type:text/html] body:b?]
+notFound:(b:-)[status:404 headers:[Content-Type:text/plain] body:b?]
 location:(u:_)[Location:{u?}]
 redirect:(u:_)[status:303 headers:location!u? body:[]]
 pair:(k:_ v:_)[{k?}:{v?}]

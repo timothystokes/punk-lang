@@ -135,6 +135,7 @@ function evalItem(node, env) {
       return mkBool(matchPattern(node.pattern, thing) !== null);
     }
     case 'Pipe': return evalPipe(node, env);
+    case 'Swap': return evalSwap(node, env);
     case 'Cases': return evalCases(node, env);
     case 'FnLit': return makeFn(node, env);
     default: return node;
@@ -146,21 +147,35 @@ function evalItem(node, env) {
 const isIndex = (s) => /^-?\d+$/.test(s);
 const RANGE = /^(-?\d+)-(-?\d+)?$/;
 
-// A negative index counts from the end: -1 is the last item (QRY-9).
+// A negative index selects a suffix: -1 is the last item, -2 the last two.
 const absIndex = (n, len) => (n < 0 ? len + n + 1 : n);
+
+function queryItems(v) {
+  if (v.kind !== 'Word') return itemsOf(v);
+  return [...(v.text ?? textOf(v))].map(mkWord);
+}
 
 function applySegs(v, segs) {
   for (const s of segs) {
-    const items = itemsOf(v);
     const range = RANGE.exec(s);
+    const charQuery = v.kind === 'Word' && (isIndex(s) || range);
+    const items = queryItems(v);
     if (isIndex(s)) {
-      const i = absIndex(Number(s), items.length);
-      v = i >= 1 && i <= items.length ? items[i - 1] : NONE;
+      const n = Number(s);
+      const i = absIndex(n, items.length);
+      if (i < 1 || i > items.length) v = NONE;
+      else if (n < 0) {
+        const selected = items.slice(i - 1);
+        v = charQuery ? mkWord(selected.map((x) => x.text).join('')) : mkGroup(selected);
+      } else v = items[i - 1];
     } else if (range) {
       // a-b and a- select a clamped slice, or nothing (QRY-10..12)
       const from = absIndex(Number(range[1]), items.length);
       const to = range[2] === undefined ? items.length : absIndex(Number(range[2]), items.length);
-      v = from >= 1 && to >= from && from <= items.length ? mkGroup(items.slice(from - 1, Math.min(to, items.length))) : NONE;
+      if (from >= 1 && to >= from && from <= items.length) {
+        const selected = items.slice(from - 1, Math.min(to, items.length));
+        v = charQuery ? mkWord(selected.map((x) => x.text).join('')) : mkGroup(selected);
+      } else v = NONE;
     } else {
       const hit = items.find((x) => x.kind === 'Named' && x.name === s);
       v = hit ? hit.value : NONE;
@@ -178,6 +193,7 @@ export function resolveQuery(query, env) {
   const segs = query.segs.map((s) => segText(s, env));
   if (segs.some((s, i) => s === '' && typeof query.segs[i] !== 'string')) return NONE;
   const q = { local: query.local, segs };
+  if (query.base) return applySegs(evalItem(query.base, env), q.segs);
   if (q.local) {
     const fe = env.localFn(); // `.` is always local (NAME-2e)
     const arg = fe ? fe.fn.arg : NONE;
@@ -227,8 +243,8 @@ export function matchPattern(pattern, thing) {
     if (s.label) binds.set(s.label, unwrapNamed(item));
   }
   for (const r of pattern.right) {
-    const hit = items.find((x) => x.kind === 'Named' && x.name === r.name);
-    if (!hit || !specMatches(r.spec, hit.value)) return null;
+    const value = applySegs(thing, r.name.split('.'));
+    if (isNone(value) || !specMatches(r.spec, value)) return null;
   }
   return binds;
 }
@@ -335,7 +351,10 @@ function targetOf(t, env) {
 function evalCall(node, env, hasPiped = false, piped) {
   const { f, literal } = targetOf(node.target, env);
   const attached = node.args ? evalItem(node.args, env) : undefined;
-  const argItems = [...(attached !== undefined ? itemsOf(attached) : []), ...(hasPiped ? [piped] : [])];
+  const attachedItems = attached !== undefined
+    ? (hasPiped && isNone(attached) ? [attached] : itemsOf(attached))
+    : [];
+  const argItems = [...attachedItems, ...(hasPiped ? [piped] : [])];
   let argThing;
   if (attached === undefined) argThing = hasPiped ? piped : NONE;
   else argThing = mkGroup(argItems);
@@ -344,6 +363,7 @@ function evalCall(node, env, hasPiped = false, piped) {
 
 function runStage(stage, input, env) {
   if (stage.kind === 'Call') return evalCall(stage, env, true, input);
+  if (stage.kind === 'FnLit') return { matched: true, value: makeFn(stage, env) };
   const f = evalItem(stage, env);
   return callThing(f, [input], input, env, false);
 }
@@ -354,10 +374,22 @@ function evalPipe(node, env) {
   return v;
 }
 
+function evalSwap(node, env) {
+  if (node.atom.kind !== 'Word' || !isAtom(node.atom)) return NONE;
+  const name = node.atom.text.slice(1);
+  const current = env.atoms().get(name) ?? NONE;
+  const result = runStage(node.stage, current, env);
+  if (!result.matched) return NONE;
+  env.atoms().set(name, result.value);
+  return result.value;
+}
+
 // ---------- cases ----------
 
 function runStages(stages, subject, env) {
-  let r = runStage(stages[0], subject, env);
+  const r = stages.length === 1 && stages[0].kind === 'FnLit'
+    ? callThing(makeFn(stages[0], env), [subject], subject, env, true)
+    : runStage(stages[0], subject, env);
   if (!r.matched) return { matched: false, value: NONE };
   let v = r.value;
   for (const st of stages.slice(1)) v = runStage(st, v, env).value;

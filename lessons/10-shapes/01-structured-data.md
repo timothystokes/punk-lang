@@ -11,7 +11,7 @@ person:[name:Paul age:42]
 A pattern can describe the shape a function accepts.
 
 ```punk
-birthday:(# | name:_ age:_)[[.name? age:+![.age? 1]]]
+birthday:(- | name:_ age:_)[[.name? age:+![.age? 1]]]
 birthday![name:Paul age:42]
 ```
 **`[Paul age:43]`**
@@ -19,7 +19,7 @@ birthday![name:Paul age:42]
 A "method" is a function that takes the record.
 
 ```punk
-describe:(# | name:_ age:_)[{.name?} is {.age?}]
+describe:(- | name:_ age:_)[{.name?} is {.age?}]
 describe![name:Paul age:42]
 ```
 **`[Paul is 42]`**

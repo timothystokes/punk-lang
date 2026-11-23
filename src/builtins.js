@@ -15,7 +15,8 @@ const INF = Infinity;
 const list = [];
 const def = (name, min, max, fn) => list.push({ name, min, max, fn });
 
-const textFrom = (items) => items.map((x) => textOf(unwrapNamed(x))).join(' ');
+const contentText = (v) => textOf(unwrapNamed(v));
+const textFrom = (items) => items.map(contentText).join(' ');
 const dataOf = (items, from) => {
   const rest = items.slice(from);
   return rest.length === 1 ? itemsOf(rest[0]) : rest;
@@ -59,6 +60,12 @@ def('lt', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) < 0));
 def('gt', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) > 0));
 def('lte', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) <= 0));
 def('gte', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) >= 0));
+def('#', 1, 1, (a) => mkBool(isNumericText(textOf(unwrapNamed(a[0])))));
+def('#<', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) < 0));
+def('#>', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) > 0));
+def('#<=', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) <= 0));
+def('#>=', 2, 2, (a) => mkBool(cmpValues(a[0], a[1]) >= 0));
+def('#=', 2, 2, (a) => mkBool(allEqual(a)));
 
 // Logic
 def('~', 1, INF, (a) => mkBool(!a.every((x) => isTrue(unwrapNamed(x)))));
@@ -100,28 +107,29 @@ def('sub', 3, INF, (a) => {
 def('startsWith', 2, INF, (a) => mkBool(textFrom(a.slice(1)).startsWith(textOf(a[0]))));
 def('endsWith', 2, INF, (a) => mkBool(textFrom(a.slice(1)).endsWith(textOf(a[0]))));
 def('repeat', 2, INF, (a) => mkWord(textFrom(a.slice(1)).repeat(Math.max(0, Math.floor(toNum(a[0]))))));
-def('pad', 3, INF, (a) => mkWord(textFrom(a.slice(2)).padStart(Math.max(0, toNum(a[0])), textOf(a[1]) || ' ')));
+def('pad', 3, INF, (a) => mkWord(textFrom(a.slice(2)).padStart(Math.max(0, toNum(a[0])), contentText(a[1]) || ' ')));
 
 // Collections
 def('count', 0, INF, (a) => numWord(a.length));
 def('first', 0, INF, (a) => a[0] ?? NONE);
 def('last', 0, INF, (a) => a[a.length - 1] ?? NONE);
 def('rev', 0, INF, (a) => mkGroup([...a].reverse()));
-def('sort', 0, INF, (a) => mkGroup([...a].sort(cmpValues)));
-def('unique', 0, INF, (a) => mkGroup(a.filter((x, i) => a.findIndex((y) => equals(x, y)) === i)));
+def('sort', 0, INF, (a, c) => {
+  const hasComparator = a.length > 1;
+  const comparator = hasComparator ? a[0] : NONE;
+  const data = hasComparator ? dataOf(a, 1) : dataOf(a, 0);
+  const compare = isNone(comparator)
+    ? cmpValues
+    : (x, y) => toNum(c.callFn(comparator, mkGroup([x, y])));
+  return mkGroup([...data].sort(compare));
+});
+def('set', 0, INF, (a) => mkGroup(a.filter((x, i) => a.findIndex((y) => equals(x, y)) === i)));
 def('contains', 2, INF, (a) => mkBool(dataOf(a, 1).some((x) => equals(unwrapNamed(a[0]), unwrapNamed(x)))));
 def('push', 1, INF, (a) => mkGroup(a.flatMap(itemsOf)));
 def('pop', 0, INF, (a) => mkGroup(a.slice(0, -1)));
 def('shift', 0, INF, (a) => mkGroup(a.slice(1)));
 def('unshift', 1, INF, (a) => mkGroup([a[0], ...a.slice(1).flatMap(itemsOf)]));
-def('take', 1, INF, (a) => mkGroup(dataOf(a, 1).slice(0, Math.max(toNum(a[0]), 0))));
-def('drop', 1, INF, (a) => mkGroup(dataOf(a, 1).slice(Math.max(toNum(a[0]), 0))));
 def('remove', 1, INF, (a) => mkGroup(dataOf(a, 1).filter((_, i) => i !== toNum(a[0]) - 1)));
-def('concat', 2, INF, (a) => mkGroup(a.flatMap(itemsOf)));
-def('slice', 3, INF, (a) => {
-  const d = dataOf(a, 2);
-  return mkGroup(d.slice(Math.max(toNum(a[0]) - 1, 0), toNum(a[1])));
-});
 def('range', 2, 2, (a) => {
   const from = toNum(a[0]), to = toNum(a[1]);
   const out = [];
@@ -148,10 +156,6 @@ hof('find', 2, (f, d, c) => d.find((x, i) => isTrue(call(c, f, x, i))) ?? NONE);
 hof('each', 2, (f, d, c) => { d.forEach((x, i) => call(c, f, x, i)); return mkGroup(d); });
 hof('any', 2, (f, d, c) => mkBool(d.some((x, i) => isTrue(call(c, f, x, i)))));
 hof('all', 2, (f, d, c) => mkBool(d.every((x, i) => isTrue(call(c, f, x, i)))));
-hof('sortBy', 2, (f, d, c) => {
-  const keyed = d.map((x, i) => ({ x, k: call(c, f, x, i) }));
-  return mkGroup(keyed.sort((p, q) => cmpValues(p.k, q.k)).map((p) => p.x));
-});
 hof('partition', 2, (f, d, c) => {
   const yes = [], no = [];
   d.forEach((x, i) => (isTrue(call(c, f, x, i)) ? yes : no).push(x));
@@ -199,7 +203,7 @@ def('patternOf', 1, 1, (a) => {
   const f = a[0];
   if (f.kind !== 'Fn') return NONE;
   const slotThing = (s) => {
-    const t = s.type === 'lit' ? s.thing : mkWord(s.type === 'rest' ? '#' : '_');
+    const t = s.type === 'lit' ? s.thing : mkWord(s.type === 'rest' ? '-' : '_');
     return s.label ? mkNamed(s.label, t) : t;
   };
   return mkGroup(f.pattern.left.map(slotThing));

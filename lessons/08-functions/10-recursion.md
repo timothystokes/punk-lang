@@ -1,6 +1,8 @@
 # Recursion
 
-A function can call itself by name. Put the finishing case first.
+Punk has no `for` or `while`. Without mutable variables, repeated work is
+done by a function calling itself with new arguments. Put the finishing case
+first.
 
 ```punk
 fact:(n:_)[
@@ -25,10 +27,10 @@ total!4
 Recursion suits nested data. A taxonomy is groups inside groups, and a function can count its leaves without knowing how deep it goes. A single thing is a leaf and counts as 1. Anything with more items is mapped over, calling the function again on each item, and the results are summed.
 
 ```punk
-leaves:(#)[
+leaves:(-)[
   .?
   -> (_)[1]!
-  -> (_ _ #)[
+  -> (_ _ -)[
     .? > map!(v:_)[leaves![v?]] > sum!
   ]!
 ]

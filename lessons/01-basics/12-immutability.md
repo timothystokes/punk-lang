@@ -4,7 +4,7 @@ Nothing in Punk changes in place. Every library function returns a new thing and
 
 ```punk
 a:[3 1 2]
-b:sort!a?
+b:sort![[] a?]
 [a? b?]!
 ```
 **`[[3 1 2] [1 2 3]]`**

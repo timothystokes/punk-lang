@@ -25,7 +25,22 @@ Library functions never change their input (LIB-3).
 
 ```punk
 x:[b a]
-sort!x?
+sort![[] x?]
 x?
 ```
 **`[b a]`**
+
+The `#` predicates provide numeric checks and comparisons:
+
+```punk
+[#!42 #<![2 3] #>=![2 2]]!
+```
+**`[TRUE TRUE TRUE]`**
+
+Text functions treat nested groups as their complete content and return a
+new word.
+
+```punk
+sub![2 4 [hello there]]
+```
+**`ell`**

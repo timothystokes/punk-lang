@@ -1,6 +1,6 @@
 # Patterns
 
-A pattern describes a shape. `_` is one thing, `#` is any number of
+A pattern describes a shape. `_` is one thing, `-` is any number of
 things (including none, and last), and a literal word matches that word.
 Executing a pattern with `!` gives `TRUE` or `FALSE` (PAT-7).
 
@@ -10,7 +10,7 @@ Executing a pattern with `!` gives `TRUE` or `FALSE` (PAT-7).
 **`TRUE`**
 
 ```punk
-[a b c](_ #)!
+[a b c](_ -)!
 ```
 **`TRUE`**
 

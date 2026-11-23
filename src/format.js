@@ -9,12 +9,13 @@ function wordText(w) {
 
 function fmtQuery(q) {
   const seg = (s) => (typeof s === 'string' ? s : wordText({ text: null, parts: s.parts }));
-  return (q.local ? '.' : '') + q.segs.map(seg).join('.') + '?';
+  const path = q.segs.map(seg).join('.');
+  return q.base ? `${fmt(q.base)}${path ? `.${path}` : ''}?` : (q.local ? '.' : '') + path + '?';
 }
 
 function fmtPattern(p) {
   const slot = (s) => {
-    const base = s.type === 'one' ? '_' : s.type === 'rest' ? '#' : fmt(s.thing);
+    const base = s.type === 'one' ? '_' : s.type === 'rest' ? '-' : fmt(s.thing);
     return s.label ? `${s.label}:${base}` : base;
   };
   const left = p.left.map(slot);
@@ -45,6 +46,7 @@ export function fmt(v) {
     case 'Call': return `${fmt(v.target)}!${v.args ? fmt(v.args) : ''}`;
     case 'Match': return `${fmt(v.thing)}${fmtPattern(v.pattern)}!`;
     case 'Pipe': return `${v.seed ? fmt(v.seed) + ' ' : ''}> ${v.stages.map(fmt).join(' > ')}`;
+    case 'Swap': return `${fmt(v.atom)}<>${fmt(v.stage)}`;
     default: return '?';
   }
 }

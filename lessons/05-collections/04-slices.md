@@ -1,15 +1,17 @@
 # Slices
 
-A query takes a range: `.1-2?` for the first two, `.-1?` for the last and `.3-?` for the third to the end. The `slice`, `take` and `drop` functions do the same by call.
+A query takes a range: `.1-2?` for the first two, `.-1?` for the last
+one, `.-2?` for the last two, and `.3-?` from the third to the end.
 
 ```punk
 l:[a b c d e]
-[l.2-3? l.-2-? l.-1?]!
+[l.2-3? l.-2? l.-1?]!
 ```
 **`[[b c] [d e] e]`**
 
 ```punk
-slice![2 3 [a b c d e]]
+l:[a b c d e]
+l.2-3?
 ```
 **`[b c]`**
 

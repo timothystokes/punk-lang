@@ -23,3 +23,13 @@ Writing returns the stored thing, so a counter is a pipe from the atom back into
 @count
 ```
 **`6`**
+
+`<>` is a compact atom swap. Spaces may surround it, but `<` and `>` must
+stay together. The stage receives the atom's current value, and its result is
+stored back and returned.
+
+```punk
+1 > @countSwap!
+[@countSwap <> +!5 @countSwap]!
+```
+**`[6 6]`**

@@ -132,6 +132,18 @@ function parseTokens(t) {
         }
         continue;
       }
+      if (t.type === 'SWAP') {
+        if (elems.length === 0) err("'<' and '>' must follow an atom", t);
+        next();
+        skipWs(false);
+        if (peek().type === 'EOF' || peek().type === 'WS' || peek().type === 'RB' || peek().type === 'RP') {
+          err("An atom swap must be followed by its stage", peek());
+        }
+        const atom = elems.pop();
+        const stage = element();
+        elems.push({ kind: 'Swap', atom, stage, line: t.line, col: t.col });
+        continue;
+      }
       elems.push(element());
     }
     return elems.length === 1 ? elems[0] : mkGroup(elems);
@@ -213,7 +225,23 @@ function parseTokens(t) {
     while (true) {
       const t = peek();
       if (!t.adj) break;
+      if (node.kind === 'Group' && t.type === 'CHUNK'
+        && t.parts.length === 1 && t.parts[0].lit.startsWith('.')) {
+        next();
+        const path = parsePath(t.parts[0].lit, t.line, t.col);
+        if (peek().type !== 'QMARK' || !peek().adj) {
+          err("A static thing query must end with '?'", peek());
+        }
+        next();
+        node = { kind: 'Query', base: node, local: false, segs: path.segs };
+        continue;
+      }
       if (t.type === 'QMARK') {
+        if (node.kind === 'Group') {
+          next();
+          node = { kind: 'Query', base: node, local: false, segs: [] };
+          continue;
+        }
         if (node.kind !== 'Word' || node.queried) break;
         next();
         const q = node.parts ? queryFromParts(node.parts, t.line, t.col) : parsePath(node.text, t.line, t.col);
@@ -284,7 +312,8 @@ function parseTokens(t) {
       const v = next();
       let slot;
       if (v.type === 'CHUNK' && v.parts.length === 1 && v.parts[0].lit === '_') slot = { type: 'one' };
-      else if (v.type === 'CHUNK' && v.parts.length === 1 && v.parts[0].lit === '#') slot = { type: 'rest' };
+      else if (v.type === 'CHUNK' && v.parts.length === 1
+        && (side === 'left' && v.parts[0].lit === '-')) slot = { type: 'rest' };
       else if (v.type === 'CHUNK') slot = { type: 'lit', thing: word(v) };
       else if (v.type === 'LB') { p--; slot = { type: 'lit', thing: group() }; }
       else err('A pattern can only contain slots, words and groups', v);
@@ -292,13 +321,13 @@ function parseTokens(t) {
         left.push({ ...slot, label });
       } else {
         if (!nameTok) err("Things after '|' must be named things", t);
-        if (slot.type === 'rest') err("A '#' cannot be used after '|'", v);
+        if (slot.type === 'rest') err("A '-' cannot be used after '|'", v);
         right.push({ name: label, spec: slot });
       }
     }
     const rests = left.filter((s) => s.type === 'rest').length;
     if (rests > 1 || (rests === 1 && left[left.length - 1].type !== 'rest')) {
-      throw syntaxError("A '#' must be the last slot of a pattern and can appear only once", open.line, open.col);
+      throw syntaxError("A '-' must be the last slot of a pattern and can appear only once", open.line, open.col);
     }
     return { kind: 'Pattern', left, right };
   }

@@ -29,7 +29,7 @@ embedded thing, without the `[ ]` around it. Any `[ ]` inside the thing
 are kept (EMB-13).
 
 ```punk
-greet:(#)[Hello {.?}]
+greet:(-)[Hello {.?}]
 [Punk Lang] > greet!
 ```
 **`[Hello Punk Lang]`**

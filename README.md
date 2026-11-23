@@ -44,10 +44,13 @@ The reserved symbols used by Punk include:
 `{}` - embeds a query's result into text inside an evaluated template
 `|` - a 'such that' condition within a pattern
 `_` - a single placeholder in a pattern
-`#` - an any placeholder in a pattern
+`-` - an any-number placeholder in a pattern
 `@` - an atom, a global place for state
 `\` - makes the next character plain text
 `##` - a comment to the end of the line
+
+In a pattern, `-` is the any-number placeholder. Escape it as `\-` when a
+literal hyphen is needed. `#` is now available as an ordinary word.
 
 ### Things
 
@@ -107,7 +110,7 @@ message:[Hello world]
 
 ### Try it in the browser
 
-`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections, each example with editable code on the left and live output on the right (a group that holds groups of several items is laid out on indented lines to read more easily), plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `# Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
+`npm run build:web` builds a static site into `site/`: one page per lesson in the `lessons/` folder, grouped into sections, each example with editable code on the left and live output on the right (a group that holds groups of several items is laid out on indented lines to read more easily), plus a playground. To add a lesson, add a file named like `05-my-topic.md` to a section folder such as `lessons/05-collections/` (a new numbered folder is a new section); it starts with a `- Title`; each ```punk block followed by a bold output line becomes a runnable example and is checked by `npm test`. The browser has no files or network, so `read`, `write`, `import` and `serve` do nothing there. The `Deploy site` workflow publishes it to GitHub Pages on every push to main.
 
 ### Querying Named Things
 
@@ -127,11 +130,24 @@ message.1?
 ```
 **`Hello`**
 
+Static things can be queried directly as well. A whole-thing query simply
+returns the thing, while a path selects within it:
+
+```punk
+[x y z]?
+```
+**`[x y z]`**
+
+```punk
+[x y z].2?
+```
+**`y`**
+
 > NOTE: Indexes in most programming languages start with zero to get the first item. Punk is different. It uses 1 for the first item, 2 for the second etc..
 
 ### Ranges and Counting from the End
 
-A negative index counts from the end, so -1 is the last thing. A range `a-b` returns the things from index a to index b, and `a-` returns everything from index a to the end.
+A negative index selects a suffix by length: -1 is the last thing, -2 is the last two, and so on. A range `a-b` returns the things from index a to index b, and `a-` returns everything from index a to the end.
 
 ```punk
 letters:[a b c d]
@@ -142,6 +158,11 @@ letters:[a b c d]
 letters.-1?
 ```
 **`d`**
+
+```punk
+letters.-2?
+```
+**`[c d]`**
 
 ```punk
 letters.1-2?
@@ -184,6 +205,15 @@ Here is another example that queries the person's 'name' thing then references i
 person.name.2?
 ```
 **`Jones`**
+
+Numeric and range segments can also query the characters of a word. Word
+indexes are one-based, and numeric words are treated as text:
+
+```punk
+word:hello
+[word.2? word.3-4?]!
+```
+**`[e ll]`**
 
 ### Queries with embeds
 
@@ -266,7 +296,7 @@ name:[Paul Jones]
 An embed that stands alone in a template adds the contents of the embedded thing, without the [ ] around it. Any [ ] inside the thing are kept.
 
 ```punk
-greet:(#)[Hello {.?}]
+greet:(-)[Hello {.?}]
 [Punk Lang] > greet!
 ```
 **`[Hello Punk Lang]`**
@@ -287,17 +317,17 @@ A failed query embeds as nothing. { } cannot be nested, and in a thing that isn'
 
 ### Patterns
 
-Patterns are a way of defining the shape that can be compared to a thing. This provides a way to build conditions in our program. Patterns are defined by ( ) syntax where underscores _ are used to denote an item placement and # to denote any number of items.
+Patterns are a way of defining the shape that can be compared to a thing. This provides a way to build conditions in our program. Patterns are defined by ( ) syntax where underscores _ are used to denote an item placement and - to denote any number of items.
 
 **`(_)`** - A pattern that describes a thing shape that contains a single thing
 
 **`(_ _)`** - A pattern that describes a thing shape that contains two grouped things
 
-**`(#)`** - A pattern that describes a thing that has any number of nested items including no items
+**`(-)`** - A pattern that describes a thing that has any number of nested items including no items
 
 **`(5 _ _)`** - A pattern that describes a thing that contains three items where the first item is 5
 
-**`(_ _ _ #)`** - A pattern that describes a thing that has at least 3 things
+**`(_ _ _ -)`** - A pattern that describes a thing that has at least 3 things
 
 
 ### Pattern Matching
@@ -342,16 +372,23 @@ person:[name:Bob age:42]
 ```
 
 ```punk
-person? > (# | name:Bob)!
+person? > (- | name:Bob)!
 ```
 **`TRUE`**
 
 ```punk
-person? > (# | name:Sally)!
+person? > (- | name:Sally)!
 ```
 **`FALSE`**
 
-The `#` on the left means match any shape, then the thing must also have a named thing `name` with the content `Bob`.
+Right-hand names may query through nested named things:
+
+```punk
+[name:[first:Tom last:Jones] age:42](- | age:42 name.last:Jones)!
+```
+**`TRUE`**
+
+The `-` on the left means match any shape, then the thing must also have a named thing `name` with the content `Bob`.
 
 Labels on the left side of the `|` are names for the matched things that can be used inside the function template. The names on the right side of the `|` are the actual names and values of the thing being passed to the function. In other words, match the thing using a shape `|` (such that) the named things are there and have specific values.
 
@@ -427,6 +464,20 @@ We have already seen how values are passed to a function. This is called a pipe 
 Sally > welcome! > upper!
 ```
 **`[HELLO SALLY]`**
+
+An inline function without `!` is passed to the next stage as a function
+reference. Add `!` when the inline function should receive the piped thing and
+pass its result onward.
+
+```punk
+1 > (n:_)[n?] > isfn!
+```
+**`TRUE`**
+
+```punk
+1 > (n:_)[n?]! > isfn!
+```
+**`FALSE`**
 
 > NOTE: A pipe of functions is a essentially just a function where the initial patterns determines the input and the last function determines the output.
 
@@ -548,6 +599,16 @@ Writing returns the stored thing, so a counter is a pipe from the atom back into
 ```
 **`6`**
 
+The `<>` notation swaps an atom through the adjacent pipe stage. Spaces may
+surround the operator, but `<` and `>` stay together. It reads the current
+value, runs the stage, stores the result back, and returns the new value:
+
+```punk
+1 > @countSwap!
+[@countSwap <> +!5 @countSwap]!
+```
+**`[6 6]`**
+
 ### Modules
 
 `import!name` evaluates the file `name.punk` (beside your program, then in the `lib` folder) and returns everything it names. Name the result and query it.
@@ -581,9 +642,9 @@ Here is a full list of functions, their patterns and what they do. Functions are
 
 ### Maths
 
-- `+(_ _ #)` - add two or more numbers.
+- `+(_ _ -)` - add two or more numbers.
 - `-(_ _)` - subtract the second number from the first.
-- `*(_ _ #)` - multiply two or more numbers.
+- `*(_ _ -)` - multiply two or more numbers.
 - `\(_ _)` - divide the first number by the second.
 - `mod(_ _)` - the remainder after dividing the first number by the second.
 - `pow(_ _)` - raise the first number to the power of the second.
@@ -593,43 +654,46 @@ Here is a full list of functions, their patterns and what they do. Functions are
 - `floor(_)` - round down to the nearest whole number.
 - `ceil(_)` - round up to the nearest whole number.
 - `round(_)` - round to the nearest whole number.
-- `min(_ _ #)` - the smallest of two or more numbers.
-- `max(_ _ #)` - the largest of two or more numbers.
-- `sum(#)` - add up every item in a thing.
+- `min(_ _ -)` - the smallest of two or more numbers.
+- `max(_ _ -)` - the largest of two or more numbers.
+- `sum(-)` - add up every item in a thing.
 - `rand(_ _)` - a random number between the first and second numbers.
 
 ### Comparison
 
-- `=(_ _ #)` - returns TRUE if two or more things are the same.
-- `~=(_ _ #)` - returns TRUE if two or more things are not all the same. Equivalent to `~` applied to `=`.
+- `=(_ _ -)` - returns TRUE if two or more things are the same.
+- `~=(_ _ -)` - returns TRUE if two or more things are not all the same. Equivalent to `~` applied to `=`.
 - `lt(_ _)` - returns TRUE if the first number is less than the second.
 - `gt(_ _)` - returns TRUE if the first number is greater than the second.
 - `lte(_ _)` - returns TRUE if the first number is less than or equal to the second.
 - `gte(_ _)` - returns TRUE if the first number is greater than or equal to the second.
+- `#(_)` - returns TRUE if the argument is numeric text.
+- `#<(_ _)` / `#>(_ _)` - compare the first and second arguments.
+- `#<=(_ _)` / `#>=(_ _)` / `#=(_ _)` - less-than-or-equal, greater-than-or-equal, and equality predicates.
 
 ### Logic
 
-- `~(#)` - inverts the logical input.
-- `&(_ _ #)` - returns TRUE if all of two or more logical inputs are TRUE.
+- `~(-)` - inverts the logical input.
+- `&(_ _ -)` - returns TRUE if all of two or more logical inputs are TRUE.
 - `xor(_ _)` - returns TRUE if exactly one of the two inputs is TRUE.
 
 ### Type Checks
 
 - `isnum(_)` - TRUE if the thing can be treated as a number.
 - `istext(_)` - TRUE if the thing is text.
-- `isempty(#)` - TRUE if the thing has no items.
+- `isempty(-)` - TRUE if the thing has no items.
 - `isfn(_)` - TRUE if the thing is a function.
 - `num(_)` - converts a thing to a number, or returns [] if it can't be.
 
 ### Text Manipulation
 
-- `upper(#)` - converts all alpha characters to uppercase.
-- `lower(#)` - converts all alpha characters to lowercase.
-- `trim(#)` - removes leading and trailing whitespace.
-- `length(#)` - the number of characters in a text.
-- `chars(#)` - splits text into a thing of individual characters.
+- `upper(-)` - converts all alpha characters to uppercase.
+- `lower(-)` - converts all alpha characters to lowercase.
+- `trim(-)` - removes leading and trailing whitespace.
+- `length(-)` - the number of characters in a text.
+- `chars(-)` - splits text into a thing of individual characters.
 - `split(_ _)` - splits text by a separator into a thing of items.
-- `join(_ #)` - joins the items of a thing into text using a separator.
+- `join(_ -)` - joins the items of a thing into text using a separator.
 - `replace(_ _ _)` - replaces every occurrence of a search text with another text.
 - `sub(_ _ _)` - the part of a text between a start and end position.
 - `startsWith(_ _)` - TRUE if the text begins with the given text.
@@ -637,20 +701,21 @@ Here is a full list of functions, their patterns and what they do. Functions are
 - `repeat(_ _)` - repeats a text a number of times.
 - `pad(_ _ _)` - pads a text to a given width using a fill character.
 
+Text functions treat a nested group as its complete text content. For example,
+`sub![2 4 [hello there]]` returns `ell`, and the result is a new word.
+
 ### Collections
 
-- `count(#)` - the number of items in a thing.
-- `first(#)` - the first item.
-- `last(#)` - the last item.
-- `rev(#)` - reverses the order of items.
-- `sort(#)` - sorts items in ascending order.
-- `unique(#)` - removes duplicate items.
-- `contains(_ #)` - TRUE if the thing contains the given item.
-- `concat(_ _ #)` - joins two or more things into one.
-- `slice(_ _ #)` - the items between a start and end position.
+- `count(-)` - the number of items in a thing.
+- `first(-)` - the first item.
+- `last(-)` - the last item.
+- `rev(-)` - reverses the order of items.
+- `sort(_ -)` - sorts by a comparator applied to each pair; pass `[]` as the comparator for the default ascending sort.
+- `set(-)` - removes duplicate items.
+- `contains(_ -)` - TRUE if the thing contains the given item.
 - `range(_ _)` - a thing containing every whole number from the first to the second.
 - `zip(_ _)` - pairs up the items of two things.
-- `flatten(#)` - removes one level of nesting.
+- `flatten(-)` - removes one level of nesting.
 
 ### Higher Order Functions
 
@@ -662,20 +727,19 @@ double:*!2
 ```
 **`[2 4 6]`**
 
-- `map(_ #)` - applies a function to every item and returns the results.
-- `filter(_ #)` - keeps only the items for which a function returns TRUE.
-- `find(_ #)` - the first item for which a function returns TRUE.
-- `each(_ #)` - calls a function for every item, for side effects.
-- `reduce(_ _ #)` - combines all items into one using a function and a starting value.
-- `any(_ #)` - TRUE if a function returns TRUE for any item.
-- `all(_ #)` - TRUE if a function returns TRUE for every item.
-- `flatMap(_ #)` - maps a function over every item and joins the results.
-- `sortBy(_ #)` - sorts items by the result of a function.
-- `partition(_ #)` - splits items into `[[matching] [others]]` using a function.
+- `map(_ -)` - applies a function to every item and returns the results.
+- `filter(_ -)` - keeps only the items for which a function returns TRUE.
+- `find(_ -)` - the first item for which a function returns TRUE.
+- `each(_ -)` - calls a function for every item, for side effects.
+- `reduce(_ _ -)` - combines all items into one using a function and a starting value.
+- `any(_ -)` - TRUE if a function returns TRUE for any item.
+- `all(_ -)` - TRUE if a function returns TRUE for every item.
+- `flatMap(_ -)` - maps a function over every item and joins the results.
+- `partition(_ -)` - splits items into `[[matching] [others]]` using a function.
 
 A function is passed by reference with `?`, as in `map!double?`. A bare `double` is just text; functions only see what they are explicitly given.
 
-The function can ask for more than the item. With two parameters it also gets the key (the name of a named item, or `[]`), and with three it also gets the position, starting at 1. A function with `#` gets all three.
+The function can ask for more than the item. With two parameters it also gets the key (the name of a named item, or `[]`), and with three it also gets the position, starting at 1. A function with `-` gets all three.
 
 ```punk
 [a:1 b:2] > map!(v:_ k:_ i:_)[{k?}-{v?}-{i?}]
@@ -686,7 +750,7 @@ Only a result of TRUE counts as true for these functions. `reduce` calls its fun
 
 ### Input, Output and Files
 
-- `print(#)` - writes a thing to the output.
+- `print(-)` - writes a thing to the output.
 - `read(_)` - reads the contents of a file.
 - `write(_ _)` - writes a thing to a file, replacing its contents.
 - `append(_ _)` - adds a thing to the end of a file.
@@ -695,7 +759,7 @@ Only a result of TRUE counts as true for these functions. `reduce` calls its fun
 ### Utility
 
 - `time()` - the current time in milliseconds. It takes no parameters, so it is called as `time!`.
-- `assert(_ #)` - returns TRUE if the first thing is TRUE, otherwise prints the remaining things as a message and returns [].
+- `assert(_ -)` - returns TRUE if the first thing is TRUE, otherwise prints the remaining things as a message and returns [].
 - `serialize(_)` - converts a thing to text.
 - `deserialize(_)` - converts text back to a thing.
 - `import(_)` - loads a module and returns the names it defines.
@@ -703,13 +767,13 @@ Only a result of TRUE counts as true for these functions. `reduce` calls its fun
 - `isnamed(_)` - TRUE if the thing is a named thing.
 - `isfn(_)` - TRUE if the thing is a function.
 - `patternOf(_)` / `bodyOf(_)` - read a function's pattern slots and body items without calling it.
-- `cat(#)` / `space()` - join text with no delimiter; a single space.
-- `push(_ #)` - adds the remaining things to the end of the first thing; as a pipe stage the piped thing is added last (`item > push!list`).
-- `pop(#)`, `shift(#)` - the things without the last / first one.
-- `unshift(_ #)` - adds the first thing to the front of the remaining things (`unshift![x [a b]]` is `[x a b]`).
-- `take(n #)`, `drop(n #)`, `remove(n #)` - the first `n` things, all but the first `n`, or without position `n`. Like every function these return new things and never change their input.
-- `pick(_ #)` - the value of the named thing called the first thing.
-- `urlencode(_ #)` / `urldecode(_ #)` - percent encode and decode text.
+- `cat(-)` / `space()` - join text with no delimiter; a single space.
+- `push(_ -)` - adds the remaining things to the end of the first thing; as a pipe stage the piped thing is added last (`item > push!list`).
+- `pop(-)`, `shift(-)` - the things without the last / first one.
+- `unshift(_ -)` - adds the first thing to the front of the remaining things (`unshift![x [a b]]` is `[x a b]`).
+- `remove(n -)` - the things without position `n`. Like every function it returns a new thing and never changes its input.
+- `pick(_ -)` - the value of the named thing called the first thing.
+- `urlencode(_ -)` / `urldecode(_ -)` - percent encode and decode text.
 - `serve(_ _)` - `serve![port handler]` starts an HTTP server. The handler gets `[method:.. url:.. headers:[..] body:..]` and returns `[status:.. headers:[..] body:..]`.
 
 ## Features to Consider
@@ -731,5 +795,5 @@ Capabilities a general-purpose language might offer that Punk does not have yet.
 - **A real JSON codec**: `serialize` and `deserialize` use Punk text and take a single thing.
 - **Logging levels**.
 - **Packages and environments**: `import` loads one file.
-- **A set type**: `unique` and `contains` are used instead.
-- **Several things as one argument**: `f!g?` flattens a group variable into the call, so a function that needs a whole record can only take it through `#` and a such-that pattern.
+- **A set type**: `set` and `contains` are used instead.
+- **Several things as one argument**: `f!g?` flattens a group variable into the call, so a function that needs a whole record can only take it through `-` and a such-that pattern.

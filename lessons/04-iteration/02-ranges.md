@@ -17,9 +17,10 @@ range![1 100] > filter!(n:_)[=![mod![n? 25] 0]]
 ```
 **`[25 50 75 100]`**
 
-`take` and `drop` cut a group by count.
+Negative query indexes select a suffix by length.
 
 ```punk
-[take![2 [a b c d]] drop![2 [a b c d]]]!
+things:[a b c d]
+things.-2?
 ```
-**`[[a b] [c d]]`**
+**`[c d]`**

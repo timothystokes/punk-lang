@@ -1,24 +1,27 @@
 # Sorting
 
-`sort` sorts ascending and `sortBy` sorts by the result of a function. Neither changes its input (HOF-6).
+`sort` takes a comparator as its first item. Pass `[]` for the default
+ascending comparison. Neither form changes its input (HOF-6).
 
 ```punk
-[3 1 2] > sort!
+sort![[] 3 1 2]
 ```
 **`[1 2 3]`**
 
 ```punk
-[pear fig banana] > sortBy!length?
+compare:(a:_ b:_)[-![a? b?]]
+[3 1 2] > sort!compare?
 ```
-**`[fig pear banana]`**
+**`[1 2 3]`**
 
 ```punk
+byAge:(a:_ b:_)[-![a.age? b.age?]]
 people:[[name:Ann age:31] [name:Bob age:25]]
-people? > sortBy!(p:_)[p.age?] > map!(p:_)[p.name?]
+people? > sort!byAge? > map!(p:_)[p.name?]
 ```
 **`[Bob Ann]`**
 
 ```punk
-[3 1 2] > sort! > rev!
+[3 1 2] > sort![] > rev!
 ```
 **`[3 2 1]`**

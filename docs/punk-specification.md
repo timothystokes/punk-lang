@@ -20,10 +20,10 @@ Status: draft. Derived from `README.md`; rules not stated there are listed in
 |---|---|
 | [x] LEX-1 | Space MUST be the delimiter between things. |
 | [x] LEX-2 | Punk MUST NOT have reserved words. Any run of non-reserved characters is a word. |
-| [x] LEX-3 | The reserved symbols are `:` `[` `]` `.` `?` `!` `>` `->` `(` `)` `{` `}` `\|` `_` `#` `@` `\` `##`. |
-| [x] LEX-4 | `_` and `#` are reserved only as placeholders inside a pattern. |
+| [x] LEX-3 | The reserved symbols are `:` `[` `]` `.` `?` `!` `>` `->` `(` `)` `{` `}` `\|` `_` `-` `@` `\` `##`. |
+| [x] LEX-4 | `_` and `-` are reserved only as placeholders inside a pattern; `#` is an ordinary word except at the start of `##` comments. |
 | [x] LEX-5 | `->` MAY be lengthened (`-->`, `--->`, …) to denote deeper case levels (see CASE-4). |
-| [x] LEX-6 | Function names MUST NOT contain `>`, `<` or `\|`. `^` is allowed as a function name (logical or). (`>` is the pipe symbol; `\|` is such-that.) |
+| [x] LEX-6 | Function names MUST NOT contain `\|`. `^` and the `#` numeric predicate names are allowed as function names. `>` remains the pipe symbol except in `#>`, `#>=`, and `#>`-based predicate names immediately followed by `!`. |
 | [x] LEX-7 | `TRUE` and `FALSE` MUST be ordinary words with no special evaluation. They are used by convention for logical results. |
 | [x] LEX-8 | A `\` MUST make the next character plain text, so `a\:b` is the word `a:b`. `\n` is a newline and `\t` is a tab. A space cannot be escaped. |
 | [x] LEX-9 | `##` at the start of a word MUST begin a comment that runs to the end of the line. Comments MUST be ignored. |
@@ -100,14 +100,16 @@ person:[name:[Paul Jones] age:42]
 | ID | Rule |
 |---|---|
 | [x] QRY-1 | A query is written `path?`. |
+| [x] QRY-1a | A static group MAY be queried directly, so `[a b]?` returns the group and `[a b].2?` returns `b`. |
 | [x] QRY-2 | A path is a name followed by zero or more `.`-separated segments. |
 | [x] QRY-3 | A **name segment** MUST select the named thing of that name in the current thing. |
 | [x] QRY-4 | A **numeric segment** `n` MUST select the nth item of the current thing. |
 | [x] QRY-5 | Indexes MUST start at `1`. |
-| [x] QRY-9 | A negative numeric segment `-n` MUST select the nth item counting from the end, so `-1` is the last item. |
+| [x] QRY-9 | A negative numeric segment `-n` MUST select the final `n` items, so `-1` is the last item and `-2` is the last two. A one-item result is the item itself, not a group. |
 | [x] QRY-10 | A **range segment** `a-b` MUST select the items from index `a` to index `b` inclusive, as a group. Either index MAY be negative (QRY-9). |
 | [x] QRY-11 | A range segment `a-` MUST select the items from index `a` to the last item. |
 | [x] QRY-12 | A range MUST be clamped to the items that exist, and MUST resolve to the non-thing if it selects none (an index of `0`, a start after the end, or a start after the stop). |
+| [x] QRY-13 | Numeric and range segments applied to a word MUST query its characters; a numeric word is queried as its text. A single character resolves to a word, and a range resolves to one word containing the selected characters. |
 | [x] QRY-14 | A segment MAY contain `{ }` embeds, as in `g.{k?}?`. The embeds MUST be evaluated first and the text of the result is the segment, used as a name, an index or a range exactly as if it had been written literally. This lets a name or position held in a thing select from a group. |
 | [x] QRY-15 | A segment MUST NOT be split again after its embeds are evaluated, so a result containing `.` is one name. Text adjacent to an embed joins to it as in EMB-4 (`g.item-{n?}?`). |
 | [x] QRY-16 | A query whose embedded segment fails, or evaluates to the non-thing, MUST resolve to the non-thing (QRY-7). |
@@ -187,8 +189,9 @@ Sam > greet!                         ⇒ Hi Sam!
 |---|---|
 | [x] PAT-1 | A pattern `( … )` describes the shape a thing can have. |
 | [x] PAT-2 | `_` MUST match exactly one item. |
-| [x] PAT-3 | `#` MUST match any number of items, including none. |
-| [x] PAT-3a | `#` MUST be the last positional slot, and a pattern level MUST contain at most one `#`; otherwise it is a syntax error. |
+| [x] PAT-3 | `-` MUST match any number of items, including none. |
+| [x] PAT-3a | `-` MUST be the last positional slot, and a pattern level MUST contain at most one rest placeholder; otherwise it is a syntax error. |
+| [x] PAT-3b | `#` MUST remain available as a literal word in a pattern; it MUST NOT act as a rest placeholder. |
 | [x] PAT-4 | A literal word in a pattern MUST match only an item whose value equals that word. The item's name, if any, MUST be ignored: `[name:Tim]` matches `(Tim)`. |
 | [x] PAT-5 | Items MUST be matched positionally, left to right. |
 | [x] PAT-6 | A pattern MUST match only if every item of the thing is accounted for. |
@@ -197,9 +200,9 @@ Sam > greet!                         ⇒ Hi Sam!
 |---|---|
 | `(_)` | a thing with exactly one item |
 | `(_ _)` | exactly two items |
-| `(#)` | any number of items |
+| `(-)` | any number of items |
 | `(5 _ _)` | three items, the first equal to `5` |
-| `(_ _ _ #)` | at least three items |
+| `(_ _ _ -)` | at least three items |
 
 ### 6.2 Executing
 
@@ -233,7 +236,7 @@ name? > (_ _)[Full name found]!      ⇒ [Full name found]
 | [x] PAT-14 | A pattern MAY contain at most one `\|` at its top level. |
 | [x] PAT-15 | The left of `\|` MUST be an ordinary shape pattern (6.1, 6.3). |
 | [x] PAT-16 | The right of `\|` MUST be one or more `name:value` pairs. |
-| [x] PAT-17 | Each right-hand pair MUST match a named thing of that name and value inside the thing being matched. |
+| [x] PAT-17 | Each right-hand pair MUST match a named thing of that name and value inside the thing being matched. A dotted name such as `name.last` MUST resolve through nested named things using query semantics. |
 | [x] PAT-18 | Right-hand pairs MUST be matched in any order. |
 | [x] PAT-18a | A right-hand `value` MAY itself be nested (e.g. `person:[name:[Bob Smith]]`) and MUST match by the same rules at that depth. |
 | [x] PAT-18b | The right side MUST NOT constrain shape: it asserts that the named elements exist with the given values and MUST ignore all other structure. |
@@ -241,8 +244,8 @@ name? > (_ _)[Full name found]!      ⇒ [Full name found]
 
 ```punk
 person:[name:Bob age:42]
-person? > (# | name:Bob)!             ⇒ TRUE
-person? > (# | name:Sally)!           ⇒ FALSE
+person? > (- | name:Bob)!             ⇒ TRUE
+person? > (- | name:Sally)!           ⇒ FALSE
 ```
 
 ## 7. Functions (`FN`)
@@ -274,6 +277,8 @@ welcome!Jim                        ⇒ [Hello Jim]
 | [x] PIPE-3 | A pipe is a function: its input pattern MUST be the first stage's pattern and its output the last stage's result. |
 | [x] PIPE-4 | A pipe MAY be named (`p:> f! > g!`) and called like a function. |
 | [x] PIPE-5 | `name:thing > f!` MUST bind `name` to the result of the whole pipe applied to `thing`. |
+| [x] PIPE-6 | An inline function without `!` in a pipe MUST pass its function reference to the next stage without being called. |
+| [x] PIPE-7 | An inline function with `!` in a pipe MUST be called with the piped thing, and its result MUST pass to the next stage. |
 
 ```punk
 Sally > welcome! > upper!            ⇒ [HELLO SALLY]
@@ -317,6 +322,7 @@ An atom is a global, named place for state that changes while a program runs.
 | [x] ATOM-2 | An unset atom MUST evaluate to the non-thing `[]`. |
 | [x] ATOM-3 | `thing > @name!` MUST store the thing in the atom and return the stored thing. `@name!thing` is the same call. |
 | [x] ATOM-4 | Atoms MUST be global. Functions and imported modules see the same atoms. |
+| [x] ATOM-5 | `@name <> stage` MUST read the atom, run the stage against its value, store the result back in the atom, and return that result. Spaces MAY surround `<>`, but `<` and `>` MUST be contiguous. |
 
 ## 9c. Modules (`MOD`)
 
@@ -359,39 +365,43 @@ timesTwo:*[2]!
 | [x] LIB-5 | Numeric functions MUST treat a non-numeric thing as `0`; text functions MUST treat a number as a word. Library functions MUST degrade gradually in line with intent and MUST NOT raise errors (ERR-2). |
 | [x] LIB-6 | Division by zero MUST yield the non-thing. |
 | [x] LIB-3 | Library functions MUST NOT mutate their inputs (immutability, NAME-2). |
+| [x] LIB-14 | `#` MUST return `TRUE` for numeric text; `#<`, `#>`, `#<=`, `#>=`, and `#=` MUST compare their two arguments like `lt`, `gt`, `lte`, `gte`, and `=`. Text functions that return text MUST treat nested groups as their complete content and return a new word. |
 
 ### 11.1 Maths
 
 | Signature | Rule |
 |---|---|
-| `+(_ _ #)` | MUST return the sum of two or more numbers. |
+| `+(_ _ -)` | MUST return the sum of two or more numbers. |
 | `-(_ _)` | MUST return first − second (exactly two arguments). |
-| `*(_ _ #)` | MUST return the product of two or more numbers. |
+| `*(_ _ -)` | MUST return the product of two or more numbers. |
 | `\(_ _)` | MUST return first ÷ second (exactly two arguments); by zero yields the non-thing (LIB-6). |
 | `mod(_ _)` | MUST return the remainder of first ÷ second. |
 | `pow(_ _)` | MUST return first raised to second. |
 | `sqrt(_)` `abs(_)` `neg(_)` | square root, absolute value, sign flip. |
 | `floor(_)` `ceil(_)` `round(_)` | round down, up, to nearest whole number. |
-| `min(_ _ #)` `max(_ _ #)` | smallest / largest of two or more numbers. |
-| `sum(#)` | MUST return the sum of every item. |
+| `min(_ _ -)` `max(_ _ -)` | smallest / largest of two or more numbers. |
+| `sum(-)` | MUST return the sum of every item. |
 | `rand(_ _)` | MUST return a random number between first and second. |
 
 ### 11.2 Comparison
 
 | Signature | Rule |
 |---|---|
-| `=(_ _ #)` | MUST return `TRUE` iff all things are the same. |
-| `~=(_ _ #)` | MUST equal `~` applied to `=`. |
+| `=(_ _ -)` | MUST return `TRUE` iff all things are the same. |
+| `~=(_ _ -)` | MUST equal `~` applied to `=`. |
 | `lt(_ _)` `gt(_ _)` | first < second; first > second. |
 | `lte(_ _)` `gte(_ _)` | first ≤ second; first ≥ second. |
+| `#(_)` | MUST return `TRUE` iff its argument is numeric text. |
+| `#<(_ _)` `#>(_ _)` | first < second; first > second. |
+| `#<=(_ _)` `#>=(_ _)` `#=(_ _)` | first ≤ second; first ≥ second; the two things are equal. |
 
 ### 11.3 Logic
 
 | Signature | Rule |
 |---|---|
-| `~(#)` | MUST invert the logical input. |
-| `&(_ _ #)` | MUST return `TRUE` iff all inputs are `TRUE`. |
-| `^(_ _ #)` | MUST return `TRUE` iff any of two or more inputs is `TRUE` (or). |
+| `~(-)` | MUST invert the logical input. |
+| `&(_ _ -)` | MUST return `TRUE` iff all inputs are `TRUE`. |
+| `^(_ _ -)` | MUST return `TRUE` iff any of two or more inputs is `TRUE` (or). |
 | `xor(_ _)` | MUST return `TRUE` iff exactly one input is `TRUE`. |
 
 ### 11.4 Type checks
@@ -400,7 +410,7 @@ timesTwo:*[2]!
 |---|---|
 | `isnum(_)` | `TRUE` iff the thing can be treated as a number. |
 | `istext(_)` | `TRUE` iff the thing is text. |
-| `isempty(#)` | `TRUE` iff the thing has no items. |
+| `isempty(-)` | `TRUE` iff the thing has no items. |
 | `isfn(_)` | `TRUE` iff the thing is a function. |
 | `num(_)` | MUST convert to a number, or return the non-thing if impossible. |
 
@@ -408,38 +418,35 @@ timesTwo:*[2]!
 
 | Signature | Rule |
 |---|---|
-| `upper(#)` `lower(#)` | uppercase / lowercase all alpha characters. |
-| `trim(#)` | remove leading and trailing whitespace. |
-| `length(#)` | number of characters. |
-| `chars(#)` | split into individual characters. |
+| `upper(-)` `lower(-)` | uppercase / lowercase all alpha characters. |
+| `trim(-)` | remove leading and trailing whitespace. |
+| `length(-)` | number of characters. |
+| `chars(-)` | split into individual characters. |
 | `split(_ _)` | split text by a separator. |
-| `join(_ #)` | join items with a separator. |
+| `join(_ -)` | join items with a separator. |
 | `replace(_ _ _)` | replace every occurrence of a search text. |
 | `sub(_ _ _)` | part of a text between start and end. |
 | `startsWith(_ _)` `endsWith(_ _)` | `TRUE` iff text begins / ends with the given text. |
 | `repeat(_ _)` | repeat a text a number of times. |
-| `pad(_ _ _)` | pad a text to a width with a fill character. |
+| `pad(_ _ _)` | pad a text to a width with a fill character. Nested groups are treated as their complete text content. |
 
 ### 11.6 Collections
 
 | Signature | Rule |
 |---|---|
-| `count(#)` | number of items. |
-| `first(#)` `last(#)` | first / last item. |
-| `rev(#)` `sort(#)` `unique(#)` | reverse, sort ascending, remove duplicates. |
-| `contains(_ #)` | `TRUE` iff the thing contains the item. |
-| `push(_ #)` | add the remaining things to the end of the first thing. As a pipe stage the piped thing is the last argument, so `item > push!list` appends `item` to `list`. An empty first argument is simply absent, so `item > push![[]]` is `item`. |
-| `pop(#)` | the things without the last one (a new thing; nothing is mutated). |
-| `shift(#)` | the things without the first one. |
-| `unshift(_ #)` | add the first thing to the front of the remaining things. |
-| `take(n #)` | the first `n` things. |
-| `drop(n #)` | all but the first `n` things. |
-| `remove(n #)` | the things without the one at position `n` (1-based). |
-| `concat(_ _ #)` | join two or more things into one. |
-| `slice(_ _ #)` | items between start and end. |
+| `count(-)` | number of items. |
+| `first(-)` `last(-)` | first / last item. |
+| `rev(-)` `set(-)` | reverse, remove duplicates. |
+| `sort(_ -)` | sort by a comparator applied to each pair; `[]` uses the default comparison. |
+| `contains(_ -)` | `TRUE` iff the thing contains the item. |
+| `push(_ -)` | add the remaining things to the end of the first thing. As a pipe stage the piped thing is the last argument, so `item > push!list` appends `item` to `list`. An empty first argument is simply absent, so `item > push![[]]` is `item`. |
+| `pop(-)` | the things without the last one (a new thing; nothing is mutated). |
+| `shift(-)` | the things without the first one. |
+| `unshift(_ -)` | add the first thing to the front of the remaining things. |
+| `remove(n -)` | the things without the one at position `n` (1-based). |
 | `range(_ _)` | every whole number from first to second. |
 | `zip(_ _)` | pair up items of two things. |
-| `flatten(#)` | remove one level of nesting. |
+| `flatten(-)` | remove one level of nesting. |
 
 ### 11.7 Higher-order (`HOF`)
 
@@ -447,26 +454,25 @@ timesTwo:*[2]!
 |---|---|
 | [x] HOF-1 | The function MUST be the first argument and the data MUST be the last, so partially applied (curried, CURRY-1) higher-order functions work as pipeline stages with data flowing through. |
 | [x] HOF-8 | A function passed to a function MUST be passed explicitly as a reference (`map!double?`). A bare word is plain text and MUST NOT be resolved to a function by name. |
-| [x] HOF-9 | A function passed to `map` `filter` `find` `each` `any` `all` `flatMap` `sortBy` or `partition` MUST be called with up to three things in the order value, key, position, giving it only as many as its pattern declares slots for (one by default). The key is the name of a named item and `[]` for any other item. The position starts at 1. A pattern with a rest slot (`#`) receives all three. An item always counts as one value, so `(t:_)` receives a whole record. |
+| [x] HOF-9 | A function passed to `map` `filter` `find` `each` `any` `all` `flatMap` or `partition` MUST be called with up to three things in the order value, key, position, giving it only as many as its pattern declares slots for (one by default). The key is the name of a named item and `[]` for any other item. The position starts at 1. A pattern with a rest slot (`-`) receives all three. An item always counts as one value, so `(t:_)` receives a whole record. |
 | [x] HOF-2 | `f` MUST be called once per item with exactly one thing (FN-2), except `reduce` (HOF-4). |
 | [x] HOF-3 | Items MUST be processed in order, first to last. |
 | [x] HOF-4 | `reduce` MUST call `f` with a group `[accumulator item]`; the result becomes the next accumulator. |
 | [x] HOF-5 | A predicate MUST count as true only if it returns `TRUE`; any other result, including `[]`, is false. |
 | [x] HOF-6 | Higher-order functions MUST NOT mutate their input (LIB-3). |
-| [x] HOF-7 | On empty data, `map` `filter` `flatMap` `sortBy` return `[]`; `find` returns `[]`; `any` returns `FALSE`; `all` returns `TRUE`; `reduce` returns its start value. |
+| [x] HOF-7 | On empty data, `map` `filter` `flatMap` and `partition` return `[]`; `find` returns `[]`; `any` returns `FALSE`; `all` returns `TRUE`; `reduce` returns its start value. |
 
 | Signature | Rule |
 |---|---|
-| `map(_ #)` | MUST return a group of `f` applied to every item. |
-| `flatMap(_ #)` | MUST map `f` over the items and remove one level of nesting from the results. |
-| `filter(_ #)` | MUST keep the items for which `f` is `TRUE`. |
-| `find(_ #)` | MUST return the first item for which `f` is `TRUE`, else `[]`. |
-| `each(_ #)` | MUST call `f` per item for side effects and return the data unchanged. |
-| `reduce(_ _ #)` | MUST combine items with `f` and a start value (second argument). |
-| `any(_ #)` | `TRUE` iff `f` is `TRUE` for at least one item. |
-| `all(_ #)` | `TRUE` iff `f` is `TRUE` for every item. |
-| `sortBy(_ #)` | MUST sort items ascending by the result of `f` on each item. |
-| `partition(_ #)` | MUST return `[[matching] [others]]` split by `f`. |
+| `map(_ -)` | MUST return a group of `f` applied to every item. |
+| `flatMap(_ -)` | MUST map `f` over the items and remove one level of nesting from the results. |
+| `filter(_ -)` | MUST keep the items for which `f` is `TRUE`. |
+| `find(_ -)` | MUST return the first item for which `f` is `TRUE`, else `[]`. |
+| `each(_ -)` | MUST call `f` per item for side effects and return the data unchanged. |
+| `reduce(_ _ -)` | MUST combine items with `f` and a start value (second argument). |
+| `any(_ -)` | `TRUE` iff `f` is `TRUE` for at least one item. |
+| `all(_ -)` | `TRUE` iff `f` is `TRUE` for every item. |
+| `partition(_ -)` | MUST return `[[matching] [others]]` split by `f`. |
 
 ```punk
 double:*[2]!
@@ -481,7 +487,7 @@ doubleAll:> map!double
 
 | Signature | Rule |
 |---|---|
-| `print(#)` | write a thing to output. |
+| `print(-)` | write a thing to output. |
 | `read(_)` | read a file's contents. |
 | `write(_ _)` | write a thing to a file, replacing contents. |
 | `append(_ _)` | add a thing to the end of a file. |
@@ -492,17 +498,17 @@ doubleAll:> map!double
 | Signature | Rule |
 |---|---|
 | `time()` | the current time in milliseconds since 1970-01-01 UTC. Takes no parameters (FN-9). |
-| `assert(_ #)` | MUST return `TRUE` if the first thing is `TRUE`. Otherwise MUST write the remaining things as a message to output (as `print`) and return the non-thing. MUST NOT abort (ERR-2). |
+| `assert(_ -)` | MUST return `TRUE` if the first thing is `TRUE`. Otherwise MUST write the remaining things as a message to output (as `print`) and return the non-thing. MUST NOT abort (ERR-2). |
 | `serialize(_)` `deserialize(_)` | thing → text; text → thing. |
 | `import(_)` | load a module (see MOD). |
 | `nameOf(_)` `valueOf(_)` | the name and the value of a named thing. |
 | `isfn(_)` | `TRUE` iff the thing is a function. |
-| `patternOf(_)` | introspection: the slots of a function's pattern as things. A labelled slot is the named thing `label:slot`, `_` and `#` stand for themselves. A function is not called. |
+| `patternOf(_)` | introspection: the slots of a function's pattern as things. A labelled slot is the named thing `label:slot`, `_` and `-` stand for themselves. A function is not called. |
 | `bodyOf(_)` | introspection: the items of a function's body, evaluated in the function's context without calling it. Consecutive items that are not named things are merged into one text. |
-| `cat(#)` `space()` | `cat` joins the text of all its things with no delimiter. `space` is a single space. |
+| `cat(-)` `space()` | `cat` joins the text of all its things with no delimiter. `space` is a single space. |
 | `isnamed(_)` | `TRUE` iff the thing is a named thing. |
-| `pick(_ #)` | the value of the named thing called the first thing, found in the rest. `[]` if absent. |
-| `urlencode(_ #)` `urldecode(_ #)` | percent-encode / decode text. `urldecode` also turns `+` into a space. |
+| `pick(_ -)` | the value of the named thing called the first thing, found in the rest. `[]` if absent. |
+| `urlencode(_ -)` `urldecode(_ -)` | percent-encode / decode text. `urldecode` also turns `+` into a space. |
 | `serve(_ _)` | `serve![port handler]` starts an HTTP server. The handler is called with `[method:.. url:.. headers:[..] body:..]` and returns `[status:.. headers:[..] body:..]`. The response MAY nest those things inside other groups. A request body with content type `application/x-www-form-urlencoded` MUST be parsed into named things (`note=hi+x` gives `note:[hi x]`) so a handler can query `body.note?`. |
 
 ---

@@ -1,6 +1,6 @@
 // Punk tokenizer: source text -> flat token list.
 //
-// Tokens: WS(nl) LB RB LP RP BANG QMARK GT ARROW(depth) NAME CHUNK EOF.
+// Tokens: WS(nl) LB RB LP RP BANG QMARK GT SWAP ARROW(depth) NAME CHUNK EOF.
 // Each token has `adj` = true when it directly follows the previous token
 // with no whitespace; the parser uses adjacency to build `f!x`, `x?`,
 // `thing(pattern)!` and `(pattern)[template]` (LEX-1).
@@ -52,11 +52,20 @@ export function tokenize(src) {
     if (c === ')') { advance(); push({ type: 'RP' }, start, sl, sc); continue; }
     if (c === '!') { advance(); push({ type: 'BANG' }, start, sl, sc); continue; }
     if (c === '?') { advance(); push({ type: 'QMARK' }, start, sl, sc); continue; }
+    if (src.startsWith('<>', i)) { advance(2); push({ type: 'SWAP' }, start, sl, sc); continue; }
 
     const arrow = /^-+>/.exec(src.slice(i, i + 16));
     if (arrow) {
       advance(arrow[0].length);
       push({ type: 'ARROW', depth: arrow[0].length - 1 }, start, sl, sc);
+      continue;
+    }
+    // `#>` is a function-name character sequence when it is called directly;
+    // otherwise `>` remains the pipe token.
+    const numericPredicate = /^#(?:>=|<=|>|<|=)(?=!)/.exec(src.slice(i));
+    if (numericPredicate) {
+      advance(numericPredicate[0].length);
+      push({ type: 'CHUNK', parts: [{ lit: numericPredicate[0] }] }, start, sl, sc);
       continue;
     }
     if (c === '>') { advance(); push({ type: 'GT' }, start, sl, sc); continue; }
@@ -74,7 +83,7 @@ export function tokenize(src) {
     let lit = '';
     while (i < src.length) {
       const ch = src[i];
-      if (isWs(ch) || DELIMS.has(ch)) break;
+      if (isWs(ch) || DELIMS.has(ch) || (ch === '<' && src[i + 1] === '>')) break;
       if (ch === '\\' && i + 1 < src.length && !isWs(src[i + 1])) {
         // Escape: the next character is plain text (LEX-8).
         const e = src[i + 1];

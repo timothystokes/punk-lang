@@ -35,3 +35,18 @@ f:(_ _)[hi]
 f![a b c]
 ```
 **`[]`**
+
+Functions are things, so they can be named, passed to other functions and
+returned from one. A function can also have several cases, tried in order.
+
+```punk
+argcount:(-)[
+  .?
+  -> ()[0]!
+  -> (_)[1]!
+  -> (_ _)[2]!
+  -> (_ _ r:-)[+![2 count!r?]]!
+]
+[argcount! argcount!a argcount![a b] argcount![a b c d e]]!
+```
+**`[0 1 2 5]`**

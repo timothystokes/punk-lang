@@ -1,9 +1,10 @@
 # Sets
 
-There is no set type. Take the unique items of a group, and test membership with `contains`.
+There is no separate set type. Use `set` to remove duplicate items from a
+group, and test membership with `contains`.
 
 ```punk
-unique![a b a c b]
+set![a b a c b]
 ```
 **`[a b c]`**
 
@@ -12,10 +13,10 @@ contains![b [a b c]]
 ```
 **`TRUE`**
 
-A union is a concatenation made unique, and an intersection is a filter.
+A union is a flattened set, and an intersection is a filter.
 
 ```punk
-concat![[a b] [b c]] > unique!
+flatten![[a b] [b c]] > set!
 ```
 **`[a b c]`**
 

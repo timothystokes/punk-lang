@@ -31,9 +31,9 @@ A parent case works like an outer `if`, and its sub-cases like the `if`s inside 
 ```punk
 order:[item:book qty:0]
 order?
--> (# | item:book)[book]!
---> (# | qty:0)[out of stock]!
---> (# | qty:1)[one left]!
+-> (- | item:book)[book]!
+--> (- | qty:0)[out of stock]!
+--> (- | qty:1)[one left]!
 -> (_ _)[something else]!
 ```
 **`[out of stock]`**
@@ -43,9 +43,9 @@ If the parent matches but none of its sub-cases do, the result is `[]`. The case
 ```punk
 order:[item:book qty:5]
 order?
--> (# | item:book)[book]!
---> (# | qty:0)[out of stock]!
---> (# | qty:1)[one left]!
+-> (- | item:book)[book]!
+--> (- | qty:0)[out of stock]!
+--> (- | qty:1)[one left]!
 -> (_ _)[something else]!
 ```
 **`[]`**
@@ -55,8 +55,8 @@ When the parent does not match, the next top-level case is tried as usual.
 ```punk
 order:[item:pen qty:5]
 order?
--> (# | item:book)[book]!
---> (# | qty:0)[out of stock]!
+-> (- | item:book)[book]!
+--> (- | qty:0)[out of stock]!
 -> (_ _)[something else]!
 ```
 **`[something else]`**

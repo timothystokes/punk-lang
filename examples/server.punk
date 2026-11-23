@@ -10,7 +10,7 @@ html:import!punk.html
 ## state lives in an atom: the list of todo notes
 [] > @todos!
 
-page:(#)[
+page:(-)[
   html.page![
     head:()[
       title:()[Todos]
